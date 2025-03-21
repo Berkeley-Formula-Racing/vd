@@ -13,8 +13,6 @@ clear
 setup_paths
 
 carCells = [];
-givenTorque = 150;
-
 %{
 for i = 1:1
     carHelper = carConfig();
@@ -30,7 +28,7 @@ numCars = size(carCell,1);
 time = struct();time.prev = 0; time.curr = 0;
 tic
 % Set numWorkers to number of cores for better performance
-numWorkers = 0;
+numWorkers = 8;
 if numWorkers ~= 0
     disp('The parallel toolbox takes a few minutes to start.')
     disp('Set numWorkers to 0 for single-car runs')

@@ -8,7 +8,7 @@ x0 = lat_accel_guess;
 [x_table_ss,lat_accel,yaw_accel,lat_accel_guess] = max_constant_beta(velocity,beta,car,1);
 steer_angle2 = x_table_ss{1,'steer_angle'};
 
-steer_angles = linspace(-20,20,30);
+steer_angles = linspace(-20,20, 41);
 lat_accel_vec = zeros(size(steer_angles));
 yaw_accel_vec = zeros(size(steer_angles));
 

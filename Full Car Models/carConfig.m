@@ -2,7 +2,7 @@ function carCell = carConfig()
 
 % car parameters (updated 2/4/21)
 carParams = struct();
-carParams.mass = [168.7]; % not including driver (378 lb) [168.7] 204.117
+carParams.mass = [163]; % not including driver (366 lb) 
 carParams.driver_weight = 68; % (150 lb)
 carParams.accel_driver_weight = 68; % (150 lb)
 carParams.wheelbase = [62] * 0.0254; % 62 in
@@ -13,15 +13,15 @@ carParams.wheel_radius = 0.1956; % loaded
 carParams.cg_height = [0.3048]; % (12 in) % 0.2965
 carParams.roll_center_height_front = 0.08636; % (3.4 in)
 carParams.roll_center_height_rear = 0.09144; % (3.6 in)
-carParams.R_sf = [0.385]; % proportion of roll stiffness in front (not same as LLTD)
+carParams.R_sf = [0.52]; % proportion of roll stiffness in front (not same as LLTD)
 carParams.I_zz = [83.28];%, 82.28]; %kg-m^2
 carParams.ackermann = [1]; %expressed as exponent for current ackermann curve
 carParams.camber_compliance = [0.125/1334];
 
 % aero parameters (updated 6/6/22)
 aeroParams = struct();
-aeroParams.cda = [1.56]; % m^2 (1.88)   NEW? 1.56
-aeroParams.cla = [3.66]; % m^2 (3.45)  NEW? 3.66
+aeroParams.cda = [1.54]; % m^2 (1.88)   NEW? 1.56
+aeroParams.cla = [4.27]; % m^2 (3.45)  NEW? 3.66
 aeroParams.distribution = 0.4119; % proportion of downforce in front
 
 % KTM engine parameters (updated 5/1/19)

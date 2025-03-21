@@ -259,7 +259,7 @@ classdef Events2 < handle
             curvature = obj.autocross_track(2,:);
             [long_vel_final,long_accel_final,lat_accel_final,time_final,time_vec,num_upshifts] = ...
                 Track_Solver(obj,arclength,curvature, true, 0);
-            obj.times.autocross = time_final;
+            obj.times.autocross = time_final*1.080;
             obj.autocross.time_vec = time_vec;
             obj.autocross.num_upshifts = num_upshifts;
             obj.autocross.long_vel = long_vel_final;
@@ -287,7 +287,7 @@ classdef Events2 < handle
             [long_vel_final,long_accel_final,lat_accel_final,time_final,time_vec,num_upshifts] = ...
                 Track_Solver(obj,arclength,curvature, false, end_vel);
             time_total = time_total + (time_final*9); % 10 laps in endurance
-            obj.times.endurance = time_total*1.05; % scaling factor due to driver conservatism during enduro
+            obj.times.endurance = time_total*1.085; % scaling factor due to driver conservatism during enduro
             obj.endurance.time_vec = time_vec;
             obj.endurance.num_upshifts = num_upshifts;
             obj.endurance.long_vel = long_vel_final;
@@ -313,7 +313,7 @@ classdef Events2 < handle
             % skidpad: 58.9, accel: 54.9, autocross: 113.1, enduro: 262.3
 
             % winning time (Michigan 2016, no one faster since)
-            skidpad_winning_time = 4.714; 
+            skidpad_winning_time = 5.0      ; 
             
             % winning times (based on 2019 Lincoln)
             accel_winning_time = 4.206;% Michigan 2023 (4.174) // Michigan 2024 (4.206)
@@ -359,7 +359,7 @@ classdef Events2 < handle
             if t_your > t_max
                 endurance_points = 25;
             else 
-                endurance_points = 200 * ((t_max / t_your) - 1.0) / ((t_max / t_min) - 1.0) + 25.0;
+                endurance_points = 250 * ((t_max / t_your) - 1.0) / ((t_max / t_min) - 1.0) + 25.0;
             end
             
             points = struct();

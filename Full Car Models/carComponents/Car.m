@@ -170,7 +170,7 @@ classdef Car
                         
             % Equations of Motion
             lat_accel = sum(Fy)*(1/obj.M)-yaw_rate*long_vel;
-            long_accel = (sum(Fx)-obj.aero.drag(long_vel))*(1/(obj.M-10))+yaw_rate*lat_vel;
+            long_accel = (sum(Fx)-obj.aero.drag(long_vel))*(1/(obj.M))+yaw_rate*lat_vel;
             yaw_accel = ((Fx(1)-Fx(2))*obj.t_f/2+(Fx(3)-Fx(4))*obj.t_r/2+(Fy(1)+Fy(2))*obj.l_f-(Fy(3)+Fy(4))*obj.l_r)*(1/obj.I_zz);
             %yaw_accel = ((Fy(1)+Fy(2))*obj.l_f-(Fy(3)+Fy(4))*obj.l_r)*(1/obj.I_zz);
     

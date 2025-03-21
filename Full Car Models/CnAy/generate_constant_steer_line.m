@@ -1,4 +1,6 @@
-function [lat_accel_vec,yaw_accel_vec] = generate_constant_steer_line(car,velocity,steer_angle)
+function [lat_accel_vec,yaw_accel_vec, lat_velocities] = generate_constant_steer_line(car,velocity,steer_angle, dataPointStability)
+
+betaVal = deg2rad(dataPointStability(1));
 
 counter = 1;
 
@@ -8,7 +10,10 @@ x0 = lat_accel_guess;
 [x_table_ss,lat_accel,yaw_accel,lat_accel_guess] = max_constant_steer(velocity,steer_angle,car,1);
 lat_vel2 = x_table_ss{1,'lat_vel'};
 
-lat_velocities = linspace(lat_vel1,lat_vel2,15);
+lat_velocities = linspace(lat_vel1,lat_vel2,30);   
+lat_velocities = [lat_velocities, 20*tan(betaVal), 20*tan(betaVal+deg2rad(1))]; 
+%generate values for slip angles we want to test at
+
 lat_accel_vec = zeros(size(lat_velocities));
 yaw_accel_vec = zeros(size(lat_velocities));
 
