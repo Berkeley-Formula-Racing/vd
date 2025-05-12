@@ -55,8 +55,9 @@ constraint = @(P) car.constraint5(P,radius);
 vel_corner_guess = x;
 
 [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-Fzvirtual,Fz,alpha,T] = car.equations(x);  
-
+Fzvirtual,Fz,alpha,T,gamma] = car.equations(x);  
+gamma = transpose(gamma);
+%disp(gamma)
 max_vel_corner = x(3);
 
 x_corner_vel = [exitflag long_accel x(3)*x(5) x omega(1:4) engine_rpm current_gear beta...

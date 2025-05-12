@@ -211,7 +211,7 @@ classdef Events2 < handle
                     lat_accel = long_vel^2*abs(curvature(i));
                     lat_accel_vector_2(i) = lat_accel*sign(curvature(i));
                     long_accel = F_braking(lat_accel,long_vel);
-                    if long_vel == obj.car.max_vel
+                    if long_vel >= obj.car.max_vel
                         long_accel = 0;
                     end
                     long_accel_vector_2(i) = long_accel;
@@ -224,6 +224,7 @@ classdef Events2 < handle
                         abs(1/curvature(i)))); 
                     %}
                     time_2(i) = 2*(arclength(i+1)-arclength(i))/(long_vel+long_vel_initial);
+
                 end
 
                 % end next calculation at end of current segment
@@ -259,7 +260,7 @@ classdef Events2 < handle
             curvature = obj.autocross_track(2,:);
             [long_vel_final,long_accel_final,lat_accel_final,time_final,time_vec,num_upshifts] = ...
                 Track_Solver(obj,arclength,curvature, true, 0);
-            obj.times.autocross = time_final*1.080;
+            obj.times.autocross = time_final*1.05;
             obj.autocross.time_vec = time_vec;
             obj.autocross.num_upshifts = num_upshifts;
             obj.autocross.long_vel = long_vel_final;
@@ -304,7 +305,7 @@ classdef Events2 < handle
             % Skid Pad 75 points
             % Autocross 125 points
             % Efficiency 100 points
-            % Endurance 275 points+
+            % Endurance 275 points
             
             % B19 points:
             % skidpad: 41.3, accel: 52.7, autocross: 104.9, enduro: 98.8
@@ -313,7 +314,7 @@ classdef Events2 < handle
             % skidpad: 58.9, accel: 54.9, autocross: 113.1, enduro: 262.3
 
             % winning time (Michigan 2016, no one faster since)
-            skidpad_winning_time = 5.0      ; 
+            skidpad_winning_time = 5.18; 
             
             % winning times (based on 2019 Lincoln)
             accel_winning_time = 4.206;% Michigan 2023 (4.174) // Michigan 2024 (4.206)

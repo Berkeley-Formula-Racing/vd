@@ -2,27 +2,30 @@ function carCell = carConfig()
 
 % car parameters (updated 2/4/21)
 carParams = struct();
-carParams.mass = [163]; % not including driver (366 lb) 
-carParams.driver_weight = 68; % (150 lb)
-carParams.accel_driver_weight = 68; % (150 lb)
+carParams.mass = [168.7]; % not including driver (366 lb) 
+carParams.driver_weight = 64; %
+carParams.accel_driver_weight = 59; % (130 lb)
 carParams.wheelbase = [62] * 0.0254; % 62 in
 carParams.weight_dist = [0.512]; % percentage of weight in rear
 carParams.track_width = 1.1938; % (47 in)
 carParams.wheel_radius = 0.1956; % loaded 
 % radius (7.7 in)
-carParams.cg_height = [0.3048]; % (12 in) % 0.2965
+carParams.cg_height = [11.75] * 0.0254; % (12 in) % 0.2965
 carParams.roll_center_height_front = 0.08636; % (3.4 in)
 carParams.roll_center_height_rear = 0.09144; % (3.6 in)
-carParams.R_sf = [0.52]; % proportion of roll stiffness in front (not same as LLTD)
+carParams.R_sf = [0.35]; % proportion of roll stiffness in front (not same as LLTD)
 carParams.I_zz = [83.28];%, 82.28]; %kg-m^2
 carParams.ackermann = [1]; %expressed as exponent for current ackermann curve
 carParams.camber_compliance = [0.125/1334];
+carParams.static_r_toe = [0 -0.25]; %toe in deg, toe out - negative
 
 % aero parameters (updated 6/6/22)
 aeroParams = struct();
-aeroParams.cda = [1.54]; % m^2 (1.88)   NEW? 1.56
-aeroParams.cla = [4.27]; % m^2 (3.45)  NEW? 3.66
-aeroParams.distribution = 0.4119; % proportion of downforce in front
+aeroParams.cda = [1.48]; % m^2 (1.88)   NEW? 1.56
+aeroParams.cla = [3.969]; % m^2 (3.45)  NEW? 3.66
+aeroParams.accel_cda = [0.855]; % low drag
+aeroParams.accel_cla = [2.37]; % 
+aeroParams.distribution = 0.418; % proportion of downforce in front
 
 % KTM engine parameters (updated 5/1/19)
 eParams = struct();
@@ -45,12 +48,12 @@ DTparams.G_d2_driving = (TBR-1)./(2+2*TBR); % differential torque transfer gain 
 
 % brake parameters (updated 8/14/23)
 Bparams = struct();
-Bparams.brake_distribution = 0.75;% proportion of brake torque applied to front
+Bparams.brake_distribution = [0.75];% proportion of brake torque applied to front
 Bparams.max_braking_torque = 840; % total braking torque (Nm)
 
 % tire parameters (updated 5/1/19)
 tireParams = struct();
-tireParams.gamma = [-1.5]; % camber angle
+tireParams.gamma = [-1]; % camber angle
 tireParams.p_i = [12]; % pressure
 % these parameters are non-iterable
 load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters

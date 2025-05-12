@@ -253,15 +253,9 @@ camber_fromsteer_2 = steer_angle_2*steer_camber;
 %disp([camber_fromsteer_1, camber_fromsteer_2]);
 camber(1) = static_camber +camber_fromroll_1 +(camber_fromsteer_1*-1) + camber_fromcompliance_1;
 camber(2) = static_camber +camber_fromroll_2 +(camber_fromsteer_2*1) + camber_fromcompliance_2;
-
-if static_camber < -64
-    camber(3) = 0;
-    camber(4) = 0;
-    return;
-end
-
 camber(3) = static_camber +camber_fromroll_3 +camber_fromcompliance_3;
 camber(4) = static_camber +camber_fromroll_4 +camber_fromcompliance_4;
+
 %disp([camber_fromcompliance_1, camber_fromcompliance_2, camber_fromcompliance_3, camber_fromcompliance_4])
 %disp(camber)
 

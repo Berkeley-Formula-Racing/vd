@@ -261,19 +261,34 @@ auto_y = cumtrapz(auto_s, sin(auto_theta));
 
 end_x = cumtrapz(end_s, cos(end_theta));
 end_y = cumtrapz(end_s, sin(end_theta));
-
 figure
+
+% Plot track
 plot(auto_x, auto_y, 'k-', 'LineWidth', 2)
 hold on
+
+% Scatter plot with velocity as color
 scatter(auto_x, auto_y, 50, carCell{1,1}.comp.autocross.long_vel, 'filled');
+
+% Colormap and colorbar
 colormap(jet);
-colorbar;
+cb = colorbar('SouthOutside');  % Move colorbar to bottom
+
+% Plot aesthetics
 title('2024 FSAE Michigan Autocross Track with Velocity (m/s) Heatmap');
 axis equal
 set(gca,'YTickLabel',[]);
 set(gca,'XTickLabel',[]);
-hold off
 
+% Adjust axis limits to fit data tightly
+xlim([min(auto_x)-10 max(auto_x)+10]);
+ylim([min(auto_y)-10 max(auto_y)+10]);
+
+% Improve layout
+set(gca, 'Position', [0.1 0.25 0.8 0.65]);  % Shrink axes to make room for colorbar
+set(cb, 'Position', [0.25 0.1 0.5 0.03]);   % Position colorbar at bottom
+
+hold off
 figure
 plot(end_x, end_y, 'k-', 'LineWidth', 2)
 hold on
