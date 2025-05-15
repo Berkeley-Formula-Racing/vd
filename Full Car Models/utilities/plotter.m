@@ -26,7 +26,7 @@ if plot_choice(1)
         [long_g_accel long_g_accel long_g_braking long_g_braking],...
         [vel_accel vel_accel vel_braking vel_braking],'b');
     hold on
-    scatter3([real_lat_g_accel], [real_long_g_accel], [real_long_vel], 'red')
+    %scatter3([real_lat_g_accel], [real_long_g_accel], [real_long_vel], 'red')
     title('Velocity-Dependent G-G diagram Scatter Plot','FontSize',18)
     xlabel('Lat G','FontSize',15)
     ylabel('Long G','FontSize',15)

@@ -13,24 +13,24 @@ clear
 setup_paths
 
 carCells = [];
-givenTorque = 150;
+%givenTorque = KTM450();
 
-%{
-for i = 1:1
-    carHelper = carConfig();
-    carHelper{1, 1}.powertrain.torque_fn = [0 100 12000 16000 20000; 0 givenTorque givenTorque givenTorque - 15 givenTorque - 30];
-    carHelper{1, 2}.powertrain.torque_fn = [0 100 12000 16000 20000; 0 givenTorque givenTorque givenTorque - 15 givenTorque - 30];
-    carCells = [carCells; carHelper];
-    givenTorque = givenTorque + 10;
-end
-%}
+
+%for i = 1:2
+%    carHelper = carConfig();
+%    carHelper{1, 1}.powertrain.torque_fn = givenTorque;
+%    carHelper{1, 2}.powertrain.torque_fn = givenTorque;
+%    carCells = [carCells; carHelper];
+%    givenTorque = KTM450HC();
+%end
+
 
 carCell = carConfig(); %generate all cars to sim over
 numCars = size(carCell,1);
 time = struct();time.prev = 0; time.curr = 0;
 tic
 % Set numWorkers to number of cores for better performance
-numWorkers = 0;
+numWorkers = 10;
 if numWorkers ~= 0
     disp('The parallel toolbox takes a few minutes to start.')
     disp('Set numWorkers to 0 for single-car runs')
@@ -101,8 +101,8 @@ selected_categories = find([ ...
      1 ... %Total  
 ]);
 
-%plot_lapsim_points(carCell, display_point_values_above_bar_flag, true,...
-%    [], automatic_label_name, automatic_label, selected_categories);
+plot_lapsim_points(carCell, display_point_values_above_bar_flag, true,...
+    [], automatic_label_name, automatic_label, selected_categories);
 %% Car Plotting
 
 % select desired car object
@@ -141,6 +141,7 @@ plot_choice = [plot1 plot2 plot3 plot4 plot5 plot6 plot7 plot8];
 for i=1: numCars
     event_plotter(carCell{i,1}.comp,[0, 0, 0, 0, 0, 0, 0, 0]);
 end
+
 figure
 hold on
 for i = 1 : numCars

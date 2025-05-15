@@ -1169,7 +1169,8 @@ points = [
 
 
 RPM = transpose(points(:,2));
-TQ = transpose(points(:,1));
+TQ = transpose(points(:,1)); %1.075 is for scaling the engine to estimated B25 torque curve
 
 torque_fn = [RPM; TQ];
-%plot(RPM, TQ);
+figure
+plot(RPM, TQ);
