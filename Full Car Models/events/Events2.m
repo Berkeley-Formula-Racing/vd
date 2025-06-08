@@ -182,6 +182,7 @@ classdef Events2 < handle
                         start_shifting = false;
                         shift_time_cumulative = 0;
                         current_gear = current_gear+1;
+                        current_gear = min(current_gear + 1, length(obj.car.powertrain.switch_gear_velocities));
                         num_upshifts = num_upshifts + 1;
                     end
                     
@@ -211,7 +212,7 @@ classdef Events2 < handle
                     lat_accel = long_vel^2*abs(curvature(i));
                     lat_accel_vector_2(i) = lat_accel*sign(curvature(i));
                     long_accel = F_braking(lat_accel,long_vel);
-                    if long_vel >= obj.car.max_vel
+                    if long_vel == obj.car.max_vel
                         long_accel = 0;
                     end
                     long_accel_vector_2(i) = long_accel;

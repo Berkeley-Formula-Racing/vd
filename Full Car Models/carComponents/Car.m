@@ -151,7 +151,11 @@ classdef Car
             %angle? We have lat vel, long vel, yaw rate, slip angles
             fyApprox = zeros(1,4);
             
-            fyApprox = (Fz./(sum(Fz))) * (yaw_rate) * (long_vel) * obj.M;
+            fyApprox(1) = obj.tire.F_y(alpha(1), kappa(1), Fz(1), obj.static_gamma);
+            fyApprox(2) = obj.tire.F_y(alpha(2), kappa(2), Fz(2), obj.static_gamma);
+            fyApprox(3) = obj.tire.F_y(alpha(3), kappa(3), Fz(3), obj.static_gamma);
+            fyApprox(4) = obj.tire.F_y(alpha(4), kappa(4), Fz(4), obj.static_gamma);
+
             %disp(fyApprox);
             %{
             fyApprox(1) = obj.tire.F_y(alpha(1),kappa(1),Fz(1),-obj.static_gamma); 

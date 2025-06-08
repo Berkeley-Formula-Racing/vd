@@ -2,22 +2,22 @@ function carCell = carConfig()
 
 % car parameters (updated 2/4/21)
 carParams = struct();
-carParams.mass = [168.7]; % not including driver (366 lb) 
+carParams.mass = [168]; % not including driver (366 lb) 
 carParams.driver_weight = 64; %
 carParams.accel_driver_weight = 59; % (130 lb)
 carParams.wheelbase = [62] * 0.0254; % 62 in
 carParams.weight_dist = [0.512]; % percentage of weight in rear
-carParams.track_width = 1.1938; % (47 in)
+carParams.track_width = [47] * 0.0254; % (47 in)
 carParams.wheel_radius = 0.1956; % loaded 
 % radius (7.7 in)
 carParams.cg_height = [11.75] * 0.0254; % (12 in) % 0.2965
 carParams.roll_center_height_front = 0.08636; % (3.4 in)
 carParams.roll_center_height_rear = 0.09144; % (3.6 in)
-carParams.R_sf = [0.35]; % proportion of roll stiffness in front (not same as LLTD)
+carParams.R_sf = [0.34]; % proportion of roll stiffness in front (not same as LLTD)
 carParams.I_zz = [83.28];%, 82.28]; %kg-m^2
 carParams.ackermann = [1]; %expressed as exponent for current ackermann curve
-carParams.camber_compliance = [0.125/1334];
-carParams.static_r_toe = [0 -0.25]; %toe in deg, toe out - negative
+carParams.camber_compliance = [0.1 0.09 0.08 0.07 0.06 0.05 0.04 0.03 0.02 0.01 0] / 9.8; %deg/g
+carParams.static_r_toe = [0]; %toe in deg, toe out - negative
 
 % aero parameters (updated 6/6/22)
 aeroParams = struct();
