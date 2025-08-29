@@ -54,6 +54,7 @@ classdef Events2 < handle
             obj.Accel();
             obj.Autocross();
             obj.Endurance();
+            obj.Understeer();
             points = obj.computePoints();
         end
         
@@ -68,7 +69,45 @@ classdef Events2 < handle
             obj.times.skidpad = time;
             obj.skidpad.x_table_skid = x_table_skid;
         end
-        
+        function [x_table_skid_multiple, maxVel_multiple, time_multiple] = Understeer(obj)
+            % modelled as pure steady state (no longitudinal acceleration)
+            % iterates over multiple skidpad radii
+            
+            % Radii range (you can modify this range based on your needs)
+            vel_list = linspace(5.0, 12.0, 41); 
+            num_vel = length(vel_list);
+            
+            % Initialize arrays to store the results for each radius
+            x_table_skid_multiple = cell(num_vel, 1); % storing tables for each radius
+            maxVel_multiple = zeros(num_vel, 1);      % storing max velocities for each radius
+            time_multiple = zeros(num_vel, 1);        % storing times for each radius
+            ay_multiple = zeros(num_vel, 1);
+            steer_angle_multiple = zeros(num_vel, 1);
+            
+            radius = 8.5;
+            % Iterate over the velocities
+            for i = 1:num_vel
+                vel = vel_list(i);
+                
+                % Call max_skidpad_vel to get the results for the current radius
+                [x_table_skid, maxVel, time] = skidpad_vel_sweep(radius,vel,obj.car);
+                
+                % Store the results
+                x_table_skid_multiple{i} = x_table_skid;
+                maxVel_multiple(i) = maxVel;
+                time_multiple(i) = time;
+                ay_multiple(i) = x_table_skid{1,"lat_accel"} / 9.8;
+                steer_angle_multiple(i) = x_table_skid{1,"steer_angle"};
+            end
+            
+            % Store the results in the object (if needed)
+            obj.times.skidpad_multiple = time_multiple;
+            obj.skidpad.x_table_skid_multiple = x_table_skid_multiple;
+            obj.skidpad.maxVel_multiple = maxVel_multiple;
+            obj.skidpad.ay = ay_multiple;
+            obj.skidpad.steer = steer_angle_multiple;
+        end
+
         function [time,ending_vel,long_accel_vector,long_vel_vector] = Accel(obj)
             % car starts 0.3 m behind starting line
             % accel is 75 m long
@@ -181,9 +220,8 @@ classdef Events2 < handle
                     if shift_time_cumulative>obj.car.powertrain.shift_time
                         start_shifting = false;
                         shift_time_cumulative = 0;
-                        current_gear = current_gear+1;
                         current_gear = min(current_gear + 1, length(obj.car.powertrain.switch_gear_velocities));
-                        num_upshifts = num_upshifts + 1;
+                        num_upshifts = num_upshifts + 1;    
                     end
                     
                     long_accel_vector_1(i) = long_accel;
@@ -204,29 +242,46 @@ classdef Events2 < handle
                 last_index_1 = extrema_indices(j);
 
                 % for braking calculate backwards from the apex velocity of the segment end
-                long_vel = apex_velocity(j);
-
-                for i = extrema_indices(j):-1:last_index_2 % opposite direction from accel
-
-                    % basic kinematics equations
-                    lat_accel = long_vel^2*abs(curvature(i));
-                    lat_accel_vector_2(i) = lat_accel*sign(curvature(i));
-                    long_accel = F_braking(lat_accel,long_vel);
+                long_vel = apex_velocity(j);  % reset velocity at apex
+                current_gear = find(long_vel < obj.car.powertrain.switch_gear_velocities, 1);  % initialize gear
+                if isempty(current_gear)
+                    current_gear = length(obj.car.powertrain.switch_gear_velocities);
+                end
+                
+                downshift_timer = 0;
+                is_downshifting = false;
+                
+                for i = extrema_indices(j):-1:last_index_2  % backward loop
+                    % Compute lateral acceleration
+                    lat_accel = long_vel^2 * abs(curvature(i));
+                    lat_accel_vector_2(i) = lat_accel * sign(curvature(i));
+                
+                    % Apply downshift delay logic
+                    if is_downshifting
+                        downshift_timer = downshift_timer - time_2(i+1);  % subtract previous time step
+                        if downshift_timer <= 0
+                            current_gear = max(current_gear - 1, 1);
+                            is_downshifting = false;
+                        end
+                    elseif current_gear > 1 && long_vel < obj.car.powertrain.switch_gear_velocities(current_gear - 1)
+                        is_downshifting = true;
+                        downshift_timer = 0.150;  % 150 ms delay
+                    end
+                
+                    % Compute braking acceleration
+                    long_accel = F_braking(lat_accel, long_vel);
                     if long_vel == obj.car.max_vel
                         long_accel = 0;
                     end
+                
                     long_accel_vector_2(i) = long_accel;
                     long_vel_initial = long_vel;
                     long_vel_vector_2(i) = long_vel_initial;
-                    long_vel = sqrt(long_vel^2-2*long_accel*(arclength(i+1)-arclength(i)));
-                    % can't exceed max possible velocity for given radius
-                    %{
-                    long_vel = min(long_vel,lininterp1(obj.interp_info.radius_vector,obj.interp_info.max_vel_corner_vector,...
-                        abs(1/curvature(i)))); 
-                    %}
-                    time_2(i) = 2*(arclength(i+1)-arclength(i))/(long_vel+long_vel_initial);
-
+                    long_vel = sqrt(max(long_vel^2 - 2 * long_accel * (arclength(i+1) - arclength(i)), 0));
+                
+                    time_2(i) = 2 * (arclength(i+1) - arclength(i)) / (long_vel + long_vel_initial);
                 end
+
 
                 % end next calculation at end of current segment
                 last_index_2 = extrema_indices(j);

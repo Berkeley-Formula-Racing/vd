@@ -67,8 +67,6 @@ fprintf("Stage Time: %d s; Total time elapsed: %d s\n",[time.curr-time.prev time
 fprintf("done\n");
 carCell = carOut;
 
-%% Saving
-save('DesignBinderFinalDriveSweep2.mat','carCell');
 
 %% Points Plotting
 for i = numCars
@@ -82,25 +80,25 @@ display_point_values_above_bar_flag = true;
 label_cars_automatically_flag = true;
 
 %automatic car labeling
-automatic_label_name = 'Camber Compliance';
+automatic_label_name = 'Camber Compliance f (deg/G)';
 %automatic_label = @(car) (1/2+car.powertrain.G_d2_driving)/(1/2-car.powertrain.G_d2_driving);%TBR
 %automatic_label = @(car) max(car.powertrain.torque_fn(2,:).*car.powertrain.torque_fn(1,:))/5252;
-automatic_label = @(car) car.camber_compliance;
+automatic_label = @(car) car.camber_compliance_f;
 %automatic_label = @(car) car.tire.gamma;
 %automatic_label = @(car) car.R_sf;
 %automatic_label = @(car) car.static_r_toe;
 
 % 1 to select, 0 to exclude 
 selected_categories = find([ ...
-     0 ... %Accel
-     0 ... %Autocross
-     0 ... %Endurance
-     0 ... %Skidpad
+     1 ... %Accel
+     1 ... %Autocross
+     1 ... %Endurance
+     1 ... %Skidpad
      1 ... %Total  
 ]);
 
-plot_lapsim_points(carCell, display_point_values_above_bar_flag, true,[], automatic_label_name, automatic_label, selected_categories);
-plot_lapsim_lines(carCell, true, [], automatic_label_name, automatic_label);
+%plot_lapsim_points(carCell, display_point_values_above_bar_flag, true,[], automatic_label_name, automatic_label, selected_categories);
+%plot_lapsim_lines(carCell, true, [], automatic_label_name, automatic_label);
 %% Car Plotting
 
 % select desired car object
@@ -127,22 +125,20 @@ comp = carCell{1,1}.comp;
 % set desired plots to 1
 plot1 = 0; % autocross track distance vs curvature
 plot2 = 0; % endurance track distance vs curvature
-plot3 = 1   ; % max possible velocity for given radius
+plot3 = 0; % max possible velocity for given radius
 plot4 = 0; % max possible long accel for given velocity
 plot5 = 0; % accel event longitudinal velocity vs time
 plot6 = 0; % accel event longitudinal accel vs time
 plot7 = 0; % autocross gear shifts
 plot8 = 0; % autocross slip angle vs distance
+plot9 = 0; %US/g
 
-plot_choice = [plot1 plot2 plot3 plot4 plot5 plot6 plot7 plot8];
+plot_choice = [plot1 plot2 plot3 plot4 plot5 plot6 plot7 plot8 plot9];
 
 for i=1: numCars
-    event_plotter(carCell{i,1}.comp,[0, 0, 0, 0, 0, 0, 0, 0]);
+    event_plotter(carCell{i,1}.comp,plot_choice);
 end
-figure
-hold on
-for i = 1 : numCars
-    scatter(carCell{i, 1}.powertrain.final_drive * 11, carCell{i,1}.comp.times.autocross);
-end
+
+understeer_plots(carCell);
 %engine_sweep(carCell, numCars)
 %tesla_plots(carCell)

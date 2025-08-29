@@ -1,12 +1,9 @@
-function [camber] = Camber_Evaluation(long_vel,yaw_rate, steer_angle_1,steer_angle_2, static_camber, fyApprox, ccVal);
+ function [camber] = Camber_Evaluation(fz, long_vel,yaw_rate, steer_angle_1,steer_angle_2, static_camber, fyApprox, ccVal_f, ccVal_r);
 steer_angle_1 = steer_angle_1/21.789;
 steer_angle_2 = steer_angle_2/21.789;
 steer_camber = 1.564; % deg at full steer
 roll_gradient = 0.67; %[0.62 1.33]; %0.67; % deg/g range (min to max)
 %static_camber = 0; % deg
-
-%camber_compliance_outside = 0.25 / 1334; %
-camber_compliance_outside = ccVal;
 %disp(camber_compliance_outside * 1334);
 % 0.2deg / 250 ft lbs = 0.2deg / 338.9 NM
 
@@ -240,10 +237,11 @@ camber_fromroll_1 = lininterp1(rc_Fn(1,:), rc_Fn(4,:), roll); %outer for right t
 camber_fromroll_2 = lininterp1(rc_Fn(1,:), rc_Fn(2,:), roll);%inner for right turn
 camber_fromroll_3 = lininterp1(rc_Fn(1,:), rc_Fn(5,:), roll);
 camber_fromroll_4 = lininterp1(rc_Fn(1,:), rc_Fn(3,:), roll);
-camber_fromcompliance_1 = fyApprox(1)*camber_compliance_outside;
-camber_fromcompliance_2 = fyApprox(2)*camber_compliance_outside;
-camber_fromcompliance_3 = fyApprox(3)*camber_compliance_outside;
-camber_fromcompliance_4 = fyApprox(4)*camber_compliance_outside;
+
+camber_fromcompliance_1 = ccVal_f *(fyApprox(1) / fz(1));
+camber_fromcompliance_2 = ccVal_f *(fyApprox(2) / fz(2));
+camber_fromcompliance_3 = ccVal_r *(fyApprox(3) / fz(3));
+camber_fromcompliance_4 = ccVal_r *(fyApprox(4) / fz(4));
 %camber_fromsteer = steer_angle*steer_camber;
 camber_fromsteer_1 = steer_angle_1*steer_camber;
 camber_fromsteer_2 = steer_angle_2*steer_camber;
@@ -253,8 +251,8 @@ camber_fromsteer_2 = steer_angle_2*steer_camber;
 %disp([camber_fromsteer_1, camber_fromsteer_2]);
 camber(1) = static_camber +camber_fromroll_1 +(camber_fromsteer_1*-1) + camber_fromcompliance_1;
 camber(2) = static_camber +camber_fromroll_2 +(camber_fromsteer_2*1) + camber_fromcompliance_2;
-camber(3) = static_camber +camber_fromroll_3 +camber_fromcompliance_3;
-camber(4) = static_camber +camber_fromroll_4 +camber_fromcompliance_4;
+camber(3) = static_camber +camber_fromroll_3 + camber_fromcompliance_3;
+camber(4) = static_camber +camber_fromroll_4 + camber_fromcompliance_4;
 
 %disp([camber_fromcompliance_1, camber_fromcompliance_2, camber_fromcompliance_3, camber_fromcompliance_4])
 %disp(camber)

@@ -21,11 +21,14 @@ function plot_lapsim_lines_by_event(carCell, label_cars_automatically_flag, ...
     event_names = {'Accel','Autocross','Endurance','Skidpad'};
     num_events = numel(event_names);
 
-    % Build point matrix: rows = events, columns = cars
+    % Build points and times matrix: rows = events, columns = cars
     points_matrix = zeros(num_events, num_cars);
+    times_matrix = zeros(num_events, num_cars);
     for i = 1:num_cars
         pts = carCell{i}.comp.points;
+        tms = carCell{i}.comp.times;
         points_matrix(:,i) = [pts.accel; pts.autocross; pts.endurance; pts.skidpad];
+        times_matrix(:,i) = [tms.accel; tms.autocross; tms.endurance; tms.skidpad];
     end
 
     %% --- Plot: Each line = 1 event, X-axis = cars ---
@@ -41,4 +44,17 @@ function plot_lapsim_lines_by_event(carCell, label_cars_automatically_flag, ...
     legend('Location','northwest');
     grid on;
     hold off;
+
+    %% --- Plot one figure per event: Time vs Car ---
+    for e = 1:num_events
+        figure('Name',['Times - ' event_names{e}]); hold on;
+        plot(1:num_cars, times_matrix(e,:), '-o');
+        xticks(1:num_cars);
+        xticklabels(car_labels);
+        xlabel('Car');
+        ylabel('Time (s)');
+        title([event_names{e} ' Times Across Cars']);
+        grid on;
+        hold off;
+    end
 end

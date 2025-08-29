@@ -18,7 +18,8 @@ classdef Car
         I_zz %polar moment of inertia, z axis
         static_gamma %static camber
         static_r_toe
-        camber_compliance
+        camber_compliance_f
+        camber_compliance_r
         aero
         powertrain
         tire
@@ -61,7 +62,7 @@ classdef Car
     
     methods
         function obj = Car(mass,wheelbase,weight_dist,track_width,wheel_radius,cg_height,...
-                roll_center_height_front,roll_center_height_rear,R_sf,I_zz,static_gamma,camber_compliance,aero,powertrain,tire,ackermann,static_r_toe);
+                roll_center_height_front,roll_center_height_rear,R_sf,I_zz,static_gamma,camber_compliance_f,camber_compliance_r,aero,powertrain,tire,ackermann,static_r_toe);
             obj.M = mass;
             obj.W_b = wheelbase;
             obj.l_f = wheelbase*weight_dist; % distance from cg to front
@@ -80,7 +81,8 @@ classdef Car
             obj.powertrain = powertrain;
             obj.tire = tire;
             obj.ackermann = ackermann;
-            obj.camber_compliance = camber_compliance;
+            obj.camber_compliance_f = camber_compliance_f;
+            obj.camber_compliance_r = camber_compliance_r;
             obj.static_r_toe = static_r_toe;
         end
         
@@ -151,22 +153,11 @@ classdef Car
             %angle? We have lat vel, long vel, yaw rate, slip angles
             fyApprox = zeros(1,4);
             
-            fyApprox(1) = obj.tire.F_y(alpha(1), kappa(1), Fz(1), obj.static_gamma);
-            fyApprox(2) = obj.tire.F_y(alpha(2), kappa(2), Fz(2), obj.static_gamma);
-            fyApprox(3) = obj.tire.F_y(alpha(3), kappa(3), Fz(3), obj.static_gamma);
-            fyApprox(4) = obj.tire.F_y(alpha(4), kappa(4), Fz(4), obj.static_gamma);
-
+            fyApprox = (Fz./(sum(Fz))) * (yaw_rate) * (long_vel) * obj.M;
             %disp(fyApprox);
-            %{
-            fyApprox(1) = obj.tire.F_y(alpha(1),kappa(1),Fz(1),-obj.static_gamma); 
-
-            fyApprox(2) = obj.tire.F_y(alpha(2),kappa(2),Fz(2),obj.static_gamma);
-            fyApprox(3) = obj.tire.F_y(alpha(3),kappa(3),Fz(3),-obj.static_gamma);
-            fyApprox(4) = obj.tire.F_y(alpha(4),kappa(4),Fz(4),obj.static_gamma);
-            %}
-
+            
             %gamma = [obj.static_gamma obj.static_gamma obj.static_gamma obj.static_gamma];
-            gamma = Camber_Evaluation(long_vel, yaw_rate, steer_angle_1, steer_angle_2, obj.static_gamma, fyApprox, obj.camber_compliance).';
+            gamma = Camber_Evaluation(Fz, long_vel, yaw_rate, steer_angle_1, steer_angle_2, obj.static_gamma, fyApprox, obj.camber_compliance_f, obj.camber_compliance_r).';
             %disp(gamma);
             %disp("------------");
             
