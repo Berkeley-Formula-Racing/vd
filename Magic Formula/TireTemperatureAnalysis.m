@@ -1,6 +1,7 @@
 close all;clc;
 setup_paths
 %% Temperature and Slip Angle vs Time
+%{
 load('A1654raw24.mat')
 figure
 %ax1 = subplot(3,1,1);
@@ -82,43 +83,63 @@ figure
 ET_input = [0 90];
 SA_input = -11;
 
-file_name = 'A1654raw24.mat';
+file_name = "C:\Users\johny\Desktop\CS\vd\Magic Formula\TTC Documentation\Round 9\RawData_Cornering_Matlab_USCS_Round9_Runs1to15\A2356raw8.mat";
 [SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, index] = TireTemperatureParser2(ET_input, SA_input, file_name);
 scatter(ET_out,FY_out)
 hold on
-
+%{
 file_name = 'A1965raw6.mat';
 [SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, index] = TireTemperatureParser2(ET_input, SA_input, file_name);
 scatter(ET_out,FY_out)
-
+%}
 file_name = 'A1965raw15.mat';
 [SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, index] = TireTemperatureParser2(ET_input, SA_input, file_name);
 scatter(ET_out,FY_out)
+
 xlabel('Time (s)')
 ylabel('Lateral Force (lb)')
-legend('18x7.5-10 R25B','16x7.5-10 R25B','16x7.5-10 LC0')
-
+legend('16x7.5-10 R20','16x7.5-10 LC0')
+%}
 %% Good Stuff 3
-figure
-ET_input = [0 200];
-SA_input = -11;
+ET_input = [0 200]; % Time range
+SA_inputs = 4:1:12; % Slip angles to iterate over
 
-file_name = 'A1654raw24.mat';
-[SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, IA_out, index] = TireTemperatureParser2(ET_input, SA_input, file_name);
-scatter(TSTC_out,smooth(FY_out,10))
-hold on
+% File paths for datasets
+file_name_1 = "C:\Users\johny\Desktop\CS\vd\Magic Formula\TTC Documentation\Round 9\RawData_Cornering_Matlab_USCS_Round9_Runs1to15\A2356raw8.mat";
+file_name_2 = 'A1965raw15.mat';
 
-file_name = 'A1965raw6.mat';
-[SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out,  IA_out,index] = TireTemperatureParser2(ET_input, SA_input, file_name);
-scatter(TSTC_out,smooth(FY_out,10))
+for i = 1:length(SA_inputs)
+    SA_input = SA_inputs(i);
 
-file_name = 'A1965raw15.mat';
-[SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out,  IA_out,index] = TireTemperatureParser2(ET_input, SA_input, file_name);
-scatter(TSTC_out,smooth(FY_out,1))
-xlabel('Temperature (F)')
-ylabel('Lateral Force (Lb)')
-legend('18x7.5-10 R25B','16x7.5-10 R25B','16x7.5-10 LC0')
+    % Parse data for first dataset
+    [SA_out, FY_out_1, FZ_out_1, P_out_1, TSTC_out_1, ET_out_1, IA_out_1, NFY_out_1, index_1] = TireTemperatureParser2(ET_input, SA_input, file_name_1);
 
+    % Parse data for second dataset
+    [SA_out, FY_out_2, FZ_out_2, P_out_2, TSTC_out_2, ET_out_2, NFY_out_2, IA_out_2, index_2] = TireTemperatureParser2(ET_input, SA_input, file_name_2);
+
+    % Create a new figure for each slip angle
+    figure;
+    hold on;
+
+    % Plot first dataset (R20) in red
+    scatter(TSTC_out_1, smooth(-FY_out_1, 1), 'r', 'DisplayName', '16x7.5-10 R20');
+
+    % Plot second dataset (LC0) in blue
+    scatter(TSTC_out_2, smooth(-FY_out_2, 1), 'b', 'DisplayName', '16x7.5-10 LC0');
+
+    % Customize plot
+    xlabel('Temperature (F)');
+    ylabel('Lateral Force (lbs)');
+    title(sprintf('Lateral Force vs Temperature (SA = %d)', SA_input));
+    legend('show');
+    grid on;
+    hold off;
+    filename = sprintf('R20-LC0-Temp-SA%d.png', SA_input);
+    saveas(gcf, filename);
+end
+
+
+%{
 %% Good Stuff 4
 
 figure
@@ -239,7 +260,7 @@ title('FZ = 250, P = 12',...
 
 
 %%
-file_name = 'A1654run24.mat';
+file_name = '"C:\Users\johny\Desktop\CS\vd\Magic Formula\TTC Documentation\Round 9\RawData_Cornering_Matlab_USCS_Round9_Runs1to15 (2)\A2356raw8.mat"';
 [SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, index] = TireTemperatureParser(P_input, IA_input, FZ_input, SA, file_name);
 
 plot(SA_out,FY_out)
@@ -276,15 +297,12 @@ P_input = 12;
 IA_input = 0;
 FZ_input = [50 150 250];
 
-file_name = 'A1654raw24.mat';
+file_name = "C:\Users\johny\Desktop\CS\vd\Magic Formula\TTC Documentation\Round 9\RawData_Cornering_Matlab_USCS_Round9_Runs1to15\A2356raw8.mat";
 [SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, index] = TireTemperatureParser3(ET_input,P_input, IA_input, FZ_input, SA_input, file_name);
 
 scatter(TSTC_out,FY_out);
 hold on
 
-file_name = 'A1965raw6.mat';
-[SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, index] = TireTemperatureParser3(ET_input,P_input, IA_input, FZ_input, SA_input, file_name);
-scatter(TSTC_out,FY_out);
 
 file_name = 'A1965raw15.mat';
 [SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, index] = TireTemperatureParser3(ET_input,P_input, IA_input, FZ_input, SA_input, file_name);
@@ -292,6 +310,6 @@ file_name = 'A1965raw15.mat';
 scatter(TSTC_out,FY_out);
 xlabel('Temperature (F)')
 ylabel('Friction Coefficient')
-legend('18x7.5-10 R25B','16x7.5-10 R25B','16x7.5-10 LC0')
+legend('16x7.5-10 R20','16x7.5-10 LC0')
 
-
+%}

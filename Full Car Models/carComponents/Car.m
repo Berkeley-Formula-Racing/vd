@@ -321,20 +321,20 @@ classdef Car
             xdot(13) = x(14);
             xdot(14) = ((T(4)-Fx(4)*obj.R)*(obj.Jw+obj.Jm*(Gr/2)^2) - (T(3)-Fx(3)*obj.R)*obj.Jm*(Gr/2)^2)*(1/denom);
         end
+
+        function [Fz_f, Fz_r] = FzForces(obj,longVel,T,pitch)
+            Fz_front_static = (obj.M*9.81*obj.l_r+obj.aero.pd_lift(longVel,pitch)*(obj.aero.D_f+obj.aero.D_p_deg_p*pitch))/(obj.W_b);
+            Fz_rear_static = (obj.M*9.81*obj.l_f+obj.aero.pd_lift(longVel,pitch)*(obj.aero.D_r-obj.aero.D_p_deg_p*pitch))/(obj.W_b);
+            long_load_transfer = (sum(T)/obj.R)*(obj.h_g/obj.W_b);
+            Fz_f = Fz_front_static - long_load_transfer;
+            Fz_r = Fz_rear_static + long_load_transfer;
+        end
         
         function [Fz, Fzvirtual] = ssForces(obj,longVel,yawRate,T,steer_angle)
-            Fz_front_static = (obj.M*9.81*obj.l_r+obj.aero.lift(longVel)*obj.aero.D_f)/obj.W_b;
-            Fz_rear_static = (obj.M*9.81*obj.l_f+obj.aero.lift(longVel)*obj.aero.D_r)/obj.W_b;
-            
-            Fy_front_approx = longVel*yawRate*obj.M*(obj.l_r/obj.W_b);
-            Fx_fromFy = -Fy_front_approx*sin(steer_angle);
-            %(F_x1+F_x2+F_x3+F_x4)*h_g/W_b approximated (neglecting wheel dynamics) since longitudinal forces are unknown
-            % Fx_fromFy term added to avoid overestimation of long load
-            %   transfer. Approximates Fx component from front tire lateral
-            %   forces
-            %long_load_transfer = (sum(T)/obj.R+Fx_fromFy)*(obj.h_g/obj.W_b);            
-            long_load_transfer = (sum(T)/obj.R)*(obj.h_g/obj.W_b);
-            
+
+            [Fz_front_init, Fz_rear_init] = FzForces(obj,longVel,T,0);
+            pitch = 180/pi*asin((Fz_rear_init/26444.15-Fz_front_init/25918.77)/obj.W_b);
+            [Fz_front, Fz_rear] = FzForces(obj,longVel,T,pitch); % calculate pitch dependent
             
             lat_load_transfer_front = (yawRate*longVel*obj.M)/obj.t_f*((obj.l_r*obj.h_rf)/obj.W_b+...
                 obj.R_sf*(obj.h_g-obj.h_rc));
@@ -349,10 +349,10 @@ classdef Car
 %             
             % wheel load constraint method from Kelly
             Fzvirtual = zeros(1,4);
-            Fzvirtual(1) = 0.5*Fz_front_static-0.5*long_load_transfer+lat_load_transfer_front;
-            Fzvirtual(2) = 0.5*Fz_front_static-0.5*long_load_transfer-lat_load_transfer_front;
-            Fzvirtual(3) = 0.5*Fz_rear_static+0.5*long_load_transfer+lat_load_transfer_rear;
-            Fzvirtual(4) = 0.5*Fz_rear_static+0.5*long_load_transfer-lat_load_transfer_rear;
+            Fzvirtual(1) = 0.5*Fz_front+lat_load_transfer_front;
+            Fzvirtual(2) = 0.5*Fz_front-lat_load_transfer_front;
+            Fzvirtual(3) = 0.5*Fz_rear+lat_load_transfer_rear;
+            Fzvirtual(4) = 0.5*Fz_rear-lat_load_transfer_rear;
 
             % smooth approximation of max function
             epsilon = 10; 
