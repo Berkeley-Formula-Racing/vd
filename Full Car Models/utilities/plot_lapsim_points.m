@@ -75,3 +75,5 @@ function plot_lapsim_points(carCell, display_point_values_above_bar_flag, label_
         end
     end
 end
+
+

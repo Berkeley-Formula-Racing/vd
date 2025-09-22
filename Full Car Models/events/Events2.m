@@ -73,14 +73,14 @@ classdef Events2 < handle
             % modelled as pure steady state (no longitudinal acceleration)
             % iterates over multiple skidpad radii
             
-            % Radii range (you can modify this range based on your needs)
+            % vel range (you can modify this range based on your needs)
             vel_list = linspace(5.0, 12.0, 41); 
             num_vel = length(vel_list);
             
-            % Initialize arrays to store the results for each radius
-            x_table_skid_multiple = cell(num_vel, 1); % storing tables for each radius
-            maxVel_multiple = zeros(num_vel, 1);      % storing max velocities for each radius
-            time_multiple = zeros(num_vel, 1);        % storing times for each radius
+            % Initialize arrays to store the results for each vel
+            x_table_skid_multiple = cell(num_vel, 1); % storing tables for each vel
+            maxVel_multiple = zeros(num_vel, 1);      % storing max velocities for each vel
+            time_multiple = zeros(num_vel, 1);        % storing times for each vel
             ay_multiple = zeros(num_vel, 1);
             steer_angle_multiple = zeros(num_vel, 1);
             
@@ -425,7 +425,7 @@ classdef Events2 < handle
             points.autocross = autocross_points;
             points.endurance = endurance_points;
             points.total = sum([skidpad_points; 
-                                   accel_points;
+                                   
                                    autocross_points;
                                    endurance_points]);
             obj.points = points;

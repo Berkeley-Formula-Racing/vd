@@ -65,4 +65,3 @@ x_table_skid = generate_table(x_skid);
 
 
 skidpad_time = (pi*2*radius)/max_vel_skid;
-disp(skidpad_time);

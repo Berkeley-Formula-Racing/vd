@@ -59,11 +59,10 @@ skid_guess = x;
 [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
     Fzvirtual,Fz,alpha,T,Fy,gamma] = car.equations(x);
 
+%disp(gamma);
 x_skid = [exitflag long_accel x(3)*x(5) x omega(1:4) engine_rpm current_gear beta...
     Fz(1:4) alpha(1:4) T(1:4)];
 
 x_table_skid = generate_table(x_skid);
-
-disp(gamma);
 
 skidpad_time = (pi*2*radius)/max_vel_skid;

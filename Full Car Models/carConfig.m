@@ -2,7 +2,7 @@ function carCell = carConfig()
 
 % car parameters (updated 2/4/21)
 carParams = struct();
-carParams.mass = [168]; % not including driver (366 lb) 
+carParams.mass = [164 168 172]; % not including driver (366 lb) 
 carParams.driver_weight = 64; %
 carParams.accel_driver_weight = 59; % (130 lb)
 carParams.wheelbase = [62] * 0.0254; % 62 in
@@ -16,8 +16,8 @@ carParams.roll_center_height_rear = 3.6 * 0.0254; %
 carParams.R_sf = [0.34]; % proportion of roll stiffness in front (not same as LLTD)
 carParams.I_zz = [83.28];%, 82.28]; %kg-m^2
 carParams.ackermann = [1]; %expressed as exponent for current ackermann curve
-carParams.camber_compliance_f =  [0.275]; %lateral deg/G
-carParams.camber_compliance_r =  linspace(0,0.5,8); 
+carParams.camber_compliance_f =  linspace(0, 0.5, 4); %lateral deg/G
+carParams.camber_compliance_r =  linspace(0, 0.5, 3); 
 carParams.static_r_toe = [0]; %toe in deg, toe out - negative
 
 % aero parameters (updated 6/6/22)
@@ -61,7 +61,7 @@ load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parame
 tireParams.Fx_parameters = cell2mat(Xbestcell);
 load('Lapsim_Fy_combined_parameters_1965run15.mat'); % F_y combined magic formula parameters
 tireParams.Fy_parameters = cell2mat(Xbestcell);
-tireParams.friction_scaling_factor = 1.05*0.55; % scales tire forces to account for test/road surface difference
+tireParams.friction_scaling_factor = 1.05*0.52; % scales tire forces to account for test/road surface difference
 
 % cell array of gridded parameters
 [carCell] = parameters_loop(carParams,aeroParams,eParams,DTparams,Bparams,tireParams);
