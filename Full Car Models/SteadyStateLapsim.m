@@ -128,7 +128,7 @@ plot5 = 0; % accel event longitudinal velocity vs time
 plot6 = 0; % accel event longitudinal accel vs time
 plot7 = 0; % autocross gear shifts
 plot8 = 0; % autocross slip angle vs distance
-plot9 = 1; %US/g
+plot9 = 0; %US/g
 
 plot_choice = [plot1 plot2 plot3 plot4 plot5 plot6 plot7 plot8 plot9];
 

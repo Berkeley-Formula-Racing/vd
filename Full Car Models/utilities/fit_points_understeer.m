@@ -1,5 +1,5 @@
 function [models, tables] = fit_points_understeer(carCell, opts)
-%FIT_POINTS_UNDERSTEER  Fit Points and Understeer Gradient vs. Mass, ccF, ccR.
+%FIT_POINTS_UNDERSTEER  Fit Points vs. Mass, ccF, ccR.
 %
 % Usage:
 %   [models, tables] = fit_points_understeer(carCell)
@@ -10,8 +10,6 @@ function [models, tables] = fit_points_understeer(carCell, opts)
 %       - camber_compliance_f (deg/g)
 %       - camber_compliance_r (deg/g)
 %       - M (kg) or Mass (kg)   [optional but recommended]
-%       - comp.skidpad.ay  (vector, g)
-%       - comp.skidpad.steer (vector, deg)
 %       - comp.points.total (scalar)
 %
 %   opts (optional): struct with fields
@@ -20,23 +18,18 @@ function [models, tables] = fit_points_understeer(carCell, opts)
 %       .standardize     : z-score predictors before fitting (default=false)
 %
 % Outputs:
-%   models: struct with fields for each response (Points, Ku), each containing:
-%       .coef, .se, .t, .p, .R2, .adjR2, .RMSE, .dof, .predictFcn, .spec
-%   tables: struct with underlying data table and per-model diagnostics tables
-%       .data : table of predictors+responses per car
-%       .diag_Points, .diag_Ku : tables with fitted vs residuals
+%   models: struct with field:
+%       .Points: .coef, .se, .t, .p, .R2, .adjR2, .RMSE, .dof, .predictFcn, .spec
+%   tables: struct with:
+%       .data : table of predictors+response per car
+%       .diag_Points : table with fitted vs residuals
 %
 % Notes:
-%   - Understeer gradient Ku is estimated using an adaptive linear-region
-%     detector identical to your understeer_surface() routine.
 %   - If opts.standardize is true, coefficients are on z-scales; the returned
 %     predictFcn handles raw (unscaled) inputs transparently.
 %   - You can toggle interactions/quadratic terms without changing call sites.
 
-
-if nargin < 2 || isempty(opts)
-    opts = struct; 
-end
+if nargin < 2 || isempty(opts), opts = struct; end
 opts = set_default(opts, 'useInteractions', true);
 opts = set_default(opts, 'useQuadratic',    false);
 opts = set_default(opts, 'standardize',     false);
@@ -46,80 +39,49 @@ carCell = carCell(:,1);
 N = numel(carCell);
 
 % -----------------------------
-% Collect predictors & responses
+% Collect predictors & response
 % -----------------------------
 M   = nan(N,1);
 ccF = nan(N,1);
 ccR = nan(N,1);
 Pts = nan(N,1);
-Ku  = nan(N,1);
 Name = strings(N,1);
 
 for i = 1:N
     car = carCell{i};
 
-    % mass (try multiple common names)
-    if hasFieldOrProp(car,'M'),        M(i)   = getFieldOrProp(car,'M');        end
-    if isnan(M(i)) && hasFieldOrProp(car,'Mass'), M(i) = getFieldOrProp(car,'Mass'); end
+    M(i)  = car.M;
+    ccF(i) = car.camber_compliance_f;
+    ccR(i) = car.camber_compliance_r;
+    Pts(i) = car.comp.points.total;
 
-    if hasFieldOrProp(car,'camber_compliance_f'), ccF(i) = getFieldOrProp(car,'camber_compliance_f'); end
-    if hasFieldOrProp(car,'camber_compliance_r'), ccR(i) = getFieldOrProp(car,'camber_compliance_r'); end
-
-    % points
-    try
-        Pts(i) = car.comp.points.total;
-    catch
-        % leave NaN
-    end
-
-    % name
-    if     hasFieldOrProp(car,'name'), Name(i) = string(getFieldOrProp(car,'name'));
-    elseif hasFieldOrProp(car,'Name'), Name(i) = string(getFieldOrProp(car,'Name'));
-    else,                              Name(i) = "Car " + i; end
-
-    % understeer gradient from skidpad (deg/g)
-    try
-        ay    = car.comp.skidpad.ay(:);
-        steer = car.comp.skidpad.steer(:);
-        [Ku(i),~] = estimate_understeer(ay, steer);
-    catch
-        % leave NaN
-    end
+    Name(i) = "Car " + i;
 end
 
-T = table(Name, M, ccF, ccR, Pts, Ku);
+T = table(Name, M, ccF, ccR, Pts);
 
-% Valid rows per response
+% Valid rows
 keep_pts = isfinite(T.M) & isfinite(T.ccF) & isfinite(T.ccR) & isfinite(T.Pts);
-keep_ku  = isfinite(T.M) & isfinite(T.ccF) & isfinite(T.ccR) & isfinite(T.Ku);
-
-if nnz(keep_pts) < 3 && nnz(keep_ku) < 3
-    error('Not enough valid rows for either response.');
+if nnz(keep_pts) < 3
+    error('Not enough valid rows for Points model (need >= 3).');
 end
 
 % -----------------------------
 % Design spec and matrices
 % -----------------------------
 [spec, X_P, y_P, mu, sg] = build_design(T(keep_pts,:), 'Pts', opts);
-[~,    X_K, y_K, ~,  ~ ] = build_design(T(keep_ku ,:), 'Ku',  opts, spec, mu, sg);
 
 % -----------------------------
-% Fit OLS for both responses
+% Fit OLS for Points
 % -----------------------------
 models = struct; tables = struct; tables.data = T;
-if ~isempty(X_P)
-    models.Points = do_ols_fit(X_P, y_P, spec, mu, sg, opts);
-    tables.diag_Points = make_diag_table(T(keep_pts,:), y_P, X_P*models.Points.coef);
-end
-if ~isempty(X_K)
-    models.Ku = do_ols_fit(X_K, y_K, spec, mu, sg, opts);
-    tables.diag_Ku = make_diag_table(T(keep_ku,:), y_K, X_K*models.Ku.coef);
-end
+
+models.Points = do_ols_fit(X_P, y_P, spec, mu, sg, opts);
+tables.diag_Points = make_diag_table(T(keep_pts,:), y_P, X_P*models.Points.coef);
 
 % Pretty print
 fprintf('\n=== Model spec ===\n'); disp(spec);
-if isfield(models,'Points');  print_model('Points', models.Points, spec);  end
-if isfield(models,'Ku');      print_model('Ku',     models.Ku,     spec);  end
+print_model('Points', models.Points, spec);
 
 % Quick visualization at median mass slice
 try
@@ -131,48 +93,7 @@ end
 end
 
 %=====================================================================
-% Estimator for understeer gradient using adaptive linear region growth
-%=====================================================================
-function [Ku, meta] = estimate_understeer(ay, steer)
-    Ku = NaN; meta = struct('cutoff',NaN,'n',numel(ay));
-    if numel(ay) < 8 || numel(steer) < 8
-        return
-    end
-
-    [ay, k] = sort(ay(:)); steer = steer(:); steer = steer(k);
-    n = numel(ay);
-
-    minPts = max(10, ceil(0.25*n));
-    p0   = polyfit(ay(1:minPts), steer(1:minPts), 1);
-    r0   = steer(1:minPts) - polyval(p0, ay(1:minPts));
-    sigma = 1.4826*mad(r0,1);
-    max_error_deg = max(0.15, 3*sigma);
-
-    slope_ref = p0(1);
-    slope_tol = max(0.03, 0.20*abs(slope_ref));
-    W = max(6, min(10, floor(0.2*n)));
-
-    cutoff = n;
-    for j = (minPts+W):n
-        p_prefix = polyfit(ay(1:j), steer(1:j), 1);
-        r        = steer(1:j) - polyval(p_prefix, ay(1:j));
-
-        p_win    = polyfit(ay(j-W+1:j), steer(j-W+1:j), 1);
-        slope_dev = abs(p_win(1) - slope_ref);
-
-        if max(abs(r)) > max_error_deg && slope_dev > slope_tol
-            cutoff = j - W; break
-        end
-    end
-
-    idx = false(n,1); idx(1:cutoff) = true;
-    p = polyfit(ay(idx), steer(idx), 1);
-    Ku = p(1);
-    meta.cutoff = cutoff;
-end
-
-%=====================================================================
-% Build design matrix X given options. Supports reuse of spec/mu/sg.
+% Build design matrix X given options.
 %=====================================================================
 function [spec, X, y, mu, sg] = build_design(T, yname, opts, spec_in, mu_in, sg_in)
     % Predictors (raw)
@@ -220,8 +141,7 @@ function [spec, X, y, mu, sg] = build_design(T, yname, opts, spec_in, mu_in, sg_
     y = T.(yname);
 
     if nargin >= 4 && ~isempty(spec_in)
-        spec = spec_in; % reuse existing spec so columns align across responses
-        % If spec_in provided, rebuild X to match it exactly
+        spec = spec_in; % reuse existing spec
         [~, X] = realize_spec(base_cols, spec);
     else
         spec = struct('useInteractions',opts.useInteractions, ...
@@ -229,7 +149,6 @@ function [spec, X, y, mu, sg] = build_design(T, yname, opts, spec_in, mu_in, sg_
                       'standardize',opts.standardize, ...
                       'mu',mu,'sg',sg,'pred_names',{pred_names}, ...
                       'term_names',{names});
-        % Freeze a canonical realization function
         [spec, X] = realize_spec(base_cols, spec);
     end
 end
@@ -237,8 +156,8 @@ end
 % Canonicalize term order and provide a function for future predictions
 function [spec, X] = realize_spec(B, spec)
     % B: base predictor matrix after (optional) standardization
-    pnames = spec.pred_names; %#ok<NASGU>
-    names = {'1','x1','x2','x3'}; % map: 1 -> intercept; x1->M, x2->ccF, x3->ccR
+    % Map base predictors in fixed order: x1->M, x2->ccF, x3->ccR
+    names = {'1','x1','x2','x3'}; 
 
     % base
     X = [ones(size(B,1),1), B(:,1), B(:,2), B(:,3)];
@@ -283,7 +202,6 @@ function model = do_ols_fit(X, y, spec, mu, sg, opts)
         if opts.standardize
             B = (B - mu)./sg;
         end
-        % realize spec for a single row (or vectorized)
         [~, Xr] = realize_spec(B, spec);
         yhat = Xr * coef;
     end
@@ -311,7 +229,7 @@ function s = set_default(s, f, v)
 end
 
 %=====================================================================
-% Quick slices over ccF/ccR at median Mass for visualization
+% Quick slice over ccF/ccR at median Mass for visualization
 %=====================================================================
 function do_quick_plots(T, models, spec)
     medM = median(T.M, 'omitnan');
@@ -319,32 +237,19 @@ function do_quick_plots(T, models, spec)
     crv = linspace(min(T.ccR), max(T.ccR), 41);
     [CF, CR] = meshgrid(cfv, crv);
 
-    if isfield(models,'Points'); do_plot(models.Points, 'Pts'); end
-    if isfield(models,'Ku');     do_plot(models.Ku,     'Ku');  end
+    % Points surface
+    mdl = models.Points;
+    figure('Color','w'); hold on; grid on; box on;
+    Z = mdl.predictFcn(repmat(medM, numel(CF), 1), CF(:), CR(:));
+    Z = reshape(Z, size(CF));
+    surf(CF, CR, Z, 'EdgeAlpha', 0.15, 'FaceAlpha', 0.85);
 
-    % ---- nested helper ----
-    function do_plot(mdl, ttl)
-        figure('Color','w'); hold on; grid on; box on;
-        Z = mdl.predictFcn(repmat(medM, numel(CF), 1), CF(:), CR(:));
-        Z = reshape(Z, size(CF));
-        surf(CF, CR, Z, 'EdgeAlpha', 0.15, 'FaceAlpha', 0.85);
+    scatter3(T.ccF, T.ccR, T.Pts, 28, T.Pts, ...
+        'filled', 'MarkerEdgeColor',[0 0 0.35]);  % data points
 
-        scatter3(T.ccF, T.ccR, T.(ttl), 28, T.(ttl), ...
-            'filled', 'MarkerEdgeColor',[0 0 0.35]);  % data points
-
-        xlabel('ccF (deg/g)'); ylabel('ccR (deg/g)'); zlabel(ttl);
-        title(sprintf('%s vs ccF, ccR @ M=%.1f (spec: int=%d, quad=%d, std=%d)', ...
-            ttl, medM, spec.useInteractions, spec.useQuadratic, spec.standardize));
-        view(40,28);
-        colorbar;
-    end
-end
-
-% ----------------- helpers used above -----------------
-function tf = hasFieldOrProp(S, name)
-    tf = (isstruct(S) && isfield(S,name)) || (isobject(S) && isprop(S,name));
-end
-
-function v = getFieldOrProp(S, name)
-    if isstruct(S), v = S.(name); else, v = S.(name); end
+    xlabel('ccF (deg/g)'); ylabel('ccR (deg/g)'); zlabel('Points');
+    title(sprintf('Points vs ccF, ccR @ M=%.1f (spec: int=%d, quad=%d, std=%d)', ...
+        medM, spec.useInteractions, spec.useQuadratic, spec.standardize));
+    view(40,28);
+    colorbar;
 end

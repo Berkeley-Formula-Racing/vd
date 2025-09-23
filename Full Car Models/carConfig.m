@@ -2,7 +2,7 @@ function carCell = carConfig()
 
 % car parameters (updated 2/4/21)
 carParams = struct();
-carParams.mass = [164 168 172]; % not including driver (366 lb) 
+carParams.mass = linspace(166, 170, 3); % not including driver (366 lb) 
 carParams.driver_weight = 64; %
 carParams.accel_driver_weight = 59; % (130 lb)
 carParams.wheelbase = [62] * 0.0254; % 62 in
@@ -16,16 +16,22 @@ carParams.roll_center_height_rear = 3.6 * 0.0254; %
 carParams.R_sf = [0.34]; % proportion of roll stiffness in front (not same as LLTD)
 carParams.I_zz = [83.28];%, 82.28]; %kg-m^2
 carParams.ackermann = [1]; %expressed as exponent for current ackermann curve
-carParams.camber_compliance_f =  linspace(0, 0.5, 4); %lateral deg/G
-carParams.camber_compliance_r =  linspace(0, 0.5, 3); 
+carParams.camber_compliance_f =  0; %lateral deg/G
+carParams.camber_compliance_r =  0; 
 carParams.static_r_toe = [0]; %toe in deg, toe out - negative
 
 % aero parameters (updated 6/6/22)
 aeroParams = struct();
-aeroParams.cda = [1.48]; % m^2 (1.88)   NEW? 1.56
-aeroParams.cla = [3.969]; % m^2 (3.45)  NEW? 3.66
+aeroParams.cda = [1.48]; % m^2 (1.88)  
+aeroParams.cla = [3.969]; % m^2 (3.45) 
+aeroParams.cla_p_deg_p = 0;
+aeroParams.D_p_deg_p = 0;
+
 aeroParams.accel_cda = [0.855]; % low drag
 aeroParams.accel_cla = [2.37]; % 
+aeroParams.acc_cla_p_deg_p = 0;
+aeroParams.acc_D_p_deg_p = 0;
+
 aeroParams.distribution = 0.418; % proportion of downforce in front
 
 % KTM engine parameters (updated 5/1/19)
