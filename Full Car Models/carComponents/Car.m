@@ -17,7 +17,6 @@ classdef Car
         R_sf %roll stiffness in front
         I_zz %polar moment of inertia, z axis
         static_gamma %static camber
-        static_r_toe
         camber_compliance
         aero
         powertrain
@@ -61,7 +60,7 @@ classdef Car
     
     methods
         function obj = Car(mass,wheelbase,weight_dist,track_width,wheel_radius,cg_height,...
-                roll_center_height_front,roll_center_height_rear,R_sf,I_zz,static_gamma,camber_compliance,aero,powertrain,tire,ackermann,static_r_toe);
+                roll_center_height_front,roll_center_height_rear,R_sf,I_zz,static_gamma,camber_compliance,aero,powertrain,tire,ackermann);
             obj.M = mass;
             obj.W_b = wheelbase;
             obj.l_f = wheelbase*weight_dist; % distance from cg to front
@@ -81,7 +80,6 @@ classdef Car
             obj.tire = tire;
             obj.ackermann = ackermann;
             obj.camber_compliance = camber_compliance;
-            obj.static_r_toe = static_r_toe;
         end
         
         function [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
@@ -140,13 +138,12 @@ classdef Car
             % slip angles (small angle assumption)
             alpha(1) = -steer_angle_1+(lat_vel+obj.l_f*yaw_rate)/(long_vel+yaw_rate*obj.t_f/2)*180/pi; %deg
             alpha(2) = -steer_angle_2+(lat_vel+obj.l_f*yaw_rate)/(long_vel-yaw_rate*obj.t_f/2)*180/pi; %deg
-            alpha(3) = -obj.static_r_toe + (lat_vel-obj.l_r*yaw_rate)/(long_vel+yaw_rate*obj.t_r/2)*180/pi;
-            alpha(4) = -obj.static_r_toe + (lat_vel-obj.l_r*yaw_rate)/(long_vel-yaw_rate*obj.t_r/2)*180/pi;
-            
-            %disp([alpha(1) alpha(2) alpha(3) alpha(4)]);
-        
+            alpha(3) = (lat_vel-obj.l_r*yaw_rate)/(long_vel+yaw_rate*obj.t_r/2)*180/pi;
+            alpha(4) = (lat_vel-obj.l_r*yaw_rate)/(long_vel-yaw_rate*obj.t_r/2)*180/pi;
+         
             %tire camber using tire.Fy with static camber 
-            % (inneficient, but it will work for now)
+            % (kind of stupid, very inneficient, but it will work for now
+            % maybe?)
             %maybe theres a more efficient way to approximate Fy with slip
             %angle? We have lat vel, long vel, yaw rate, slip angles
             fyApprox = zeros(1,4);
@@ -173,7 +170,7 @@ classdef Car
                         
             % Equations of Motion
             lat_accel = sum(Fy)*(1/obj.M)-yaw_rate*long_vel;
-            long_accel = (sum(Fx)-obj.aero.drag(long_vel))*(1/(obj.M))+yaw_rate*lat_vel;
+            long_accel = (sum(Fx)-obj.aero.drag(long_vel))*(1/(obj.M-10))+yaw_rate*lat_vel;
             yaw_accel = ((Fx(1)-Fx(2))*obj.t_f/2+(Fx(3)-Fx(4))*obj.t_r/2+(Fy(1)+Fy(2))*obj.l_f-(Fy(3)+Fy(4))*obj.l_r)*(1/obj.I_zz);
             %yaw_accel = ((Fy(1)+Fy(2))*obj.l_f-(Fy(3)+Fy(4))*obj.l_r)*(1/obj.I_zz);
     
