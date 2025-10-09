@@ -44,7 +44,7 @@ ub = [steer_angle_bounds(2),throttle_bounds(2),long_vel_bounds(2),lat_vel_bounds
 
 % default algorithm is interior-point
 options = optimoptions('fmincon','MaxFunctionEvaluations',1000,'ConstraintTolerance',1e-2,...
-    'Display','notify-detailed');
+    'Display','off');
 
 % objective function: longitudinal velocity times yaw rate (v*v/r = v^2/r)
 f = @(P) -P(3)*P(5);                                     

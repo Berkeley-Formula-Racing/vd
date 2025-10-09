@@ -17,13 +17,13 @@ car.k_tr = car.k_tf;
 % C12/R12 valving
 % 1:5 HS sweep (0-x 0-x), x = 4.3 3 2 1 0
 % 6:11 LS sweep (x-4.3 x-4.3), x = 2 4 6 10 15 25
-car.c_compression = cdamp{6}([1 2 10:10:end],:); % damping curves ([in/s lbf])
-car.c_rebound = rdamp{6}([1 2 10:10:end],:);
+car.c_compression = cdamp{9}([1 2 10:10:end],:); % damping curves ([in/s lbf])
+car.c_rebound = rdamp{9}([1 2 10:10:end],:);
 
 car.Ixx = 60;
 car.Iyy = 82;
-car.k_rf = 3000*6.474; % Nm/rad
-car.k_rr = 7000*6.474; % Nm/rad
+car.k_rf = 3300*6.474; % in-lb/deg -> Nm/rad
+car.k_rr = 3200*6.474; % Nm/rad
 car.MR_F = MR18Front;
 car.MR_R = MR18Front;
 
