@@ -1,4 +1,4 @@
-function [] = heatmaps(carCell)
+function [] = heatmaps(carCell, n)
 
 autocross_vel = [];
 endurance_vel = [];

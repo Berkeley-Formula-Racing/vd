@@ -1,4 +1,4 @@
-function [x_table_skid, max_vel_skid, skidpad_time, skid_guess, gamma, steer_angle_1, steer_angle_2] = max_skidpad_vel(radius,car,x0)
+function [x_table_skid, max_vel_skid, skidpad_time, skid_guess] = max_skidpad_vel(radius,car,x0)
 % uses fmincon to minimize the objective function subject to constraints
 % optimizes lateral acceleration with no velocity constraint and zero
 %   longitudinal acceleration constraint (steady-state skidpad assumption)
@@ -57,17 +57,12 @@ max_vel_skid = x(3);
 skid_guess = x;
 
 [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-    Fzvirtual,Fz,alpha,T,Fy, gamma, steer_angle_1, steer_angle_2] = car.equations(x);
+    Fzvirtual,Fz,alpha,T,Fy] = car.equations(x);
 
 x_skid = [exitflag long_accel x(3)*x(5) x omega(1:4) engine_rpm current_gear beta...
     Fz(1:4) alpha(1:4) T(1:4)];
 
-x_table_skid = generate_table(x_skid)
+x_table_skid = generate_table(x_skid);
 
-disp(gamma)
-
-disp(steer_angle_1)
-
-disp(steer_angle_2)
 
 skidpad_time = (pi*2*radius)/max_vel_skid;
