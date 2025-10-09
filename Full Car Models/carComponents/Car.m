@@ -83,7 +83,7 @@ classdef Car
         end
         
         function [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T,Fy, gamma] = equations(obj,P)           
+                Fzvirtual,Fz,alpha,T,Fy, gamma, steer_angle_1, steer_angle_2] = equations(obj,P)           
             
             % inputs: vehicle parameters
             % outputs: vehicle accelerations and other properties

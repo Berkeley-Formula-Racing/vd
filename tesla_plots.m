@@ -6,6 +6,10 @@ endurance_times = zeros(size(carCell, 1), 1);
 peak_torque = zeros(size(carCell, 1), 1);
 autocross_vel = [];
 endurance_vel = [];
+autocross_lat = [];
+autocross_long = [];
+endurance_lat = [];
+endurance_long = [];
 
 for i = 1:size(carCell, 1)
     accel_times(i, 1) = carCell{i, 1}.comp.times.accel;
@@ -14,6 +18,10 @@ for i = 1:size(carCell, 1)
     peak_torque(i, 1) = carCell{i, 1}.powertrain.torque_fn(2,2);
     autocross_vel{i} = carCell{i, 1}.comp.autocross.long_vel;
     endurance_vel{i} = carCell{i, 1}.comp.endurance.long_vel;
+    autocross_lat{i} = carCell{i, 1}.comp.autocross.lat_accel;
+    autocross_long{i} = carCell{i, 1}.comp.autocross.long_accel;
+    endurance_lat{i} = carCell{i, 1}.comp.endurance.lat_accel;
+    endurance_long{i} = carCell{i, 1}.comp.endurance.long_accel;
 end
 %{
 smoothed_accel_times = smooth(accel_times);
@@ -262,6 +270,8 @@ auto_y = cumtrapz(auto_s, sin(auto_theta));
 end_x = cumtrapz(end_s, cos(end_theta));
 end_y = cumtrapz(end_s, sin(end_theta));
 
+
+
 figure
 plot(auto_x, auto_y, 'k-', 'LineWidth', 2)
 hold on
@@ -356,4 +366,57 @@ title('2024 FSAE Michigan Endurance Track with Lateral Gs Heatmap');
 axis equal
 set(gca,'YTickLabel',[]);
 set(gca,'XTickLabel',[]);
+hold off
+
+
+
+%{
+figure
+histogram(carCell{1,1}.comp.autocross.lat_accel/9.81, BinWidth=.1, BinLimits=[-3, 3])
+hold on
+title("Autocross Lateral Acceleration (Gs) for B25")
+xlabel("Lateral Acceleration (Gs)")
+ylabel("Count")
+hold off
+
+figure
+histogram(carCell{1,1}.comp.autocross.long_accel/9.81, BinWidth=.1, BinLimits=[-3, 3])
+hold on
+title("Autocross Longitudinal Acceleration (Gs) for B25")
+xlabel("Longitudinal Acceleration (Gs)")
+ylabel("Count")
+hold off
+
+figure
+histogram(carCell{1,1}.comp.endurance.lat_accel/9.81, BinWidth=.1, BinLimits=[-3, 3])
+hold on
+title("Endurance Lateral Acceleration (Gs) for B25")
+xlabel("Lateral Acceleration (Gs)")
+ylabel("Count")
+hold off
+
+figure
+histogram(carCell{1,1}.comp.endurance.long_accel/9.81, BinWidth=.1, BinLimits=[-3, 3])
+hold on
+title("Endurance Longitudinal Acceleration (Gs) for B25")
+xlabel("Longitudinal Acceleration (Gs)")
+ylabel("Count")
+hold off
+
+
+
+figure
+histogram(abs(carCell{1,1}.comp.endurance.lat_accel/9.81) * 0.68, BinWidth=.1, BinLimits=[0, 2])
+hold on
+title("Endurance Lateral Roll with Roll Gradient of 0.68 (ARB: Short-MR1)")
+xlabel("Lateral Roll (Deg)")
+ylabel("Count")
+hold off
+
+figure
+histogram(abs(carCell{1,1}.comp.autocross.lat_accel/9.81) * 0.68, BinWidth=.1, BinLimits=[0, 2])
+hold on
+title("Autocross Lateral Roll with Roll Gradient of 0.68 (ARB: Short-MR1)")
+xlabel("Lateral Roll (Deg)")
+ylabel("Count")
 hold off
