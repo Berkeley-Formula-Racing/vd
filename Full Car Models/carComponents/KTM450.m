@@ -1170,5 +1170,4 @@ points = [
 
 RPM = transpose(points(:,2));
 TQ = transpose(points(:,1));
-TQ = TQ * 1.075;
 torque_fn = [RPM; TQ];

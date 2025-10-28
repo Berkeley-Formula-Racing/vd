@@ -194,3 +194,4 @@ RPM = transpose(points(:,1));
 TQ = transpose(points(:,2));
 
 torque_fn = [RPM; TQ];
+plot(RPM, TQ);

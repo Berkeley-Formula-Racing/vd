@@ -10,7 +10,7 @@ if nargin == 2 % no initial guess supplied
     long_vel_guess = sqrt(9.81*0.3*radius); % approximation method to help convergence
     lat_vel_guess = 0.2;
     yaw_rate_guess = 0.3;
-
+    gear_guess = 3;
     kappa_1_guess = 0;
     kappa_2_guess = 0;
     kappa_3_guess = 0.01;

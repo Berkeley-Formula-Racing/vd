@@ -22,13 +22,14 @@ classdef Powertrain
     end
     
     methods
-        function obj = Powertrain(redline,shift_point,gears,primary_reduction,torque_fn,shift_time,final_drive,...
+        function obj = Powertrain(redline,shift_point,tq0,tqL,tqPeak,tqH,gears,primary_reduction,shift_time,final_drive,...
                 wheel_radius,drivetrain_efficiency,G_d1,G_d2_overrun,G_d2_driving,brake_distribution,max_braking_torque)
             obj.redline = redline;
             obj.shift_point = shift_point;
             obj.gears = gears;
             obj.primary_reduction = primary_reduction;
-            obj.torque_fn = torque_fn;
+            %obj.torque_fn = TorqueSpline(tq0,tqL,tqPeak,tqH);
+            obj.torque_fn = KTM450();
             obj.shift_time = shift_time;
             obj.final_drive = final_drive;
             obj.wheel_radius = wheel_radius;  
@@ -38,7 +39,6 @@ classdef Powertrain
             obj.G_d2_driving = G_d2_driving;
             obj.brake_distribution = brake_distribution;            
             obj.max_braking_torque = max_braking_torque;
-            
             % calculates longitudinal velocities to switch gears at
             % approximately equal to redline but a tiny bit off due to wheel slips
             switch_gear_velocities = obj.shift_point./obj.gears/obj.final_drive/obj.primary_reduction*pi/30*obj.wheel_radius;
@@ -70,8 +70,8 @@ classdef Powertrain
             
             if throttle > 0 % accelerating
                 % linear interpolation of torque curve
-                % linterp1 is faster than MATLAB interp1q, credit Jeffrey Wu
-                torque_engine = throttle*lininterp1(obj.torque_fn(1,:),obj.torque_fn(2,:),engine_rpm); 
+
+                torque_engine = throttle*lininterp1(obj.torque_fn(1,:),obj.torque_fn(2,:),engine_rpm);
                 
                 torque_engine = torque_engine*1.35581795; %ft-lb to nm
                 

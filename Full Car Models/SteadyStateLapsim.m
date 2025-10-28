@@ -136,6 +136,6 @@ for i=1: numCars
     event_plotter(carCell{i,1}.comp,plot_choice);
 end
 
-understeer_plots(carCell);
+%understeer_plots(carCell);
 %engine_sweep(carCell, numCars)
 %tesla_plots(carCell)

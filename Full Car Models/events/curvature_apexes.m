@@ -17,6 +17,7 @@ extrema = [extrema curvature(end)];
 extrema_indices = [extrema_indices numel(curvature)];
 
 % visual check if necessary
+% figure
 % scatter(arclength(maxima_indices),curvature(maxima_indices));
 % hold on
 % scatter(arclength(minima_indices),curvature(minima_indices));

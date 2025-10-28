@@ -38,10 +38,12 @@ aeroParams.distribution = 0.418; % proportion of downforce in front
 eParams = struct();
 eParams.redline = 11500; % 11500   20000
 eParams.shift_point = 10000; % approximate 10000   25000
-% these parameters are non-iterable
+eParams.tq0 = 0;  
+eParams.tqL = 20.6; %KTM450 20.6 
+eParams.tqPeak = [30.4]; %KTM450 30.4
+eParams.tqH = 10;
 eParams.gears = [32/16 30/18 28/20 26/22 24/24]; % updated KTM450[32/16 30/18 28/20 26/22 24/24]
 eParams.primary_reduction = 76/32; % KTM450 76/32
-eParams.torque_fn = KTM450(); %KTM450()
 eParams.shift_time = 0.050; % seconds FOR UPSHIFT ONLY; 150ms for downshift
 
 % drivetrain parameters (updated 10/14/23)
@@ -60,8 +62,8 @@ Bparams.max_braking_torque = 840; % total braking torque (Nm)
 
 % tire parameters (updated 5/1/19)
 tireParams = struct();
-tireParams.gamma_f = linspace(0, -1.5, 8); % camber angle
-tireParams.gamma_r = linspace(0, -1.5, 8); % camber angle
+tireParams.gamma_f = -1.5; % camber angle
+tireParams.gamma_r = -1; % camber angle
 
 tireParams.p_i = [12]; % pressure
 % these parameters are non-iterable
