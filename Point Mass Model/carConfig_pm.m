@@ -6,6 +6,7 @@ carParams.driver_weight  = [64];
 carParams.weight_dist    = [0.512];
 carParams.wheel_radius   = [0.1956];
 carParams.c_roll         = [0.025];
+carParams.track_width = [47] * 0.0254;
 
 %% aero parameters
 aeroParams = struct();

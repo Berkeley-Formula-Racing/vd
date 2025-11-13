@@ -11,7 +11,7 @@ classdef track_pm
         end
     end
     methods (Static)
-        function trk = loadFromMichiganMat(matfile)
+        function trk = loadFromMat(matfile)
             data = load(matfile);
             s = data.arclength(:);
             k = data.curvature(:);

@@ -1,7 +1,7 @@
 function carCell = parameters_loop_pm(carParams, aeroParams, eParams, DTparams, Bparams, muParams)
-    trk = track_pm.loadFromMichiganMat('michigantrack2024.mat');
-    sim = lapsim_pm();
-    vmax = 33;
+    % trk = track_pm.loadFromMichiganMat('michigantrack2024.mat');
+    % sim = lapsim_pm();
+    % vmax = 33;
 
     % get torque source once
     [rpm_vec_src, tq_lbft_vec_src] = getTorqueSource(eParams.engineSource);
@@ -12,6 +12,7 @@ function carCell = parameters_loop_pm(carParams, aeroParams, eParams, DTparams, 
     L.wd        = numel(carParams.weight_dist);
     L.wr        = numel(carParams.wheel_radius);
     L.croll     = numel(carParams.c_roll);
+    L.tw = numel(carParams.track_width);
 
     L.cda       = numel(aeroParams.cda);
     L.cla       = numel(aeroParams.cla);
@@ -27,12 +28,12 @@ function carCell = parameters_loop_pm(carParams, aeroParams, eParams, DTparams, 
     L.mu_coeff  = numel(muParams.mu_model_coeff);
     L.mu_exp    = numel(muParams.mu_model_exp);
 
-    [i_mass, i_drv, i_wd, i_wr, i_croll, ...
+    [i_mass, i_drv, i_wd, i_wr, i_croll, i_tw, ...
      i_cda, i_cla, i_cop, ...
      i_fd, i_eta, ...
      i_brktq, i_brkTL, ...
      i_mu_scale, i_mu_coeff, i_mu_exp] = ndgrid( ...
-        1:L.mass, 1:L.drv, 1:L.wd, 1:L.wr, 1:L.croll, ...
+        1:L.mass, 1:L.drv, 1:L.wd, 1:L.wr, 1:L.croll, 1:L.tw, ...
         1:L.cda, 1:L.cla, 1:L.cop, ...
         1:L.fd, 1:L.eta, ...
         1:L.brktq, 1:L.brkTL, ...
@@ -49,7 +50,7 @@ function carCell = parameters_loop_pm(carParams, aeroParams, eParams, DTparams, 
         spec.weight_r     = carParams.weight_dist(i_wd(n));
         spec.wheel_radius = carParams.wheel_radius(i_wr(n));
         spec.c_roll       = carParams.c_roll(i_croll(n));
-
+        spec.track_width = carParams.track_width(i_tw(n));
         % aero
         spec.cda          = aeroParams.cda(i_cda(n));
         spec.cla          = aeroParams.cla(i_cla(n));
@@ -79,18 +80,11 @@ function carCell = parameters_loop_pm(carParams, aeroParams, eParams, DTparams, 
 
         % build + run
         carObj = buildCarFromSpec_pm(spec);
-        [lapT, vprof, vlim] = sim.run(carObj, trk, vmax);
-
         out = struct();
-        out.carObj    = carObj;
-        out.spec      = spec;
-        out.lap_time  = lapT;
-        out.v_profile = vprof;
-        out.v_latlim  = vlim;
-
+        out.carObj = carObj;
+        out.spec = spec;
         carCell{n} = out;
 
-        fprintf('combo %d/%d: lap time = %.2f s\n', n, N, lapT);
     end
 end
 
