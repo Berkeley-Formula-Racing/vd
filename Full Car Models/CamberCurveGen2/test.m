@@ -6,7 +6,7 @@ friction_scaling_factor = 1.05*0.55;
 p_i = 12; % tire pressure
 
 %initialize tire object, used for camber evaluation
-tire = Tire2(3,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+tire = BDITire2(3,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
 
 F_z_vec = 0:1:250;
 F_y_max_vec = 0*F_z_vec;
@@ -28,4 +28,4 @@ hold on;
 
 
 
-    
+

@@ -1,7 +1,7 @@
-function [SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, IA_out, index] = TireTemperatureParser2(ET_input, SA_input, file_name)
+function [SA_out, FY_out, FZ_out, P_out, TSTC_out, ET_out, IA_out, NFY_out, index] = TireTemperatureParser2(ET_input, SA_input, file_name)
 
 %SA_tol = 0.5;
-SA_tol = 1;
+SA_tol = 0.5;
 
 load(file_name);
 
@@ -25,3 +25,4 @@ P_out = P(index);
 TSTC_out = TSTC(index);
 IA_out = IA(index);
 ET_out = ET(index);
+NFY_out = NFY(index);

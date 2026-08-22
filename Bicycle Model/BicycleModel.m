@@ -1,9 +1,13 @@
 %% Inputs
+clear
 setup_paths
 
 weight_dist = 0.54; % rearwards
 m = 535*0.453592; % mass, kg
 L = 1.6; % wheelbase, m
+
+a = L*weight_dist; % front axle to cg, m
+b = L*(1-weight_dist); % rear axle to cg, m
 
 load('Fy_pure_parameters_run24_new2.mat')
 C_f = 0.55*2*4.448*cornering_stiffness(Xbestcell,0,535*(1-weight_dist),12,0);
@@ -37,6 +41,9 @@ D_r = 1.5*(g*m*a)/(L*C_r); % rear cornering compliance, deg/g
 
 
 %% Transfer Functions
+
+
+
 
 % yaw velocity by steer
 r_delta = tf([(57.3*g*a*b*u)/(D_f*L),((57.3*g)^2*a*b)/(D_f*D_r*L)],...
@@ -115,8 +122,14 @@ r_stepinfo = stepinfo(r_delta);
 ay_stepinfo = stepinfo(ay_delta);
 beta_stepinfo = stepinfo(beta_delta);
 
-% approximation of rise time using bandwidth (just a check)
-ay_risetime_approx = 0.318/(bandwidth(ay_delta)/(2*pi));
+r_rT = r_stepinfo.RiseTime;
+ay_rT = ay_stepinfo.RiseTime;
+r_tT = r_stepinfo.TransientTime;
+ay_tT = ay_stepinfo.TransientTime;
+r_sT = r_stepinfo.SettlingTime;
+ay_sT = ay_stepinfo.SettlingTime;
+r_os = r_stepinfo.Overshoot;
+ay_os = ay_stepinfo.Overshoot;
 
 % yaw velocity peak to steady state ratio
 r_peak_ss_ratio = r_stepinfo.Peak/dcgain(r_delta);
@@ -168,3 +181,4 @@ ackermann_gain = -(57.3*g*L)/u^2;
 % understeer is not independent of front/rear cornering compliances
 % understeer is defined by free response and can be derived from any SSG
 
+response_table = table(ay_rT,  ay_tT, ay_sT, ay_os, r_rT, r_tT, r_sT, r_os)

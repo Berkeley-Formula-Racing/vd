@@ -1,77 +1,28 @@
-load("C:\Users\johny\Documents\VD\600DOE.mat");
+load("DOE_results.mat",'carCell','designTable');
 
-%% --- 1. DEFINE THE DYNAMIC VARIABLE MAP ---
-% Format: {'RSM_Name', 'Car_Object_Property_Path'}
-% This map includes everything from your carConfig except engine/gears.
-varMap = {
-    % Chassis
-    'mass_total',   'M';
-    'wheelbase',    'W_b';
-    'cg_height',    'h_g'; 
-    'track_width',  't_f';
-    'roll_stiff_f', 'R_sf';
-    'izz',          'I_zz';
-    'ackermann',    'ackermann';
-    'compliance',   'camber_compliance';
-    
-    % Aero (Main Car) - UPDATED TO MATCH AERO CLASS PROPERTIES
-    'cla',          'aero.cla';  % Double-check if this is ClA or ClA_tot
-    'cda',          'aero.cda';  % Double-check if this is CdA or CdA_tot
-    'aero_dist',    'aero.D_f';  % Changed from .distribution to .D_f
-    
-    % Drivetrain & Brakes
-    'final_drive',  'powertrain.final_drive';
-    'drive_eff',    'powertrain.drivetrain_efficiency';
-    'tbr_gain',     'powertrain.G_d2_driving';
-    'brake_dist',   'powertrain.brake_distribution';
-    'max_brake',    'powertrain.max_braking_torque';
-    
-    % Tires
-    'static_gamma', 'static_gamma';
-    'pressure',     'tire.p_i';
-    'mu_scale',     'tire.friction_scaling_factor'
-};
-
-% Special case: Variables that only exist in the Accel Car (Column 2)
-accelVarMap = {
-    'accel_cda',    'aero.cda';
-    'accel_cla',    'aero.cla'
-};
-
-%% --- 2. DYNAMIC EXTRACTION LOOP ---
-numRuns = size(carCell, 1);
+%% --- 1. EXTRACT RESPONSES ---
+% designTable is saved by SteadyStateLapsim and is the exact sampled input
+% matrix. Reading it directly avoids stale Car property maps whenever the
+% vehicle model gains or renames a property.
+numRuns = height(designTable);
 outputNames = {'t_autox', 't_accel', 't_skid', 'total_work'};
-
-% Initialize data storage
-inputData = zeros(numRuns, size(varMap, 1) + size(accelVarMap, 1));
 outputData = NaN(numRuns, numel(outputNames));
 
 for i = 1:numRuns
     carMain = carCell{i, 1};
-    carAccel = carCell{i, 2};
-    
-    % --- Extract Main Car Variables ---
-    for v = 1:size(varMap, 1)
-        inputData(i, v) = getProp(carMain, varMap{v, 2});
-    end
-    
-    % --- Extract Accel-Specific Variables ---
-    offset = size(varMap, 1);
-    for v = 1:size(accelVarMap, 1)
-        inputData(i, offset + v) = getProp(carAccel, accelVarMap{v, 2});
-    end
-    
-    % --- Extract Performance Results ---
     if ~isempty(carMain.comp)
         c = carMain.comp;
+        t = c.autocross.time_vec(:);
+        dt = [t(1); diff(t)];
+        power = max(0,carMain.M*c.autocross.long_accel(:)) .* ...
+            c.autocross.long_vel(:);
+        totalWork = sum(power.*dt,'omitnan');
         outputData(i, :) = [c.times.autocross, c.times.accel, c.times.skidpad, ...
-                            c.autocross.metrics.total_work_J];
+                            totalWork];
     end
 end
 
-% Combine into a Table
-allNames = [varMap(:, 1)', accelVarMap(:, 1)', outputNames];
-doeTable = array2table([inputData, outputData], 'VariableNames', allNames);
+doeTable = [designTable,array2table(outputData,'VariableNames',outputNames)];
 
 % Clean: Remove failed runs and variables with zero variance (constants)
 doeTable = doeTable(~isnan(doeTable.t_autox), :);
@@ -135,21 +86,21 @@ inputVars = setdiff(doeTable.Properties.VariableNames, outputNames, 'stable');
 
 % --- MANUAL OVERRIDE: EXCLUDE VARIABLES FROM RSM ---
 % Add any variable names here that you want the model to ignore.
-varsToExclude = {}; 
+varsToExclude = {};
 inputVars = setdiff(inputVars, varsToExclude, 'stable');
 models = struct();
 
 for t = 1:numel(targets)
     resp = targets{t};
     fprintf('\n--- Analyzing %s ---\n', resp);
-    
+
     % Filter table for target + relevant inputs
     currTable = doeTable(:, [inputVars, {resp}]);
-    
+
     % STEPWISE: Automatically picks only the parameters that matter
     models.(resp) = stepwiselm(currTable, 'ResponseVar', resp, ...
         'Lower', 'constant', 'Upper', 'quadratic', 'Criterion', 'bic');
-    
+
     fprintf('Significant Predictors found: %d\n', numel(models.(resp).PredictorNames));
     fprintf('Adjusted R-squared: %.4f\n', models.(resp).Rsquared.Adjusted);
 end
@@ -176,25 +127,25 @@ colors = {[0.2 0.4 0.8], [0.8 0.2 0.2], [0.2 0.4 0.8], [0.2 0.7 0.2]}; % Blue, R
 for e = 1:numel(events)
     target = events{e};
     mdl = models.(target);
-    
+
     % 1. CHECK FOR EMPTY MODEL
     % If BIC kicked everything out, names will be empty.
     if numel(mdl.CoefficientNames) <= 1
         fprintf('Warning: No significant factors found for %s. Skipping plot.\n', target);
-        continue; 
+        continue;
     end
-    
+
     meanVal = mean(doeTable.(target));
     coeffs = mdl.Coefficients.Estimate(2:end);
     names = mdl.CoefficientNames(2:end);
-    
+
     % 2. Calculate the "Swing" (Impact) of each term
     % We want to know: (Beta * Range) / MeanTime * 100
     percentImpact = zeros(numel(coeffs), 1);
-    
+
     for c = 1:numel(coeffs)
         termName = names{c};
-        
+
         % Check if it's an interaction (e.g., 'mass:cla')
         if contains(termName, ':')
             parts = strsplit(termName, ':');
@@ -211,20 +162,20 @@ for e = 1:numel(events)
                 valDelta = max(doeTable.(cleanName))^2 - min(doeTable.(cleanName))^2;
             end
         end
-        
+
         % Calculate Percent Change
         percentImpact(c) = (coeffs(c) * valDelta / meanVal) * 100;
     end
-    
+
     % 2. SORT AND PLOT
     [~, sortIdx] = sort(abs(percentImpact), 'descend');
     sortedImpact = percentImpact(sortIdx);
     sortedNames = names(sortIdx);
-    
+
     figure('Name', ['Sensitivity: ' target], 'Color', 'w');
     h = barh(sortedImpact);
     h.FaceColor = colors{e};
-    
+
     % 3. THE FIX: Explicitly set ticks and turn off the TeX interpreter
     % This prevents "final_drive" from trying to render as "final_{drive}"
     ax = gca;
@@ -232,11 +183,11 @@ for e = 1:numel(events)
     set(ax, 'YTickLabel', sortedNames);
     set(ax, 'TickLabelInterpreter', 'none'); % CRITICAL: Disables auto-subscripting
     set(ax, 'YDir', 'reverse');
-    
+
     xlabel('Total Effect on Metric (%)');
     title(['Primary Drivers: ', strrep(target, '_', ' ')]);
     grid on;
-    
+
     % 4. BAR LABELS
     for i = 1:numel(sortedImpact)
         text(sortedImpact(i), i, [' ', num2str(sortedImpact(i), '%+0.2f'), '%'], ...
@@ -294,7 +245,7 @@ colorbar;
 
 % Plot Formatting
 ax = gca;
-set(ax, 'TickLabelInterpreter', 'none'); 
+set(ax, 'TickLabelInterpreter', 'none');
 xlabel(factor1, 'Interpreter', 'none', 'FontWeight', 'bold');
 ylabel(factor2, 'Interpreter', 'none', 'FontWeight', 'bold');
 zlabel(strrep(targetEvent, '_', ' '), 'Interpreter', 'none', 'FontWeight', 'bold');

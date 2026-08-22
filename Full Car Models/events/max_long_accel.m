@@ -38,8 +38,9 @@ Aeq = [1 0 0 0 0 0 0 0 0
        0 0 0 1 0 0 0 0 0
        0 0 0 0 1 0 0 0 0
        0 0 0 0 0 1 0 0 0
-       0 0 0 0 0 0 1 0 0];
-beq = [0 long_vel_guess 0 0 0 0];
+       0 0 0 0 0 0 1 0 0
+       0 0 0 0 0 0 0 1 -1]; % symmetric rear slip: kappa_4 = kappa_3
+beq = [0 long_vel_guess 0 0 0 0 0];
 lb = [steer_angle_bounds(1),throttle_bounds(1),long_vel_bounds(1),lat_vel_bounds(1),...
     yaw_rate_bounds(1),kappa_1_bounds(1),kappa_2_bounds(1),kappa_3_bounds(1),kappa_4_bounds(1)];
 ub = [steer_angle_bounds(2),throttle_bounds(2),long_vel_bounds(2),lat_vel_bounds(2),...

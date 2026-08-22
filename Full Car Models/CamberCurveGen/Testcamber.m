@@ -17,7 +17,7 @@ friction_scaling_factor = 1.05*0.55;
 p_i = 12; % tire pressure
 
 %initialize tire object, used for camber evaluation
-tire = Tire2(0,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+tire = BDITire2(0,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
 
 %Vehicle Width in inches
 C.front_width = 47;

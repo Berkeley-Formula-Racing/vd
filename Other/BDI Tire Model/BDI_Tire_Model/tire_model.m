@@ -10,5 +10,5 @@ function initialize_tire()
     Fy_parameters = cell2mat(Xbestcell);
     friction_scaling_factor = 1.05*0.55; % scales tire forces to account for test/road surface difference
 
-    tire = Tire2(gamma,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+    tire = BDITire2(gamma,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
 end

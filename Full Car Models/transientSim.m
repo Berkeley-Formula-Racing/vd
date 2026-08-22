@@ -54,7 +54,7 @@ steer = (time>car.TSmpc*(n-1)/2)*deg2rad(steerDeg);
 throttle = (time>car.TSmpc*(n-1)*3/4)*-1;
 % throttle = 0.1*ones(1,n);
 % throttle = ones(1,n);
-%throttle = [0*ones(1,n/2) 1*ones(1,n/4) -0.3*ones(1,n/4)];
+throttle = [0*ones(1,n/2) 1*ones(1,n/4) -0.3*ones(1,n/4)];
 % throttle = [zeros(1,n/4) ones(1,2*n/4) -ones(1,n/4)];
 uArr = [steer; throttle];
 

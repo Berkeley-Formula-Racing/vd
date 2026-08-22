@@ -2,7 +2,7 @@ classdef BDI_Tire_Model
     properties
         tire
     end
-    
+
     methods
         function obj = BDI_Tire_Model()
             gamma = 0; % camber angle
@@ -13,7 +13,7 @@ classdef BDI_Tire_Model
             load('Lapsim_Fy_combined_parameters_1965run15.mat'); % F_y combined magic formula parameters
             Fy_parameters = cell2mat(Xbestcell);
             friction_scaling_factor = 1.05*0.55; % scales tire forces to account for test/road surface difference
-            obj.tire = Tire2(gamma,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+            obj.tire = BDITire2(gamma,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
         end
         function [force, slip_ratio] = peak_longitudinal_force(obj, normal_force)
             %iterate through slip ratios to find peak longitudinal force
@@ -27,4 +27,4 @@ classdef BDI_Tire_Model
             slip_ratio = kappa_range(index);
         end
     end
-end        
+end

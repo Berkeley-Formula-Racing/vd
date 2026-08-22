@@ -1,122 +1,97 @@
-function [car_cell] = parameters_loop(cP, aP, eP, DTp, Bp, tP, sampling_type, num_samples)
-% parameters_loop Generates a cell array of Car objects for DOE.
-%
-% Inputs:
-%   cP, aP, eP, DTp, Bp, tP: Parameter structs from carConfig
-%   sampling_type: "FullFactorial", "LHS", or "Random"
-%   num_samples: Total runs for LHS/Random (ignored for FullFactorial)
-%
-% Output:
-%   car_cell: Nx2 cell array [Main_Car, Accel_Car]
+function [car_cell,sampleTable] = parameters_loop(cP,aP,eP,DTp,Bp,tP,samplingType,numSamples)
+%PARAMETERS_LOOP Build lap and acceleration cars for grids or DOE samples.
+%   FullFactorial treats every vector as explicit levels. LHS and Random
+%   treat every non-scalar vector as [minimum, maximum] bounds. LHS uses a
+%   base-MATLAB stratified sampler, so Statistics Toolbox is not required.
 
-    % Set defaults
-    if nargin < 7, sampling_type = "FullFactorial"; end
-    if nargin < 8 && ~strcmpi(sampling_type, "FullFactorial")
-        error('num_samples is required for LHS or Random sampling.');
+if nargin < 7 || isempty(samplingType), samplingType = "FullFactorial"; end
+if nargin < 8, numSamples = []; end
+
+names = { ...
+    'mass','driver_weight','accel_driver_weight','wheelbase','weight_dist', ...
+    'track_width','wheel_radius','cg_height','roll_center_height_front', ...
+    'roll_center_height_rear','R_sf','I_zz','cda','cla','distribution', ...
+    'cla_p_deg_p','D_p_deg_p','accel_cda','accel_cla','acc_cla_p_deg_p', ...
+    'acc_D_p_deg_p','redline','shift_point','shift_time','final_drive', ...
+    'drivetrain_efficiency','G_d1','G_d2_overrun','G_d2_driving', ...
+    'brake_distribution','max_braking_torque','gamma_f','gamma_r','p_i', ...
+    'ackermann','camber_compliance_f','camber_compliance_r','static_r_toe', ...
+    'grip_scaling_front','grip_scaling_rear','I_wheel','I_driveline','Crr'};
+
+values = { ...
+    cP.mass,cP.driver_weight,cP.accel_driver_weight,cP.wheelbase,cP.weight_dist, ...
+    cP.track_width,cP.wheel_radius,cP.cg_height,cP.roll_center_height_front, ...
+    cP.roll_center_height_rear,cP.R_sf,cP.I_zz,aP.cda,aP.cla,aP.distribution, ...
+    aP.cla_p_deg_p,aP.D_p_deg_p,aP.accel_cda,aP.accel_cla,aP.acc_cla_p_deg_p, ...
+    aP.acc_D_p_deg_p,eP.redline,eP.shift_point,eP.shift_time,DTp.final_drive, ...
+    DTp.drivetrain_efficiency,DTp.G_d1,DTp.G_d2_overrun,DTp.G_d2_driving, ...
+    Bp.brake_distribution,Bp.max_braking_torque,tP.gamma_f,tP.gamma_r,tP.p_i, ...
+    cP.ackermann,cP.camber_compliance_f,cP.camber_compliance_r,cP.static_r_toe, ...
+    tP.grip_scaling_front,tP.grip_scaling_rear,cP.I_wheel,cP.I_driveline,cP.Crr};
+
+P = sampleValues(values,samplingType,numSamples);
+sampleTable = array2table(P,'VariableNames',names);
+numRuns = size(P,1);
+car_cell = cell(numRuns,2);
+
+for i = 1:numRuns
+    q = struct();
+    for j = 1:numel(names)
+        q.(names{j}) = P(i,j);
     end
 
-    %% 1. Define the Master Parameter List
-    % This is the source of truth. Every variable sampled is listed here.
-    % The second column contains the array of levels (FullFactorial) 
-    % or the [min, max] bounds (LHS/Random).
-    params_list = {
-        'mass', cP.mass;                      % 1
-        'dr_wt', cP.driver_weight;            % 2
-        'acc_dr_wt', cP.accel_driver_weight;  % 3
-        'wb', cP.wheelbase;                   % 4
-        'wd', cP.weight_dist;                 % 5
-        'tw', cP.track_width;                 % 6
-        'rad', cP.wheel_radius;               % 7
-        'cg', cP.cg_height;                   % 8
-        'rchf', cP.roll_center_height_front;  % 9
-        'rchr', cP.roll_center_height_rear;   % 10
-        'rsf', cP.R_sf;                       % 11
-        'izz', cP.I_zz;                       % 12
-        'ack', cP.ackermann;                  % 13
-        'ccomp', cP.camber_compliance;        % 14
-        'cda', aP.cda;                        % 15
-        'cla', aP.cla;                        % 16
-        'aero_dist', aP.distribution;         % 17
-        'acc_cda', aP.accel_cda;              % 18 (Special for Accel)
-        'acc_cla', aP.accel_cla;              % 19 (Special for Accel)
-        'redline', eP.redline;                % 20
-        'shift_pt', eP.shift_point;           % 21
-        'shift_t', eP.shift_time;             % 22
-        'fd', DTp.final_drive;                % 23
-        'eff', DTp.drivetrain_efficiency;     % 24
-        'gd1', DTp.G_d1;                      % 25
-        'gd2_o', DTp.G_d2_overrun;            % 26
-        'gd2_d', DTp.G_d2_driving;            % 27
-        'b_dist', Bp.brake_distribution;      % 28
-        'b_trq', Bp.max_braking_torque;       % 29
-        'gamma', tP.gamma;                    % 30
-        'pi', tP.p_i                          % 31
-    };
+    aero = Aero(q.cda,q.cla,q.distribution,q.cla_p_deg_p,q.D_p_deg_p);
+    accelAero = Aero(q.accel_cda,q.accel_cla,q.distribution, ...
+        q.acc_cla_p_deg_p,q.acc_D_p_deg_p);
+    powertrain = Powertrain(q.redline,q.shift_point,eP.gears, ...
+        eP.primary_reduction,eP.torque_fn,q.shift_time,q.final_drive, ...
+        q.wheel_radius,q.drivetrain_efficiency,q.G_d1,q.G_d2_overrun, ...
+        q.G_d2_driving,q.brake_distribution,q.max_braking_torque);
+    tire = Tire2(q.p_i,tP.Fx_parameters,tP.Fy_parameters, ...
+        tP.friction_scaling_factor);
 
-    num_vars = size(params_list, 1);
+    common = {q.wheelbase,q.weight_dist,q.track_width,q.wheel_radius, ...
+        q.cg_height,q.roll_center_height_front,q.roll_center_height_rear, ...
+        q.R_sf,q.I_zz,q.gamma_f,q.gamma_r,q.camber_compliance_f, ...
+        q.camber_compliance_r};
+    tail = {powertrain,tire,q.ackermann,q.static_r_toe,q.grip_scaling_front, ...
+        q.grip_scaling_rear,q.I_wheel,q.I_driveline,q.Crr};
 
-    %% 2. Sampling Generation Logic
-    switch lower(sampling_type)
-        case 'fullfactorial'
-            grid_args = cell(1, num_vars);
-            [grid_args{:}] = ndgrid(params_list{:,2});
-            num_runs = numel(grid_args{1});
-            final_params = zeros(num_runs, num_vars);
-            for v = 1:num_vars
-                final_params(:, v) = grid_args{v}(:);
+    car_cell{i,1} = Car(q.mass+q.driver_weight,common{:},aero,tail{:});
+    car_cell{i,2} = Car(q.mass+q.accel_driver_weight,common{:},accelAero,tail{:});
+end
+end
+
+function P = sampleValues(values,samplingType,numSamples)
+nVar = numel(values);
+switch lower(string(samplingType))
+    case {"fullfactorial","grid"}
+        grid = cell(1,nVar);
+        [grid{:}] = ndgrid(values{:});
+        P = zeros(numel(grid{1}),nVar);
+        for j = 1:nVar, P(:,j) = grid{j}(:); end
+
+    case {"lhs","random"}
+        validateattributes(numSamples,{'numeric'},{'scalar','integer','positive'});
+        U = rand(numSamples,nVar);
+        if strcmpi(samplingType,"LHS")
+            for j = 1:nVar
+                U(:,j) = (randperm(numSamples)' - U(:,j))/numSamples;
             end
-            
-        case 'lhs'
-            num_runs = num_samples;
-            lhs_norm = lhsdesign(num_runs, num_vars, 'criterion', 'maximin');
-            final_params = zeros(num_runs, num_vars);
-            for v = 1:num_vars
-                p_range = params_list{v, 2};
-                if isscalar(p_range)
-                    final_params(:, v) = p_range;
-                else
-                    final_params(:, v) = min(p_range) + lhs_norm(:, v) * (max(p_range) - min(p_range));
-                end
+        end
+        P = zeros(numSamples,nVar);
+        for j = 1:nVar
+            bounds = values{j};
+            if isscalar(bounds)
+                P(:,j) = bounds;
+            else
+                lo = min(bounds); hi = max(bounds);
+                P(:,j) = lo + U(:,j)*(hi-lo);
             end
-            
-        case 'random'
-            num_runs = num_samples;
-            rand_norm = rand(num_runs, num_vars);
-            final_params = zeros(num_runs, num_vars);
-            for v = 1:num_vars
-                p_range = params_list{v, 2};
-                if isscalar(p_range)
-                    final_params(:, v) = p_range;
-                else
-                    final_params(:, v) = min(p_range) + rand_norm(:, v) * (max(p_range) - min(p_range));
-                end
-            end
-    end
+        end
 
-    %% 3. Construction Loop
-    car_cell = cell(num_runs, 2);
-    
-    for i = 1:num_runs
-        % Row mapping for clarity
-        p = final_params(i, :);
-
-        % Sub-Component Construction
-        % Main Aero (Autox/Skid)
-        aero = Aero(p(15), p(16), p(17)); 
-        % Special Accel Aero (Low Drag)
-        accel_aero = Aero(p(18), p(19), p(17)); 
-
-        powertrain = Powertrain(p(20), p(21), eP.gears, eP.primary_reduction, ...
-            eP.torque_fn, p(22), p(23), p(7), p(24), p(25), p(26), p(27), p(28), p(29));
-            
-        tire = Tire2(p(31), tP.Fx_parameters, tP.Fy_parameters, tP.friction_scaling_factor); 
-
-        % Main Car Setup
-        car_cell{i, 1} = Car(p(1) + p(2), p(4), p(5), p(6), p(7), p(8), ...
-            p(9), p(10), p(11), p(12), p(30), p(14), aero, powertrain, tire, p(13)); 
-
-        % Accel Car Setup (Includes Accel Driver Weight and Accel Aero)
-        car_cell{i, 2} = Car(p(1) + p(3), p(4), p(5), p(6), p(7), p(8), ...
-            p(9), p(10), p(11), p(12), p(30), p(14), accel_aero, powertrain, tire, p(13)); 
-    end
+    otherwise
+        error('parameters_loop:badSamplingType', ...
+            'samplingType must be FullFactorial, LHS, or Random.');
+end
 end
