@@ -70,11 +70,12 @@ mixedMetrics = M;
 mixedMetrics.valid = mod((1:height(M))',2) == 0;
 mixedModels = doeFitSurrogates(U,mixedMetrics,{'response_a'});
 assert(isobject(mixedModels.feasibility))
+assert(size(mixedModels.responses.response_a.X,1) == nnz(mixedMetrics.valid))
 
 invalidMetrics = M;
 invalidMetrics.valid(:) = false;
-invalidModels = doeFitSurrogates(U,invalidMetrics,{'response_a'});
-assert(isnumeric(invalidModels.feasibility) && invalidModels.feasibility == 0)
+assertError(@() doeFitSurrogates(U,invalidMetrics,{'response_a'}), ...
+    'doeFitSurrogates:noResponses')
 
 study.mode = "optimization";
 [Uo,So] = doeSelectAdaptiveBatch(state,study,C);
@@ -87,3 +88,12 @@ assert(sum(Sh.source == "sensitivity") == 2)
 assert(sum(Sh.source == "optimization") == 2)
 assert(size(unique(Uh,'rows'),1) == 4)
 assert(all(ismember(Sh.mode,"hybrid")))
+
+function assertError(f,id)
+try
+    f();
+    error('test:missingError','Expected %s',id)
+catch ME
+    assert(strcmp(ME.identifier,id),ME.message)
+end
+end
