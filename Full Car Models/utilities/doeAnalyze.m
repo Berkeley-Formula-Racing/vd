@@ -1,9 +1,19 @@
 function A = doeAnalyze(resultPath,opts)
 %DOEANALYZE Extract DOE metrics, fit selected responses, and create plots.
 if nargin < 2, opts = struct(); end
-S = load(resultPath,'carCell','designTable','metricTable');
+fileVariables = whos('-file',char(resultPath));
+available = {fileVariables.name};
+requested = intersect({'carCell','designTable','metricTable','checkpoint'}, ...
+    available,'stable');
+S = load(resultPath,requested{:});
 if ~isfield(S,'carCell') || ~isfield(S,'designTable')
-    error('doeAnalyze:badResults','Result file must contain carCell and designTable.');
+    if isfield(S,'checkpoint') && isstruct(S.checkpoint)
+        S = S.checkpoint;
+    end
+end
+if ~isfield(S,'carCell') || ~isfield(S,'designTable')
+    error('doeAnalyze:badResults', ...
+        'Result or checkpoint file must contain carCell and designTable.');
 end
 
 usedCachedMetrics = isfield(S,'metricTable') && istable(S.metricTable) && ...
@@ -44,7 +54,9 @@ end
 defaultResponses = {'t_autox','t_accel','t_skid','total_work_kJ', ...
     'gLat_peak_g','gg_lat_10_g','gg_lat_20_g','gg_lat_30_g', ...
     'gg_accel_20_g','gg_brake_20_g','min_Fz_N', ...
-    'understeer_proxy_10_deg','understeer_proxy_25_deg'};
+    'understeer_proxy_10_deg','understeer_proxy_25_deg', ...
+    'understeer_gradient_10_deg_per_g', ...
+    'understeer_gradient_25_deg_per_g','rebalance_speed_mps'};
 responses = getOr(opts,'responsesWanted',defaultResponses);
 responses = intersect(responses,metricVars,'stable');
 if isempty(predictors), error('doeAnalyze:noPredictors','No varying predictors remain.'); end

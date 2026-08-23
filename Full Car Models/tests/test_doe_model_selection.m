@@ -74,3 +74,71 @@ A = doeAnalyze(resultPath,struct('responsesWanted',{{'t_autox'}}, ...
 verifyFalse(testCase,A.settings.usedCachedMetrics);
 verifyEqual(testCase,A.metricTable.t_autox,extractedMetrics.t_autox,'AbsTol',1e-12);
 end
+
+function testDefaultAnalysisIncludesAvailableRampResponses(testCase)
+% Break caught: default offline analysis silently omits cached ramp metrics.
+setup_paths;
+[carCell,designTable,metricTable] = smallCachedData(true); %#ok<ASGLU>
+folder = tempname;
+mkdir(folder);
+cleaner = onCleanup(@() rmdir(folder,'s')); %#ok<NASGU>
+resultPath = fullfile(folder,'DOE_results.mat');
+save(resultPath,'carCell','designTable','metricTable');
+
+A = doeAnalyze(resultPath,struct('plots',strings(0,1),'visible','off', ...
+    'fitGaussianProcesses',false));
+
+expected = {'t_autox','understeer_gradient_10_deg_per_g', ...
+    'understeer_gradient_25_deg_per_g','rebalance_speed_mps'};
+verifyEqual(testCase,A.settings.responses,expected);
+end
+
+function testDefaultAnalysisSkipsUnavailableRampResponses(testCase)
+% Break caught: requesting optional ramps makes legacy result files fail.
+setup_paths;
+[carCell,designTable,metricTable] = smallCachedData(false); %#ok<ASGLU>
+folder = tempname;
+mkdir(folder);
+cleaner = onCleanup(@() rmdir(folder,'s')); %#ok<NASGU>
+resultPath = fullfile(folder,'DOE_results.mat');
+save(resultPath,'carCell','designTable','metricTable');
+
+A = doeAnalyze(resultPath,struct('plots',strings(0,1),'visible','off', ...
+    'fitGaussianProcesses',false));
+
+verifyEqual(testCase,A.settings.responses,{'t_autox'});
+end
+
+function testLoadsCachedDataFromCheckpointContainer(testCase)
+% Break caught: an offline checkpoint cannot be analysed without rerunning.
+setup_paths;
+[carCell,designTable,metricTable] = smallCachedData(false);
+checkpoint = struct('carCell',{carCell},'designTable',designTable, ...
+    'metricTable',metricTable); %#ok<NASGU>
+folder = tempname;
+mkdir(folder);
+cleaner = onCleanup(@() rmdir(folder,'s')); %#ok<NASGU>
+checkpointPath = fullfile(folder,'DOE_checkpoint.mat');
+save(checkpointPath,'checkpoint');
+
+A = doeAnalyze(checkpointPath,struct('responsesWanted',{{'t_autox'}}, ...
+    'plots',strings(0,1),'visible','off','fitGaussianProcesses',false));
+
+verifyTrue(testCase,A.settings.usedCachedMetrics);
+verifyEqual(testCase,A.metricTable,metricTable);
+verifyEqual(testCase,A.cleanTable.x1,designTable.x1,'AbsTol',1e-12);
+end
+
+function [carCell,designTable,metricTable] = smallCachedData(includeRamps)
+n = 6;
+carCell = cell(n,2);
+designTable = table(linspace(0,1,n)','VariableNames',{'x1'});
+metricTable = table((1:n)',true(n,1),strings(n,1), ...
+    45 + designTable.x1, ...
+    'VariableNames',{'case_index','valid','error_message','t_autox'});
+if includeRamps
+    metricTable.understeer_gradient_10_deg_per_g = 1 + designTable.x1;
+    metricTable.understeer_gradient_25_deg_per_g = 2 + designTable.x1;
+    metricTable.rebalance_speed_mps = 20 + designTable.x1;
+end
+end
