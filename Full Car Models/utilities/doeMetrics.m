@@ -11,6 +11,11 @@ rampOpts = getOr(opts,'rampOpts',struct('speeds',[10 25], ...
 n = size(carCell,1);
 rows = cell(n,1);
 details = struct('ramp',{cell(n,1)});
+if n == 0
+    [M,~] = doeCaseMetrics([],1,[]);
+    M = M([],:);
+    return
+end
 
 for i = 1:n
     try

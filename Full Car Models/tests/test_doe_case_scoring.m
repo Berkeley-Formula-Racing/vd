@@ -38,3 +38,8 @@ cfg.penalties.rebalance.target_mps = 16;
 cfg.penalties.rebalance.pointsPerMps = 3;
 [~,B] = doeScoreCase(points,M,cfg);
 assert(abs(B.penalty_rebalance-6) < 1e-12)
+
+emptyMetrics = doeMetrics(cell(0,1));
+invalidMetrics = doeMetrics({[]});
+assert(height(emptyMetrics) == 0)
+assert(isequal(emptyMetrics,invalidMetrics([],:)))
