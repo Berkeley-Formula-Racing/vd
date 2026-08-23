@@ -21,9 +21,13 @@ try
     resolvedStudy = attachStudySettings(resolved,study);
 
     if study.resume && isfile(checkpointPath)
-        [state,~] = loadDOECheckpoint(checkpointPath,resolvedStudy);
+        [state,resumeInfo] = loadDOECheckpoint(checkpointPath,resolvedStudy);
         validateResumeStudy(state.resolvedStudy,resolvedStudy)
         state = normalizeState(state,study,eventParams);
+        if any(resumeInfo.changed == "objective")
+            state = recomputeScores(state,(1:height(state.metricTable))');
+            saveDOECheckpoint(checkpointPath,state)
+        end
     else
         state = newState(resolvedStudy,study,eventParams);
         [state.pendingU,physicalDesign] = doeInitialDesign( ...
@@ -139,7 +143,8 @@ if ~state.resolvedStudy.ramps.enabled || isempty(state.carCell), return, end
 missing = false(height(state.designTable),1);
 for i = 1:height(state.designTable)
     missing(i) = state.caseStatus(i) == "complete" && ...
-        (i > numel(state.rampData) || isempty(state.rampData{i}));
+        (i > numel(state.rampData) || ...
+        ~isRampCacheCompatible(state.rampData{i},state.resolvedStudy.ramps));
 end
 if ~any(missing), return, end
 
@@ -163,7 +168,7 @@ saveDOECheckpoint(checkpointPath,state)
 end
 
 function state = mergeSuccessfulRamp(state,index,result)
-state.rampData{index,1} = rampCache(result);
+state.rampData{index,1} = rampCache(result,state.resolvedStudy.ramps);
 rampFields = ["understeer_gradient_10_deg_per_g", ...
     "understeer_gradient_25_deg_per_g","rebalance_speed_mps"];
 for fieldName = rampFields
@@ -214,7 +219,7 @@ for j = 1:n
     result = results{j};
     batchCars(j,:) = {result.car,result.accelCar};
     rows{j} = result.metricRow;
-    ramps{j} = rampCache(result);
+    ramps{j} = rampCache(result,state.resolvedStudy.ramps);
     points{j} = result.points;
     status(j) = result.status;
 end
@@ -255,9 +260,23 @@ catch
 end
 end
 
-function cache = rampCache(result)
-cache = struct('summary',result.rampSummary,'points',result.rampPoints);
+function cache = rampCache(result,ramps)
+cache = struct('summary',result.rampSummary,'points',result.rampPoints, ...
+    'configSignature',rampConfigSignature(ramps));
 if isempty(cache.summary) && isempty(cache.points), cache = []; end
+end
+
+function tf = isRampCacheCompatible(cache,ramps)
+tf = isstruct(cache) && isscalar(cache) && ...
+    isfield(cache,'configSignature') && ...
+    isequal(string(cache.configSignature),rampConfigSignature(ramps));
+if tf && getField(ramps,'saveFullPoints',false)
+    tf = isfield(cache,'points') && ~isempty(cache.points);
+end
+end
+
+function signature = rampConfigSignature(ramps)
+signature = string(jsonencode(orderfields(ramps)));
 end
 
 function [U,selection,nextRandomState] = spaceFillingBatch(state,n)

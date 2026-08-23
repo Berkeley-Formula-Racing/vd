@@ -52,6 +52,49 @@ cache = load(resultsPath,'metricTable','rampData','selectionHistory');
 assert(height(cache.metricTable) == 6 && numel(cache.rampData) == 6)
 assert(all(cache.selectionHistory.source(end-1:end) == "optimization"))
 
+% Changing only the objective must refresh cached scores without new cases.
+objectiveStudy = study;
+objectiveStudy.objective.penalties.energy.enabled = true;
+objectiveStudy.objective.penalties.energy.threshold_kJ = 0;
+objectiveStudy.objective.penalties.energy.pointsPerKJ = 0.1;
+saveDOECheckpoint(fullfile(d,study.output.checkpoint),state2)
+rescored = runAdaptiveDOE(objectiveStudy);
+for i = 1:height(state2.metricTable)
+    [~,expected] = doeScoreCase(state2.pointData{i},state2.metricTable(i,:), ...
+        objectiveStudy.objective);
+    expected = struct2table(expected);
+    scoreNames = expected.Properties.VariableNames;
+    assert(isequaln(rescored.metricTable{i,scoreNames},expected{1,scoreNames}))
+end
+
+% A nonempty cache from saveFullPoints=false is incompatible with true.
+oldRamps = study.ramps;
+oldRamps.enabled = true;
+oldRamps.saveFullPoints = false;
+oldSignature = string(jsonencode(orderfields(oldRamps)));
+incompatible = state2;
+incompatible.rampData = cell(height(state2.metricTable),1);
+for i = 1:height(state2.metricTable)
+    incompatible.rampData{i} = struct('summary',table(10, ...
+        'VariableNames',{'vCar'}),'points',[], ...
+        'configSignature',oldSignature);
+    car = incompatible.carCell{i,1};
+    car.comp = [];
+    incompatible.carCell{i,1} = car;
+end
+saveDOECheckpoint(fullfile(d,study.output.checkpoint),incompatible)
+rampConfigStudy = study;
+rampConfigStudy.ramps.enabled = true;
+rampConfigStudy.ramps.saveFullPoints = true;
+incompatibleBackfill = runAdaptiveDOE(rampConfigStudy);
+assertMetricTableUnchanged(incompatibleBackfill.metricTable,state2.metricTable)
+assert(isequal(incompatibleBackfill.pointData,state2.pointData))
+assert(isequal(incompatibleBackfill.caseStatus,state2.caseStatus))
+assert(height(incompatibleBackfill.rampBackfillDiagnostics) == 6)
+assert(all(incompatibleBackfill.rampBackfillDiagnostics.error_identifier == ...
+    "doeRunCase:unsolvedCar"))
+assert(isequaln(incompatibleBackfill.rampData,incompatible.rampData))
+
 % A failed ramp-only pass must not discard complete full-run cache data.
 metricsBefore = state2.metricTable;
 pointsBefore = state2.pointData;
