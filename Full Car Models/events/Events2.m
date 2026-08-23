@@ -16,6 +16,9 @@ classdef Events2 < handle
         
         times
         points
+        % DOE-only cached score breakdown; kept separate so points remains
+        % the five-field public event-score struct used by sweep utilities.
+        doeScoreBreakdown = []
         
         % contains info used for interpolation in autocross/accel solvers
         interp_info

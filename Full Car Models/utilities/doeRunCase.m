@@ -96,30 +96,36 @@ result = struct( ...
 end
 
 function [points,scoreBreakdown,hasScoreBreakdown] = cachedPoints(comp)
-if isempty(comp.points) || ~isstruct(comp.points) || ...
+hasScoreBreakdown = isprop(comp,'doeScoreBreakdown') && ...
+    ~isempty(comp.doeScoreBreakdown);
+scoreBreakdown = [];
+if hasScoreBreakdown
+    scoreBreakdown = comp.doeScoreBreakdown;
+    if ~isstruct(scoreBreakdown)
+        error('doeRunCase:badCachedScore', ...
+            'car.comp.doeScoreBreakdown must be a struct.')
+    end
+end
+
+if isempty(comp.points)
+    if hasScoreBreakdown
+        points = emptyPoints();
+        return
+    end
+    error('doeRunCase:missingCachedPoints', ...
+        'rampOnly requires cached event points in car.comp.points.')
+end
+if ~isstruct(comp.points) || ...
         ~all(isfield(comp.points,{'skidpad','accel','autocross','endurance','total'}))
     error('doeRunCase:missingCachedPoints', ...
         'rampOnly requires cached event points in car.comp.points.')
 end
 points = comp.points;
-hasScoreBreakdown = isfield(points,'doeScoreBreakdown');
-scoreBreakdown = [];
-if hasScoreBreakdown
-    scoreBreakdown = points.doeScoreBreakdown;
-    if ~isstruct(scoreBreakdown)
-        error('doeRunCase:badCachedScore', ...
-            'car.comp.points.doeScoreBreakdown must be a struct.')
-    end
-    points = rmfield(points,'doeScoreBreakdown');
-end
 end
 
 function cacheScoreBreakdown(comp,scoreBreakdown)
-% Keep the DOE payload with Events2's saved event points without altering
-% Car or Events2 properties; result.points remains the raw five-field score.
-points = comp.points;
-points.doeScoreBreakdown = scoreBreakdown;
-comp.points = points;
+% Keep DOE cache state outside the public Events2.points event-score schema.
+comp.doeScoreBreakdown = scoreBreakdown;
 end
 
 function points = emptyPoints()
