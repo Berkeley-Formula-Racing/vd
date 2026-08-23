@@ -1,6 +1,7 @@
 function A = doeAnalyze(resultPath,opts)
 %DOEANALYZE Extract DOE metrics, fit selected responses, and create plots.
 if nargin < 2, opts = struct(); end
+resultPath = resolveAnalysisPath(resultPath);
 fileVariables = whos('-file',char(resultPath));
 available = {fileVariables.name};
 requested = intersect({'carCell','designTable','metricTable','checkpoint'}, ...
@@ -58,8 +59,12 @@ defaultResponses = {'modeled_dynamic_points','objective_score', ...
     'understeer_proxy_10_deg','understeer_proxy_25_deg', ...
     'understeer_gradient_10_deg_per_g', ...
     'understeer_gradient_25_deg_per_g','rebalance_speed_mps'};
+explicitResponses = isfield(opts,'responsesWanted');
 responses = getOr(opts,'responsesWanted',defaultResponses);
 responses = intersect(responses,metricVars,'stable');
+if ~explicitResponses
+    responses = responses(responseHasEnoughData(cleanTable,predictors,responses));
+end
 if isempty(predictors), error('doeAnalyze:noPredictors','No varying predictors remain.'); end
 if isempty(responses), error('doeAnalyze:noResponses','No requested response exists in the metric table.'); end
 
@@ -78,8 +83,8 @@ for i=1:numel(responses)
     T=T(finiteRows,:);
     p=numel(predictors); n=height(T);
     if n <= p+2
-        error('doeAnalyze:tooFewRuns', ...
-            '%s has %d valid rows for %d predictors; need at least %d.', ...
+        error('doeAnalyze:insufficientResponseData', ...
+            '%s has %d finite valid rows for %d predictors; need at least %d.', ...
             response,n,p,p+3);
     end
     nQuadratic=1+2*p+p*(p-1)/2;
@@ -147,6 +152,37 @@ savePath=string(getOr(opts,'savePath',""));
 if strlength(savePath)>0
     analysis=A; analysis.figures=gobjects(0); %#ok<NASGU>
     save(savePath,'analysis','-v7.3');
+end
+end
+
+function path=resolveAnalysisPath(path)
+if ~(ischar(path) || (isstring(path) && isscalar(path))) || strlength(string(path)) == 0
+    error('doeAnalyze:badResultPath','Result path must be a nonempty character vector or string scalar.');
+end
+path=string(path);
+if isfolder(path)
+    resultFile=fullfile(path,"DOE_results.mat");
+    checkpointFile=fullfile(path,"DOE_checkpoint.mat");
+    if isfile(resultFile)
+        path=resultFile;
+    elseif isfile(checkpointFile)
+        path=checkpointFile;
+    else
+        error('doeAnalyze:noAnalysisSource', ...
+            'No DOE results or checkpoint file exists in %s.',path);
+    end
+end
+if ~isfile(path)
+    error('doeAnalyze:missingResults','Analysis source does not exist: %s.',path);
+end
+end
+
+function usable=responseHasEnoughData(T,predictors,responses)
+usable=false(size(responses));
+minimumRows=numel(predictors)+3;
+for i=1:numel(responses)
+    values=T{:, [predictors responses(i)]};
+    usable(i)=sum(all(isfinite(values),2)) >= minimumRows;
 end
 end
 

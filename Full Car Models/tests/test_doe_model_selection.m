@@ -129,6 +129,79 @@ verifyEqual(testCase,A.metricTable,metricTable);
 verifyEqual(testCase,A.cleanTable.x1,designTable.x1,'AbsTol',1e-12);
 end
 
+function testLoadsResultsFromOutputDirectory(testCase)
+% Break caught: offline analysis misses the default DOE_output result file.
+setup_paths;
+[carCell,designTable,metricTable] = smallCachedData(false); %#ok<ASGLU>
+folder = tempname;
+outputDirectory = fullfile(folder,'DOE_output');
+mkdir(outputDirectory);
+cleaner = onCleanup(@() rmdir(folder,'s')); %#ok<NASGU>
+save(fullfile(outputDirectory,'DOE_results.mat'), ...
+    'carCell','designTable','metricTable');
+
+A = doeAnalyze(outputDirectory,struct('responsesWanted',{{'t_autox'}}, ...
+    'plots',strings(0,1),'visible','off','fitGaussianProcesses',false));
+
+verifyTrue(testCase,A.settings.usedCachedMetrics);
+verifyEqual(testCase,A.cleanTable.x1,designTable.x1,'AbsTol',1e-12);
+end
+
+function testLoadsCheckpointFromOutputDirectory(testCase)
+% Break caught: offline analysis misses the default DOE_output checkpoint.
+setup_paths;
+[carCell,designTable,metricTable] = smallCachedData(false);
+checkpoint = struct('carCell',{carCell},'designTable',designTable, ...
+    'metricTable',metricTable); %#ok<NASGU>
+folder = tempname;
+outputDirectory = fullfile(folder,'DOE_output');
+mkdir(outputDirectory);
+cleaner = onCleanup(@() rmdir(folder,'s')); %#ok<NASGU>
+save(fullfile(outputDirectory,'DOE_checkpoint.mat'),'checkpoint');
+
+A = doeAnalyze(outputDirectory,struct('responsesWanted',{{'t_autox'}}, ...
+    'plots',strings(0,1),'visible','off','fitGaussianProcesses',false));
+
+verifyTrue(testCase,A.settings.usedCachedMetrics);
+verifyEqual(testCase,A.cleanTable.x1,designTable.x1,'AbsTol',1e-12);
+end
+
+function testDefaultAnalysisSkipsAllNanRampResponses(testCase)
+% Break caught: default analysis attempts to fit unavailable cached ramps.
+setup_paths;
+[carCell,designTable,metricTable] = smallCachedData(true); %#ok<ASGLU>
+metricTable.understeer_gradient_10_deg_per_g(:) = NaN;
+metricTable.understeer_gradient_25_deg_per_g(:) = NaN;
+metricTable.rebalance_speed_mps(:) = NaN;
+folder = tempname;
+mkdir(folder);
+cleaner = onCleanup(@() rmdir(folder,'s')); %#ok<NASGU>
+resultPath = fullfile(folder,'DOE_results.mat');
+save(resultPath,'carCell','designTable','metricTable');
+
+A = doeAnalyze(resultPath,struct('plots',strings(0,1),'visible','off', ...
+    'fitGaussianProcesses',false));
+
+verifyEqual(testCase,A.settings.responses,{'t_autox'});
+end
+
+function testExplicitAllNanResponseRaisesClearError(testCase)
+% Break caught: explicitly requested unavailable response fails ambiguously.
+setup_paths;
+[carCell,designTable,metricTable] = smallCachedData(true); %#ok<ASGLU>
+metricTable.understeer_gradient_10_deg_per_g(:) = NaN;
+folder = tempname;
+mkdir(folder);
+cleaner = onCleanup(@() rmdir(folder,'s')); %#ok<NASGU>
+resultPath = fullfile(folder,'DOE_results.mat');
+save(resultPath,'carCell','designTable','metricTable');
+
+verifyError(testCase,@() doeAnalyze(resultPath, ...
+    struct('responsesWanted',{{'understeer_gradient_10_deg_per_g'}}, ...
+    'plots',strings(0,1),'visible','off','fitGaussianProcesses',false)), ...
+    'doeAnalyze:insufficientResponseData');
+end
+
 function [carCell,designTable,metricTable] = smallCachedData(includeRamps)
 n = 6;
 carCell = cell(n,2);

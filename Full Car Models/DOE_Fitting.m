@@ -4,10 +4,19 @@ setup_paths
 modelRoot = fileparts(which('DOE_Fitting'));
 resultPath = fullfile(modelRoot,"DOE_results.mat");
 checkpointPath = fullfile(modelRoot,"DOE_checkpoint.mat");
+study = DOEStudyConfig();
+configuredResultPath = fullfile(string(study.output.directory), ...
+    string(study.output.results));
+configuredCheckpointPath = fullfile(string(study.output.directory), ...
+    string(study.output.checkpoint));
 if ~isfile(resultPath)
     legacyPath = fullfile(fileparts(modelRoot),"DOE_results.mat");
     if isfile(legacyPath)
         resultPath = legacyPath;
+    elseif isfile(configuredResultPath)
+        resultPath = configuredResultPath;
+    elseif isfile(configuredCheckpointPath)
+        resultPath = configuredCheckpointPath;
     elseif isfile(checkpointPath)
         resultPath = checkpointPath;
     else
