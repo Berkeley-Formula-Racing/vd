@@ -31,7 +31,7 @@ models.skippedResponses = strings(0,1);
 for i = 1:numel(responseNames)
     responseName = responseNames(i);
     fieldName = matlab.lang.makeValidName(char(responseName));
-    [model,spread,available] = fitResponse(U,metricTable,valid,responseName);
+    [model,spread,available] = fitResponse(U,metricTable,valid,responseName,false);
     if available
         models.responses.(fieldName) = model;
         models.responseSpreads.(fieldName) = spread;
@@ -45,7 +45,7 @@ if isempty(fieldnames(models.responses))
 end
 
 [models.objective,~,objectiveAvailable] = ...
-    fitResponse(U,metricTable,valid,"objective_score");
+    fitResponse(U,metricTable,valid,"objective_score",true);
 if ~objectiveAvailable
     models.objective = [];
 end
@@ -58,7 +58,7 @@ else
 end
 end
 
-function [model,spread,available] = fitResponse(U,metricTable,valid,responseName)
+function [model,spread,available] = fitResponse(U,metricTable,valid,responseName,validOnly)
 model = [];
 spread = NaN;
 available = false;
@@ -71,7 +71,10 @@ if ~isnumeric(y) || ~isreal(y) || ~isvector(y)
     return
 end
 y = y(:);
-ok = valid & isfinite(y);
+ok = isfinite(y);
+if validOnly
+    ok = valid & ok;
+end
 if nnz(ok) < 2
     return
 end

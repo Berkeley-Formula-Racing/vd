@@ -36,6 +36,45 @@ study.mode = "sensitivity";
 [Us,Ss] = doeSelectAdaptiveBatch(state,study,C);
 assert(size(Us,1) == 4 && all(Ss.source == "sensitivity"))
 assert(all(Ss.nearest_existing_distance >= study.adaptive.minimumDistance))
+[UsRepeat,SsRepeat] = doeSelectAdaptiveBatch(state,study,C);
+assert(isequal(Us,UsRepeat) && isequal(Ss,SsRepeat))
+
+MnoObjective = M;
+MnoObjective.objective_score(:) = NaN;
+stateNoObjective = struct('U',U,'metricTable',MnoObjective);
+[UsNoObjective,SsNoObjective] = doeSelectAdaptiveBatch(stateNoObjective,study,C);
+assert(size(UsNoObjective,1) == study.batchSize && ...
+    all(SsNoObjective.source == "sensitivity"))
+study.mode = "hybrid";
+study.adaptive.hybridSensitivityFraction = 1;
+[UhNoOptimization,ShNoOptimization] = ...
+    doeSelectAdaptiveBatch(stateNoObjective,study,C);
+assert(size(UhNoOptimization,1) == study.batchSize && ...
+    all(ShNoOptimization.source == "sensitivity"))
+
+study.mode = "sensitivity";
+study.adaptive.candidatePoolSize = 16;
+rng(91,'twister');
+randomStateBefore = rng;
+[Ugenerated1,Sgenerated1] = doeSelectAdaptiveBatch(stateNoObjective,study);
+assert(isequal(rng,randomStateBefore))
+[Ugenerated2,Sgenerated2] = doeSelectAdaptiveBatch(stateNoObjective,study);
+assert(isequal(Ugenerated1,Ugenerated2) && isequal(Sgenerated1,Sgenerated2))
+
+modelsWithUnavailable = doeFitSurrogates(U,M, ...
+    {'response_a','constant_response','missing_response'});
+assert(all(ismember(["constant_response";"missing_response"], ...
+    string(modelsWithUnavailable.skippedResponses))))
+
+mixedMetrics = M;
+mixedMetrics.valid = mod((1:height(M))',2) == 0;
+mixedModels = doeFitSurrogates(U,mixedMetrics,{'response_a'});
+assert(isobject(mixedModels.feasibility))
+
+invalidMetrics = M;
+invalidMetrics.valid(:) = false;
+invalidModels = doeFitSurrogates(U,invalidMetrics,{'response_a'});
+assert(isnumeric(invalidModels.feasibility) && invalidModels.feasibility == 0)
 
 study.mode = "optimization";
 [Uo,So] = doeSelectAdaptiveBatch(state,study,C);

@@ -33,10 +33,6 @@ if size(candidateU,1) < study.batchSize
         'Fewer than study.batchSize unused candidates are available.')
 end
 
-models = doeFitSurrogates(state.U,state.metricTable,adaptive.responses);
-sensitivityScore = sensitivityAcquisition(models,candidateU);
-optimizationScore = optimizationAcquisition(models,state.metricTable,candidateU);
-
 nSensitivity = 0;
 nOptimization = 0;
 switch mode
@@ -53,6 +49,16 @@ switch mode
             {'scalar','real','finite','>=',0,'<=',1})
         nSensitivity = round(study.batchSize * adaptive.hybridSensitivityFraction);
         nOptimization = study.batchSize - nSensitivity;
+end
+
+models = doeFitSurrogates(state.U,state.metricTable,adaptive.responses);
+sensitivityScore = [];
+if nSensitivity > 0
+    sensitivityScore = sensitivityAcquisition(models,candidateU);
+end
+optimizationScore = [];
+if nOptimization > 0
+    optimizationScore = optimizationAcquisition(models,state.metricTable,candidateU);
 end
 
 [picked,source] = diverseSelection(candidateU,state.U,sensitivityScore, ...
