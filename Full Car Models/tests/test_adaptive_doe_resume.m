@@ -64,12 +64,15 @@ for i = 1:size(state2.carCell,1)
     car.comp = [];
     state2.carCell{i,1} = car;
 end
-saveDOECheckpoint(fullfile(d,study.output.checkpoint),state2)
+checkpointPath = fullfile(d,study.output.checkpoint);
+saveDOECheckpoint(checkpointPath,state2)
+[checkpointState,~] = loadDOECheckpoint(checkpointPath,state2.resolvedStudy);
+assertMetricTableUnchanged(checkpointState.metricTable,metricsBefore)
 
 rampStudy = study;
 rampStudy.ramps.enabled = true;
 backfilled = runAdaptiveDOE(rampStudy);
-assert(isequal(backfilled.metricTable,metricsBefore))
+assertMetricTableUnchanged(backfilled.metricTable,metricsBefore)
 assert(isequal(backfilled.pointData,pointsBefore))
 assert(isequal(backfilled.caseStatus,statusBefore))
 assert(isequal(cellfun(@(car) car.M,backfilled.carCell(:,1)),massBefore))
@@ -87,4 +90,23 @@ try
 catch ME
     assert(strcmp(ME.identifier,id),ME.message)
 end
+end
+
+function assertMetricTableUnchanged(actual,expected)
+assert(isequal(actual.Properties.VariableNames,expected.Properties.VariableNames))
+changed = strings(0,1);
+for j = 1:width(expected)
+    name = expected.Properties.VariableNames{j};
+    if isequaln(actual.(name),expected.(name)), continue, end
+    rows = zeros(0,1);
+    for i = 1:height(expected)
+        if ~isequaln(actual.(name)(i,:),expected.(name)(i,:))
+            rows(end+1,1) = i; %#ok<AGROW>
+        end
+    end
+    changed(end+1,1) = string(name) + " rows " + mat2str(rows'); %#ok<AGROW>
+end
+assert(isempty(changed),"Ramp backfill changed metricTable: " + strjoin(changed,"; "))
+assert(isequaln(actual,expected), ...
+    'Ramp backfill changed metricTable values or table metadata.')
 end
