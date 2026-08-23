@@ -1,21 +1,24 @@
 function A = doeAnalyze(resultPath,opts)
 %DOEANALYZE Extract DOE metrics, fit selected responses, and create plots.
 if nargin < 2, opts = struct(); end
-S = load(resultPath,'carCell','designTable');
+S = load(resultPath,'carCell','designTable','metricTable');
 if ~isfield(S,'carCell') || ~isfield(S,'designTable')
     error('doeAnalyze:badResults','Result file must contain carCell and designTable.');
 end
 
-metricOpts = struct('runRampMetrics',getOr(opts,'runRampMetrics',false));
-if isfield(opts,'rampOpts'), metricOpts.rampOpts=opts.rampOpts; end
-[metricTable,metricDetails] = doeMetrics(S.carCell,metricOpts);
+usedCachedMetrics = isfield(S,'metricTable') && istable(S.metricTable) && ...
+    height(S.metricTable) == height(S.designTable);
+if usedCachedMetrics
+    metricTable = S.metricTable;
+    metricDetails = struct('ramp',cell(height(metricTable),1));
+else
+    metricOpts = struct('runRampMetrics',getOr(opts,'runRampMetrics',false));
+    if isfield(opts,'rampOpts'), metricOpts.rampOpts=opts.rampOpts; end
+    [metricTable,metricDetails] = doeMetrics(S.carCell,metricOpts);
+end
 
-valid = metricTable.valid & metricTable.t_skid <= 8 & ...
-    metricTable.t_autox >= 35 & metricTable.t_autox <= 75 & ...
-    metricTable.t_accel >= 3;
-quality = struct('total',height(metricTable),'valid',sum(valid), ...
-    'invalid',sum(~valid),'wheelLiftCases',sum(metricTable.min_Fz_N < 0), ...
-    'meanGGCoverage',mean(metricTable.gg_coverage(valid),'omitnan'));
+valid = analysisValidity(metricTable);
+quality = analysisQuality(metricTable,valid);
 
 metricVars = setdiff(metricTable.Properties.VariableNames, ...
     {'case_index','valid','error_message'},'stable');
@@ -47,7 +50,10 @@ responses = intersect(responses,metricVars,'stable');
 if isempty(predictors), error('doeAnalyze:noPredictors','No varying predictors remain.'); end
 if isempty(responses), error('doeAnalyze:noResponses','No requested response exists in the metric table.'); end
 
-models=struct(); modelOrder=struct();
+predictorBounds = predictorLimits(cleanTable,predictors);
+models=struct(); gpModels=struct(); modelOrder=struct(); validation=struct(); preferredModel=struct();
+fitGaussianProcesses = getOr(opts,'fitGaussianProcesses',true);
+cvSeed = getOr(opts,'cvSeed',0);
 for i=1:numel(responses)
     response=responses{i};
     vars=[predictors {response}];
@@ -65,6 +71,15 @@ for i=1:numel(responses)
     models.(response)=stepwiselm(T,'ResponseVar',response, ...
         'Lower','constant','Upper',upper,'Criterion','bic','Verbose',0);
     modelOrder.(response)=upper;
+    if fitGaussianProcesses
+        gpModels.(response) = fitExactGP(T,predictors,response);
+    else
+        gpModels.(response) = [];
+    end
+    validation.(response) = crossValidateModels(T,predictors,response,upper, ...
+        fitGaussianProcesses,cvSeed);
+    preferredModel.(response) = choosePreferredModel(validation.(response), ...
+        fitGaussianProcesses);
 end
 
 catalog=doePlotCatalog();
@@ -89,15 +104,138 @@ if any(plots=="interactions")
 end
 
 A=struct('metricTable',metricTable,'metricDetails',metricDetails, ...
-    'cleanTable',cleanTable,'models',models,'modelOrder',modelOrder, ...
+    'cleanTable',cleanTable,'models',models,'gpModels',gpModels, ...
+    'modelOrder',modelOrder,'validation',validation, ...
+    'preferredModel',preferredModel,'predictorBounds',predictorBounds, ...
     'graphCatalog',catalog,'figures',figures,'quality',quality, ...
     'settings',struct('predictors',{predictors},'responses',{responses}, ...
-    'plots',plots,'resultPath',string(resultPath)));
+    'plots',plots,'resultPath',string(resultPath), ...
+    'usedCachedMetrics',usedCachedMetrics, ...
+    'fitGaussianProcesses',fitGaussianProcesses,'cvSeed',cvSeed));
 
 savePath=string(getOr(opts,'savePath',""));
 if strlength(savePath)>0
     analysis=A; analysis.figures=gobjects(0); %#ok<NASGU>
     save(savePath,'analysis','-v7.3');
+end
+end
+
+function valid=analysisValidity(M)
+if ~ismember('valid',M.Properties.VariableNames)
+    error('doeAnalyze:missingValidity','Metric table must contain a valid column.');
+end
+valid = logical(M.valid(:));
+if numel(valid) ~= height(M)
+    error('doeAnalyze:badValidity','Metric-table validity must have one value per row.');
+end
+valid = valid & metricCondition(M,'t_skid',@(x) x <= 8) & ...
+    metricCondition(M,'t_autox',@(x) x >= 35 & x <= 75) & ...
+    metricCondition(M,'t_accel',@(x) x >= 3);
+end
+
+function pass=metricCondition(M,name,condition)
+pass = true(height(M),1);
+if ismember(name,M.Properties.VariableNames)
+    x = M.(name);
+    if ~isnumeric(x) || ~isvector(x) || numel(x) ~= height(M)
+        pass = false(height(M),1);
+    else
+        pass = logical(condition(x(:)));
+    end
+end
+end
+
+function quality=analysisQuality(M,valid)
+wheelLiftCases = 0;
+if ismember('min_Fz_N',M.Properties.VariableNames)
+    wheelLiftCases = sum(M.min_Fz_N < 0,'omitnan');
+end
+meanGGCoverage = NaN;
+if ismember('gg_coverage',M.Properties.VariableNames)
+    meanGGCoverage = mean(M.gg_coverage(valid),'omitnan');
+end
+quality = struct('total',height(M),'valid',sum(valid), ...
+    'invalid',sum(~valid),'wheelLiftCases',wheelLiftCases, ...
+    'meanGGCoverage',meanGGCoverage);
+end
+
+function bounds=predictorLimits(T,predictors)
+lower=zeros(numel(predictors),1);
+upper=zeros(numel(predictors),1);
+for i=1:numel(predictors)
+    x=T.(predictors{i});
+    lower(i)=min(x,[],'omitnan');
+    upper(i)=max(x,[],'omitnan');
+end
+bounds=table(string(predictors(:)),lower,upper, ...
+    'VariableNames',{'parameter','lower','upper'});
+end
+
+function gp=fitExactGP(T,predictors,response)
+gp=fitrgp(T{:,predictors},T.(response), ...
+    'KernelFunction','ardmatern32','Standardize',true, ...
+    'FitMethod','exact','PredictMethod','exact');
+end
+
+function validation=crossValidateModels(T,predictors,response,upper,fitGP,seed)
+n=height(T);
+quadraticPrediction=nan(n,1);
+gpPrediction=nan(n,1);
+k=min(5,n);
+if k >= 2
+    originalRng=rng;
+    cleanup=onCleanup(@() rng(originalRng)); %#ok<NASGU>
+    rng(seed,'twister');
+    folds=cvpartition(n,'KFold',k);
+    for fold=1:k
+        train=training(folds,fold);
+        heldOut=test(folds,fold);
+        try
+            quadratic=stepwiselm(T(train,:),'ResponseVar',response, ...
+                'Lower','constant','Upper',upper,'Criterion','bic','Verbose',0);
+            quadraticPrediction(heldOut)=predict(quadratic,T(heldOut,predictors));
+        catch
+        end
+        if fitGP
+            try
+                gp=fitExactGP(T(train,:),predictors,response);
+                gpPrediction(heldOut)=predict(gp,T{heldOut,predictors});
+            catch
+            end
+        end
+    end
+end
+y=T.(response);
+validation=struct('quadratic',predictionMetrics(y,quadraticPrediction), ...
+    'gp',predictionMetrics(y,gpPrediction),'folds',k);
+end
+
+function metrics=predictionMetrics(y,prediction)
+ok=isfinite(y) & isfinite(prediction);
+if ~any(ok)
+    metrics=struct('rmse',NaN,'normalizedRMSE',NaN,'mae',NaN, ...
+        'rankCorrelation',NaN,'n',0);
+    return
+end
+error=y(ok)-prediction(ok);
+rmse=sqrt(mean(error.^2));
+spread=std(y(ok),0);
+if spread <= eps(max(abs(y(ok))))
+    normalizedRMSE=NaN;
+else
+    normalizedRMSE=rmse/spread;
+end
+metrics=struct('rmse',rmse,'normalizedRMSE',normalizedRMSE, ...
+    'mae',mean(abs(error)),'rankCorrelation', ...
+    corr(y(ok),prediction(ok),'Type','Spearman'),'n',sum(ok));
+end
+
+function preferred=choosePreferredModel(validation,fitGP)
+preferred="quadratic";
+quadratic=validation.quadratic.normalizedRMSE;
+gp=validation.gp.normalizedRMSE;
+if fitGP && isfinite(quadratic) && isfinite(gp) && gp <= 0.95*quadratic
+    preferred="gp";
 end
 end
 

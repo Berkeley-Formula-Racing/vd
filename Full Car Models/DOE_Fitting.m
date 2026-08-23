@@ -3,6 +3,7 @@ setup_paths
 
 modelRoot = fileparts(which('DOE_Fitting'));
 resultPath = fullfile(modelRoot,"DOE_results.mat");
+checkpointPath = fullfile(modelRoot,"DOE_checkpoint.mat");
 if ~isfile(resultPath)
     legacyPath = fullfile(fileparts(modelRoot),"DOE_results.mat");
     if isfile(legacyPath)
@@ -12,7 +13,7 @@ if ~isfile(resultPath)
     end
 end
 
-%% Analysis settings
+%% Offline analysis settings (this script does not run DOE simulations)
 responsesWanted = { ...
     't_autox','t_accel','t_skid','total_work_kJ', ...
     'gLat_peak_g','gg_lat_10_g','gg_lat_20_g','gg_lat_30_g', ...
@@ -23,7 +24,8 @@ plotsWanted = ["quality","sensitivity","main_effects", ...
     "pareto_events","pareto_energy","correlation","speed_grip", ...
     "balance","validation"];
 
-runRampMetrics = false;  % true can be expensive
+fitGaussianProcesses = true;
+runRampMetrics = false;  % false keeps analysis offline when cache is absent
 analysisSavePath = fullfile(modelRoot,"DOE_analysis.mat");
 figureSavePath = fullfile(modelRoot,"figures","doe");
 
@@ -32,6 +34,7 @@ opts.responsesWanted = responsesWanted;
 opts.plots = plotsWanted;
 opts.visible = 'on';
 opts.runRampMetrics = runRampMetrics;
+opts.fitGaussianProcesses = fitGaussianProcesses;
 opts.savePath = analysisSavePath;
 
 analysis = doeAnalyze(resultPath,opts);
