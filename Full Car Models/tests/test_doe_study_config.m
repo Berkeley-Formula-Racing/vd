@@ -19,8 +19,12 @@ assert(R.signature == doeResolveStudy(study,baseline).signature)
 
 bad = study; bad.parameters.rangeType(3) = "percent";
 assertError(@() doeResolveStudy(bad,baseline),'doeResolveStudy:badPercentBaseline')
+bad = study; bad.parameters.lower(1) = -100;
+assertError(@() doeResolveStudy(bad,baseline),'doeResolveStudy:badPercentPhysicalBounds')
 bad = study; bad.parameters.name(1) = "not_a_car_parameter";
 assertError(@() doeResolveStudy(bad,baseline),'doeResolveStudy:unknownParameter')
+bad = study; bad.mode = ["sensitivity","hybrid"];
+assertError(@() doeResolveStudy(bad,baseline),'doeResolveStudy:badMode')
 
 function assertError(f,id)
 try, f(); error('test:missingError','Expected %s',id)
