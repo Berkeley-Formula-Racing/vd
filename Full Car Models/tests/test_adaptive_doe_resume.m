@@ -26,6 +26,17 @@ state1 = runAdaptiveDOE(study);
 assert(height(state1.designTable) == 4)
 assert(size(unique(state1.U,'rows'),1) == 4)
 
+changedEvents = study;
+changedEvents.resume = true;
+changedEvents.events = ["endurance","autocross","accel","skidpad"];
+assertError(@() runAdaptiveDOE(changedEvents), ...
+    'runAdaptiveDOE:resumeStudyMismatch')
+changedAdaptive = study;
+changedAdaptive.resume = true;
+changedAdaptive.adaptive.minimumDistance = 0.04;
+assertError(@() runAdaptiveDOE(changedAdaptive), ...
+    'runAdaptiveDOE:resumeStudyMismatch')
+
 study.mode = "optimization";
 study.maxCases = 6;
 study.resume = true;
@@ -40,3 +51,40 @@ assert(isfile(resultsPath))
 cache = load(resultsPath,'metricTable','rampData','selectionHistory');
 assert(height(cache.metricTable) == 6 && numel(cache.rampData) == 6)
 assert(all(cache.selectionHistory.source(end-1:end) == "optimization"))
+
+% A failed ramp-only pass must not discard complete full-run cache data.
+metricsBefore = state2.metricTable;
+pointsBefore = state2.pointData;
+statusBefore = state2.caseStatus;
+massBefore = cellfun(@(car) car.M,state2.carCell(:,1));
+ggBefore = cellfun(@(car) car.ggPoints,state2.carCell(:,1), ...
+    'UniformOutput',false);
+for i = 1:size(state2.carCell,1)
+    car = state2.carCell{i,1};
+    car.comp = [];
+    state2.carCell{i,1} = car;
+end
+saveDOECheckpoint(fullfile(d,study.output.checkpoint),state2)
+
+rampStudy = study;
+rampStudy.ramps.enabled = true;
+backfilled = runAdaptiveDOE(rampStudy);
+assert(isequal(backfilled.metricTable,metricsBefore))
+assert(isequal(backfilled.pointData,pointsBefore))
+assert(isequal(backfilled.caseStatus,statusBefore))
+assert(isequal(cellfun(@(car) car.M,backfilled.carCell(:,1)),massBefore))
+assert(isequal(cellfun(@(car) car.ggPoints,backfilled.carCell(:,1), ...
+    'UniformOutput',false),ggBefore))
+assert(height(backfilled.rampBackfillDiagnostics) == 6)
+assert(all(backfilled.rampBackfillDiagnostics.status == "failed"))
+assert(all(backfilled.rampBackfillDiagnostics.error_identifier == ...
+    "doeRunCase:unsolvedCar"))
+
+function assertError(f,id)
+try
+    f();
+    error('test:missingError','Expected %s',id)
+catch ME
+    assert(strcmp(ME.identifier,id),ME.message)
+end
+end

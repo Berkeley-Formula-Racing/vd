@@ -22,7 +22,8 @@ try
 
     if study.resume && isfile(checkpointPath)
         [state,~] = loadDOECheckpoint(checkpointPath,resolvedStudy);
-        state = normalizeState(state,resolvedStudy,study,eventParams);
+        validateResumeStudy(state.resolvedStudy,resolvedStudy)
+        state = normalizeState(state,study,eventParams);
     else
         state = newState(resolvedStudy,study,eventParams);
         [state.pendingU,physicalDesign] = doeInitialDesign( ...
@@ -88,6 +89,7 @@ state.metricTable = emptyMetricTable();
 state.rampData = cell(0,1);
 state.pointData = cell(0,1);
 state.caseStatus = strings(0,1);
+state.rampBackfillDiagnostics = emptyRampBackfillDiagnostics();
 state.selectionHistory = emptySelectionTable();
 state.pendingU = zeros(0,nParameters);
 state.pendingSelection = emptySelectionTable();
@@ -98,13 +100,15 @@ state.eventParams = eventParams;
 state.parallelFallback = logical(getField(study,'parallelFallback',false));
 end
 
-function state = normalizeState(state,resolvedStudy,study,eventParams)
-state.resolvedStudy = resolvedStudy;
+function state = normalizeState(state,study,eventParams)
 state.study = study;
 if ~isfield(state,'eventParams'), state.eventParams = eventParams; end
 if ~isfield(state,'rampData'), state.rampData = cell(height(state.designTable),1); end
 if ~isfield(state,'pointData'), state.pointData = cell(height(state.designTable),1); end
 if ~isfield(state,'caseStatus'), state.caseStatus = repmat("complete",height(state.designTable),1); end
+if ~isfield(state,'rampBackfillDiagnostics')
+    state.rampBackfillDiagnostics = emptyRampBackfillDiagnostics();
+end
 if ~isfield(state,'selectionHistory'), state.selectionHistory = emptySelectionTable(); end
 if ~isfield(state,'pendingU'), state.pendingU = zeros(0,size(state.U,2)); end
 if ~isfield(state,'pendingSelection'), state.pendingSelection = emptySelectionTable(); end
@@ -112,6 +116,22 @@ if ~isfield(state,'batchNumber'), state.batchNumber = 0; end
 if ~isfield(state,'elapsed'), state.elapsed = 0; end
 if ~isfield(state,'randomState'), state.randomState = seededState(study.randomSeed); end
 if ~isfield(state,'parallelFallback'), state.parallelFallback = logical(getField(study,'parallelFallback',false)); end
+end
+
+function validateResumeStudy(savedStudy,requestedStudy)
+allowed = ["mode","maxCases","numWorkers","batchSize","objective","ramps"];
+coveredBySignature = ["parameters","toPhysical","signature"];
+runtimeOnly = ["resume","parallelFallback"];
+protected = setdiff(string(fieldnames(requestedStudy)), ...
+    [allowed,coveredBySignature,runtimeOnly]);
+for fieldName = protected'
+    name = char(fieldName);
+    if ~isfield(savedStudy,name) || ~isequaln(savedStudy.(name),requestedStudy.(name))
+        error('runAdaptiveDOE:resumeStudyMismatch', ...
+            'Cannot change study.%s while resuming; only mode, maxCases, numWorkers, batchSize, objective, and ramps may change.', ...
+            name)
+    end
+end
 end
 
 function state = backfillRamps(state,checkpointPath)
@@ -126,17 +146,40 @@ if ~any(missing), return, end
 indices = find(missing);
 results = doeRunBatch(state.carCell(indices,:),state.eventParams, ...
     state.resolvedStudy,indices,"rampOnly");
+successful = zeros(0,1);
 for j = 1:numel(indices)
     i = indices(j);
     result = results{j};
-    state.carCell(i,:) = {result.car,result.accelCar};
-    state.metricTable(i,:) = result.metricRow;
-    state.rampData{i,1} = rampCache(result);
-    state.pointData{i,1} = result.points;
-    state.caseStatus(i,1) = result.status;
+    if result.status == "complete"
+        state = mergeSuccessfulRamp(state,i,result);
+        successful(end+1,1) = i; %#ok<AGROW>
+    else
+        state.rampBackfillDiagnostics = [state.rampBackfillDiagnostics; ...
+            rampBackfillDiagnostic(i,result)];
+    end
 end
-state = recomputeScores(state,indices);
+state = recomputeScores(state,successful);
 saveDOECheckpoint(checkpointPath,state)
+end
+
+function state = mergeSuccessfulRamp(state,index,result)
+state.rampData{index,1} = rampCache(result);
+rampFields = ["understeer_gradient_10_deg_per_g", ...
+    "understeer_gradient_25_deg_per_g","rebalance_speed_mps"];
+for fieldName = rampFields
+    name = char(fieldName);
+    if ismember(name,result.metricRow.Properties.VariableNames) && ...
+            ismember(name,state.metricTable.Properties.VariableNames)
+        state.metricTable.(name)(index) = result.metricRow.(name);
+    end
+end
+end
+
+function row = rampBackfillDiagnostic(caseIndex,result)
+row = table(caseIndex,string(result.status),string(result.errorIdentifier), ...
+    string(result.errorMessage),result.elapsed, ...
+    'VariableNames',{'case_index','status','error_identifier', ...
+    'error_message','elapsed_s'});
 end
 
 function state = scheduleNextBatch(state,checkpointPath)
@@ -265,6 +308,12 @@ T = table(strings(0,1),strings(0,1),zeros(0,1),zeros(0,1),zeros(0,1), ...
     'nearest_existing_distance','candidate_index'});
 end
 
+function T = emptyRampBackfillDiagnostics()
+T = table(zeros(0,1),strings(0,1),strings(0,1),strings(0,1),zeros(0,1), ...
+    'VariableNames',{'case_index','status','error_identifier', ...
+    'error_message','elapsed_s'});
+end
+
 function T = emptyMetricTable()
 [row,~] = doeCaseMetrics([],NaN,[]);
 score = struct('points_skidpad',NaN,'points_accel',NaN, ...
@@ -336,16 +385,19 @@ metricTable = state.metricTable; %#ok<NASGU>
 rampData = state.rampData; %#ok<NASGU>
 study = state.study; %#ok<NASGU>
 selectionHistory = state.selectionHistory; %#ok<NASGU>
+rampBackfillDiagnostics = state.rampBackfillDiagnostics; %#ok<NASGU>
 save(char(path),'carCell','designTable','eventParams','metricTable', ...
-    'rampData','study','selectionHistory','-v7.3')
+    'rampData','study','selectionHistory','rampBackfillDiagnostics','-v7.3')
 end
 
 function finishLog(job,state,resultsPath,status)
 validCount = nnz(state.metricTable.valid);
 invalidCount = height(state.metricTable)-validCount;
+backfillFailures = height(state.rampBackfillDiagnostics);
 details = sprintf(['status=%s; mode=%s; batches=%d; valid=%d; invalid=%d; ' ...
-    'checkpoint=%s; results=%s'],status,string(state.resolvedStudy.mode), ...
-    state.batchNumber,validCount,invalidCount, ...
+    'ramp_backfill_failures=%d; checkpoint=%s; results=%s'], ...
+    status,string(state.resolvedStudy.mode),state.batchNumber,validCount, ...
+    invalidCount,backfillFailures, ...
     fullfile(string(state.resolvedStudy.output.directory), ...
     string(state.resolvedStudy.output.checkpoint)),resultsPath);
 simLog.finish(job,'events',cellstr(string(state.resolvedStudy.events)), ...
