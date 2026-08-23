@@ -1,4 +1,4 @@
-function [carCell,eventParams,designTable] = carConfig(samplingType,numSamples)
+function [carCell,eventParams,designTable,baselineTable] = carConfig(samplingType,numSamples)
 % outputs carCell:     one car per grid combination or DOE sample,
 %                      column 1 the lap car, column 2 the accel car
 %        eventParams:  everything the dynamic events need that is NOT a
@@ -10,20 +10,21 @@ function [carCell,eventParams,designTable] = carConfig(samplingType,numSamples)
 %                      Asking for only carCell still works, so nothing that
 %                      does not build an Events2 needs changing.
 %        designTable:  exact sampled parameter values, one row per car.
+%        baselineTable: calibrated scalar parameter values, one row.
 %
 % Default is the calibrated baseline/full-factorial configuration. For DOE:
-%   [cars,eventParams,X] = carConfig("LHS",512);
+%   [cars,eventParams,X] = carConfig("Explicit",overrideTable);
 if nargin < 1 || isempty(samplingType), samplingType = "FullFactorial"; end
 if nargin < 2, numSamples = []; end
 
 % car parameters (updated 2/4/21)
 carParams = struct();
-carParams.mass = [162] * [1 0.95 1.05]; % not including driver (366 lb)
+carParams.mass = 162; % not including driver (366 lb)
 carParams.driver_weight = 64; %
 carParams.accel_driver_weight = 59; % (130 lb)
-carParams.wheelbase = [62] * [1 0.95 1.05] * 0.0254; % 62 in
-carParams.weight_dist = [0.512] * [1 0.95 1.05]; % percentage of weight in rear
-carParams.track_width = [47] * [1 0.95 1.05] * 0.0254; % (47 in)
+carParams.wheelbase = 62*0.0254; % 62 in
+carParams.weight_dist = 0.512; % percentage of weight in rear
+carParams.track_width = 47*0.0254; % (47 in)
 carParams.wheel_radius = 0.1956; % loaded
 % radius (7.7 in)
 carParams.cg_height = [11.75] * 0.0254; % (12 in) % 0.2965
@@ -113,22 +114,6 @@ tireParams.friction_scaling_factor = 1; % scales tire forces to account for test
 tireParams.grip_scaling_front = 0.6125;
 tireParams.grip_scaling_rear  = 0.62;
 
-% DOE ranges inherited from Vehicle-DOE. They are activated only when the
-% caller explicitly requests LHS or Random sampling, so baseline tools such
-% as gripSweep continue to receive one calibrated car.
-if ~any(strcmpi(samplingType,["FullFactorial","grid"]))
-    carParams.mass = [155 170];
-    carParams.weight_dist = [0.40 0.60];
-    carParams.cg_height = [10 12]*0.0254;
-    carParams.R_sf = [0.30 0.60];
-    aeroParams.accel_cda = [0.855 1.41];
-    aeroParams.accel_cla = [2.37 3.45];
-    DTparams.final_drive = [27/11 35/11];
-    tireParams.gamma_f = [-2 0];
-    tireParams.gamma_r = [-2 0];
-    tireParams.p_i = [10 12];
-end
-
 %% ---------------- event parameters ----------------
 
 eventParams = struct();
@@ -154,6 +139,31 @@ eventParams.winning_time = struct( ...
     'autocross', 46.911, ...    % Michigan 2024 (2023 was 45.886)
     'endurance', 1389.891);
 
-%% cell array of gridded parameters
-[carCell,designTable] = parameters_loop(carParams,aeroParams,eParams, ...
-    DTparams,Bparams,tireParams,samplingType,numSamples);
+%% calibrated scalar baseline and requested cases
+[baselineCars,baselineTable] = parameters_loop(carParams,aeroParams,eParams, ...
+    DTparams,Bparams,tireParams,"FullFactorial",[]);
+
+request = lower(string(samplingType));
+switch request
+    case {"fullfactorial","grid"}
+        carCell = baselineCars;
+        designTable = baselineTable;
+
+    case "explicit"
+        [carCell,designTable] = parameters_loop(carParams,aeroParams,eParams, ...
+            DTparams,Bparams,tireParams,"Explicit",numSamples);
+
+    case {"lhs","random"}
+        warning('carConfig:legacyDOE', ...
+            ['carConfig legacy DOE sampling is deprecated; use Explicit ' ...
+             'with a resolved DOE design table.']);
+        study = DOEStudyConfig();
+        resolved = doeResolveStudy(study,baselineTable);
+        [~,overrides] = doeInitialDesign(resolved,numSamples,study.randomSeed,request);
+        [carCell,designTable] = parameters_loop(carParams,aeroParams,eParams, ...
+            DTparams,Bparams,tireParams,"Explicit",overrides);
+
+    otherwise
+        error('carConfig:badRequest', ...
+            'samplingType must be FullFactorial, Explicit, LHS, or Random.')
+end

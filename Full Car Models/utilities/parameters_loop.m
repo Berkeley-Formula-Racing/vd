@@ -29,7 +29,7 @@ values = { ...
     cP.ackermann,cP.camber_compliance_f,cP.camber_compliance_r,cP.static_r_toe, ...
     tP.grip_scaling_front,tP.grip_scaling_rear,cP.I_wheel,cP.I_driveline,cP.Crr};
 
-P = sampleValues(values,samplingType,numSamples);
+P = sampleValues(values,names,samplingType,numSamples);
 sampleTable = array2table(P,'VariableNames',names);
 numRuns = size(P,1);
 car_cell = cell(numRuns,2);
@@ -62,9 +62,29 @@ for i = 1:numRuns
 end
 end
 
-function P = sampleValues(values,samplingType,numSamples)
+function P = sampleValues(values,names,samplingType,numSamples)
 nVar = numel(values);
 switch lower(string(samplingType))
+    case "explicit"
+        sampleInput = numSamples;
+        if ~istable(sampleInput)
+            error('parameters_loop:badExplicitInput', ...
+                'Explicit sampling requires a table of parameter overrides.')
+        end
+        if any(~cellfun(@isscalar,values))
+            error('parameters_loop:nonScalarBaseline', ...
+                'Explicit sampling requires scalar baseline values.')
+        end
+        P = repmat(cellfun(@(x) x(1),values),height(sampleInput),1);
+        for k = 1:width(sampleInput)
+            j = find(strcmp(names,sampleInput.Properties.VariableNames{k}),1);
+            if isempty(j)
+                error('parameters_loop:unknownExplicitParameter', ...
+                    'Unknown explicit parameter %s.',sampleInput.Properties.VariableNames{k});
+            end
+            P(:,j) = sampleInput{:,k};
+        end
+
     case {"fullfactorial","grid"}
         grid = cell(1,nVar);
         [grid{:}] = ndgrid(values{:});
