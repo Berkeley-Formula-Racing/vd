@@ -1,256 +1,49 @@
-load("DOE_results.mat",'carCell','designTable');
+%% DOE_Fitting - metric extraction, response surfaces, and design plots
+setup_paths
 
-%% --- 1. EXTRACT RESPONSES ---
-% designTable is saved by SteadyStateLapsim and is the exact sampled input
-% matrix. Reading it directly avoids stale Car property maps whenever the
-% vehicle model gains or renames a property.
-numRuns = height(designTable);
-outputNames = {'t_autox', 't_accel', 't_skid', 'total_work'};
-outputData = NaN(numRuns, numel(outputNames));
-
-for i = 1:numRuns
-    carMain = carCell{i, 1};
-    if ~isempty(carMain.comp)
-        c = carMain.comp;
-        t = c.autocross.time_vec(:);
-        dt = [t(1); diff(t)];
-        power = max(0,carMain.M*c.autocross.long_accel(:)) .* ...
-            c.autocross.long_vel(:);
-        totalWork = sum(power.*dt,'omitnan');
-        outputData(i, :) = [c.times.autocross, c.times.accel, c.times.skidpad, ...
-                            totalWork];
+modelRoot = fileparts(which('DOE_Fitting'));
+resultPath = fullfile(modelRoot,"DOE_results.mat");
+if ~isfile(resultPath)
+    legacyPath = fullfile(fileparts(modelRoot),"DOE_results.mat");
+    if isfile(legacyPath)
+        resultPath = legacyPath;
+    else
+        error('DOE_Fitting:noResults','Run SteadyStateLapsim before DOE_Fitting.');
     end
 end
 
-doeTable = [designTable,array2table(outputData,'VariableNames',outputNames)];
+%% Analysis settings
+responsesWanted = { ...
+    't_autox','t_accel','t_skid','total_work_kJ', ...
+    'gLat_peak_g','gg_lat_10_g','gg_lat_20_g','gg_lat_30_g', ...
+    'gg_accel_20_g','gg_brake_20_g','min_Fz_N', ...
+    'understeer_proxy_10_deg','understeer_proxy_25_deg'};
 
-% Clean: Remove failed runs and variables with zero variance (constants)
-doeTable = doeTable(~isnan(doeTable.t_autox), :);
-doeTable = doeTable(:, var(table2array(doeTable)) > 1e-10 | ismember(doeTable.Properties.VariableNames, outputNames));
+plotsWanted = ["quality","sensitivity","main_effects", ...
+    "pareto_events","pareto_energy","correlation","speed_grip", ...
+    "balance","validation"];
 
+runRampMetrics = false;  % true can be expensive
+analysisSavePath = fullfile(modelRoot,"DOE_analysis.mat");
+figureSavePath = fullfile(modelRoot,"figures","doe");
 
-responseVars = {'t_autox', 't_accel', 't_skid', 'total_work'};
+opts = struct();
+opts.responsesWanted = responsesWanted;
+opts.plots = plotsWanted;
+opts.visible = 'on';
+opts.runRampMetrics = runRampMetrics;
+opts.savePath = analysisSavePath;
 
-for i = 1:numel(responseVars)
-    varName = responseVars{i};
-    % Force the column to be real numbers only
-    doeTable.(varName) = real(doeTable.(varName));
-end
-% --- DATA SANITIZATION & GHOST FILTERING ---
-% 1. Strip Numerical Noise (Complex Numbers)
-% StepwiseLM and bar charts will crash if even 1e-18 of an imaginary component exists.
-responseVars = {'t_autox', 't_accel', 't_skid', 'total_work'};
-for i = 1:numel(responseVars)
-    doeTable.(responseVars{i}) = real(doeTable.(responseVars{i}));
-end
+analysis = doeAnalyze(resultPath,opts);
+savedFigures = saveFigures(figureSavePath,analysis.figures);
+metricTable = analysis.metricTable;
+doeTable = analysis.cleanTable;
+models = analysis.models;
+wantedGraphs = analysis.graphCatalog;
 
-% 2. Define "Physicality Window"
-% Based on Michigan-style track (1km) and standard 8.5m Skidpad
-limits.skid_max  = 8.0;   % Anything over 7s is a solver stall/crawl
-limits.autox_max = 75.0;  % Upper bound for a "slow" but valid lap
-limits.autox_min = 35.0;  % Catch "teleporting" cars (10s laps are impossible)
-limits.accel_min = 3.0;   % Catch failed launches
-
-% 3. Identify Logic Failures
-% We create separate masks to see exactly WHY cars are failing
-is_too_slow_skid  = doeTable.t_skid  > limits.skid_max;
-is_too_fast_autox = doeTable.t_autox < limits.autox_min;
-is_too_slow_autox = doeTable.t_autox > limits.autox_max;
-is_broken_accel   = doeTable.t_accel < limits.accel_min;
-
-% Combine into a master "Ghost" mask
-is_ghost = is_too_slow_skid | is_too_fast_autox | is_too_slow_autox | is_broken_accel;
-
-% 4. Logging & Diagnostics
-fprintf('\n--- DOE Data Quality Report ---\n');
-if any(is_ghost)
-    fprintf('  > Detected %d "Ghost" setups:\n', sum(is_ghost));
-    if sum(is_too_fast_autox) > 0, fprintf('    - Autocross Teleports (<35s): %d\n', sum(is_too_fast_autox)); end
-    if sum(is_too_slow_skid)  > 0, fprintf('    - Skidpad Stalls (>8s):      %d\n', sum(is_too_slow_skid)); end
-    if sum(is_too_slow_autox) > 0, fprintf('    - Autocross DNFs (>75s):     %d\n', sum(is_too_slow_autox)); end
-else
-    fprintf('  > All runs passed physicality checks.\n');
-end
-
-% 5. Apply Filter
-doeTable = doeTable(~is_ghost, :);
-
-fprintf('  > Final Result: %d valid runs remaining for RSM fitting.\n', height(doeTable));
-fprintf('  > Variables Tracked: %d\n', width(doeTable) - numel(responseVars));
-fprintf('-------------------------------\n');
-
-%% --- 3. AUTOMATED STEPWISE RSM FITTING ---
-targets = {'t_autox', 't_accel', 't_skid', 'total_work'};
-% Base inputs (everything except the target lap times)
-inputVars = setdiff(doeTable.Properties.VariableNames, outputNames, 'stable');
-
-% --- MANUAL OVERRIDE: EXCLUDE VARIABLES FROM RSM ---
-% Add any variable names here that you want the model to ignore.
-varsToExclude = {};
-inputVars = setdiff(inputVars, varsToExclude, 'stable');
-models = struct();
-
-for t = 1:numel(targets)
-    resp = targets{t};
-    fprintf('\n--- Analyzing %s ---\n', resp);
-
-    % Filter table for target + relevant inputs
-    currTable = doeTable(:, [inputVars, {resp}]);
-
-    % STEPWISE: Automatically picks only the parameters that matter
-    models.(resp) = stepwiselm(currTable, 'ResponseVar', resp, ...
-        'Lower', 'constant', 'Upper', 'quadratic', 'Criterion', 'bic');
-
-    fprintf('Significant Predictors found: %d\n', numel(models.(resp).PredictorNames));
-    fprintf('Adjusted R-squared: %.4f\n', models.(resp).Rsquared.Adjusted);
-end
-
-%% --- 4. VISUALIZATION ---
-figure('Name', 'Design Sensitivity', 'Color', 'w', 'Units', 'normalized', 'Position', [0.1 0.1 0.8 0.7]);
-subplot(1,4,1); plotSlice(models.t_autox); title('Autocross Sensitivity');
-subplot(1,4,2); plotSlice(models.t_accel); title('Accel Sensitivity');
-subplot(1,4,3); plotSlice(models.t_skid);  title('Skidpad Sensitivity');
-subplot(1,4,4); plotSlice(models.total_work);  title('Total Work Sensitivity');
-%% --- HELPER FUNCTION: Recursive Property Search ---
-function val = getProp(obj, pathStr)
-    path = strsplit(pathStr, '.');
-    val = obj;
-    for p = 1:numel(path)
-        val = val.(path{p});
-    end
-end
-
-%% --- EVENT SENSITIVITY VISUALIZATION ---
-events = {'t_autox', 't_accel', 't_skid', 'total_work'};
-colors = {[0.2 0.4 0.8], [0.8 0.2 0.2], [0.2 0.4 0.8], [0.2 0.7 0.2]}; % Blue, Red, Green
-
-for e = 1:numel(events)
-    target = events{e};
-    mdl = models.(target);
-
-    % 1. CHECK FOR EMPTY MODEL
-    % If BIC kicked everything out, names will be empty.
-    if numel(mdl.CoefficientNames) <= 1
-        fprintf('Warning: No significant factors found for %s. Skipping plot.\n', target);
-        continue;
-    end
-
-    meanVal = mean(doeTable.(target));
-    coeffs = mdl.Coefficients.Estimate(2:end);
-    names = mdl.CoefficientNames(2:end);
-
-    % 2. Calculate the "Swing" (Impact) of each term
-    % We want to know: (Beta * Range) / MeanTime * 100
-    percentImpact = zeros(numel(coeffs), 1);
-
-    for c = 1:numel(coeffs)
-        termName = names{c};
-
-        % Check if it's an interaction (e.g., 'mass:cla')
-        if contains(termName, ':')
-            parts = strsplit(termName, ':');
-            % Range impact of interaction: Beta * (maxA*maxB - minA*minB)
-            rangeA = [min(doeTable.(parts{1})), max(doeTable.(parts{1}))];
-            rangeB = [min(doeTable.(parts{2})), max(doeTable.(parts{2}))];
-            valDelta = (rangeA(2)*rangeB(2)) - (rangeA(1)*rangeB(1));
-        else
-            % Linear or Quadratic term (e.g., 'mass' or 'mass^2')
-            % Stripping the '^2' for range calculation
-            cleanName = regexprep(termName, '\^2', '');
-            valDelta = max(doeTable.(cleanName)) - min(doeTable.(cleanName));
-            if contains(termName, '^2')
-                valDelta = max(doeTable.(cleanName))^2 - min(doeTable.(cleanName))^2;
-            end
-        end
-
-        % Calculate Percent Change
-        percentImpact(c) = (coeffs(c) * valDelta / meanVal) * 100;
-    end
-
-    % 2. SORT AND PLOT
-    [~, sortIdx] = sort(abs(percentImpact), 'descend');
-    sortedImpact = percentImpact(sortIdx);
-    sortedNames = names(sortIdx);
-
-    figure('Name', ['Sensitivity: ' target], 'Color', 'w');
-    h = barh(sortedImpact);
-    h.FaceColor = colors{e};
-
-    % 3. THE FIX: Explicitly set ticks and turn off the TeX interpreter
-    % This prevents "final_drive" from trying to render as "final_{drive}"
-    ax = gca;
-    set(ax, 'YTick', 1:numel(sortedNames));
-    set(ax, 'YTickLabel', sortedNames);
-    set(ax, 'TickLabelInterpreter', 'none'); % CRITICAL: Disables auto-subscripting
-    set(ax, 'YDir', 'reverse');
-
-    xlabel('Total Effect on Metric (%)');
-    title(['Primary Drivers: ', strrep(target, '_', ' ')]);
-    grid on;
-
-    % 4. BAR LABELS
-    for i = 1:numel(sortedImpact)
-        text(sortedImpact(i), i, [' ', num2str(sortedImpact(i), '%+0.2f'), '%'], ...
-            'VerticalAlignment', 'middle', 'Interpreter', 'none');
-    end
-end
-
-%% --- 5. 3D COMPOUND EFFECTS (INTERACTION) VISUALIZATION ---
-% Choose your target event and the two factors you want to investigate
-targetEvent = 't_autox';      % Options: 't_autox', 't_accel', 't_skid', 'total_work'
-factor1     = 'mass_total';   % Must match a variable name in your doeTable
-factor2     = 'cla';          % Must match a variable name in your doeTable
-
-% Grab the specific Stepwise Model and original table
-mdl = models.(targetEvent);
-predictors = mdl.PredictorNames;
-
-% Ensure the factors were actually kept by the stepwise model
-if ~ismember(factor1, predictors) || ~ismember(factor2, predictors)
-    warning('One or both factors were excluded by the Stepwise model because they lacked significance for %s.', targetEvent);
-end
-
-% 1. Setup the Evaluation Grid (50x50 resolution)
-% Find the min and max limits from your DOE table
-f1_min = min(doeTable.(factor1)); f1_max = max(doeTable.(factor1));
-f2_min = min(doeTable.(factor2)); f2_max = max(doeTable.(factor2));
-
-[X1_grid, X2_grid] = meshgrid(linspace(f1_min, f1_max, 50), ...
-                              linspace(f2_min, f2_max, 50));
-
-% 2. Create "Dummy Data" holding all other variables at their mean
-% This isolates the effects to JUST the two variables we care about
-numPoints = numel(X1_grid);
-dummyData = table();
-for i = 1:numel(predictors)
-    varName = predictors{i};
-    % Fill with the mean value across all points
-    meanVal = mean(doeTable.(varName));
-    dummyData.(varName) = repmat(meanVal, numPoints, 1);
-end
-
-% 3. Inject our sweeping 3D grid variables into the table
-dummyData.(factor1) = X1_grid(:);
-dummyData.(factor2) = X2_grid(:);
-
-% 4. Predict the response using the fitted RSM
-Z_pred = predict(mdl, dummyData);
-Z_grid = reshape(Z_pred, size(X1_grid));
-
-% 5. Render the 3D Surface Plot
-figure('Name', sprintf('Interaction: %s vs %s', factor1, factor2), 'Color', 'w');
-surf(X1_grid, X2_grid, Z_grid, 'EdgeColor', 'none', 'FaceAlpha', 0.85);
-colormap parula;
-colorbar;
-
-% Plot Formatting
-ax = gca;
-set(ax, 'TickLabelInterpreter', 'none');
-xlabel(factor1, 'Interpreter', 'none', 'FontWeight', 'bold');
-ylabel(factor2, 'Interpreter', 'none', 'FontWeight', 'bold');
-zlabel(strrep(targetEvent, '_', ' '), 'Interpreter', 'none', 'FontWeight', 'bold');
-title(sprintf('Compound Effect on %s\n(Other variables held at mean)', strrep(targetEvent, '_', ' ')));
-
-% Adjust view angle for standard 3D perspective
-view(-45, 30);
-grid on;
+fprintf('\nDOE metrics: %d/%d valid cases, mean g-g coverage %.2f%%.\n', ...
+    analysis.quality.valid,analysis.quality.total, ...
+    100*analysis.quality.meanGGCoverage);
+fprintf('Analysis saved to %s\n',analysisSavePath);
+fprintf('Figures saved to %s\n',figureSavePath);
+disp(wantedGraphs(:,{'id','title','purpose','producer','default_enabled'}));

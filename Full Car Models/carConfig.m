@@ -18,12 +18,12 @@ if nargin < 2, numSamples = []; end
 
 % car parameters (updated 2/4/21)
 carParams = struct();
-carParams.mass = [162]; % not including driver (366 lb)
+carParams.mass = [162] * [1 0.95 1.05]; % not including driver (366 lb)
 carParams.driver_weight = 64; %
 carParams.accel_driver_weight = 59; % (130 lb)
-carParams.wheelbase = [62] * 0.0254; % 62 in
-carParams.weight_dist = [0.512]; % percentage of weight in rear
-carParams.track_width = [47] * 0.0254; % (47 in)
+carParams.wheelbase = [62] * [1 0.95 1.05] * 0.0254; % 62 in
+carParams.weight_dist = [0.512] * [1 0.95 1.05]; % percentage of weight in rear
+carParams.track_width = [47] * [1 0.95 1.05] * 0.0254; % (47 in)
 carParams.wheel_radius = 0.1956; % loaded
 % radius (7.7 in)
 carParams.cg_height = [11.75] * 0.0254; % (12 in) % 0.2965
@@ -46,14 +46,7 @@ carParams.static_r_toe = [0]; %toe in deg, toe out - negative
 carParams.I_wheel = 0.164;
 
 % I_driveline is now ZERO, and that is a deliberate choice, not "no crank
-% inertia". The accel event constrains ONE combined budget of longitudinal
-% resistance-plus-inertia beyond the measured wheels, and rolling resistance
-% (below) and driveline inertia are degenerate against it -- both slow the car
-% and one 75 m time cannot separate them. This budget is expressed entirely as
-% rolling resistance because that is a real force the model was missing, where
-% the fitted driveline inertia it replaces was flagged as five times too small
-% for a real crankshaft. Put it back as a nonzero value only if you also have
-% data (a coastdown) that pins Crr independently.
+% inertia".
 carParams.I_driveline = 0;
 
 % Rolling resistance coefficient. Force = Crr*(M*g + downforce) opposing
@@ -63,14 +56,7 @@ carParams.I_driveline = 0;
 % measured. It is a plausible warm-slick value (FSAE run 0.012-0.030), but read
 % it as the whole "extra longitudinal resistance" the accel needs, absorbing
 % rolling resistance, driveline inertia and whatever else.
-%
-% IMPORTANT what this exposed: physical values of BOTH rolling resistance
-% (~0.020) AND a real crank inertia (~0.008) make the model about 5% slow on
-% accel -- neither can be raised to physical without the other having to go
-% negative. So the longitudinal model is optimistic somewhere it compensates
-% for: drivetrain efficiency (0.87, assumed) or the dyno torque curve. A
-% coastdown gives the true Crr and a dyno the true torque; with those, raise
-% drivetrain_efficiency to close the gap and both can be physical at once.
+
 carParams.Crr = 0.014;
 
 % aero parameters (updated 6/6/22)

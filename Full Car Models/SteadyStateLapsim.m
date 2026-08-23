@@ -7,10 +7,11 @@ setup_paths
 
 %% DOE settings
 samplingType = "LHS";       % "LHS", "Random", or "FullFactorial"
-numSamples   = 512;         % ignored for FullFactorial
+numSamples   = 16;         % ignored for FullFactorial
 numWorkers   = 16;          % parallel cars; each gg2 remains serial
 randomSeed   = 1;           % repeatable sample locations
-savePath     = "DOE_results.mat";
+modelRoot    = fileparts(which('SteadyStateLapsim'));
+savePath     = fullfile(modelRoot,"DOE_results.mat");
 
 rng(randomSeed);
 [carCell,eventParams,designTable] = carConfig(samplingType,numSamples);
