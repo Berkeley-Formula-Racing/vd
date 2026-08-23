@@ -5,7 +5,7 @@ catalog = doePlotCatalog();
 plots = string(getOr(opts,'plots',catalog.id(strcmp(catalog.producer,'plotDOEMetrics'))));
 visible = getOr(opts,'visible','on');
 supported = ["quality","pareto_events","pareto_energy", ...
-    "correlation","speed_grip","balance"];
+    "correlation","speed_grip","balance","sobol"];
 bad = setdiff(plots,supported);
 if ~isempty(bad)
     warning('plotDOEMetrics:modelPlots', ...
@@ -25,8 +25,63 @@ for id = plots(:)'
         case "correlation",   plotCorrelation(X,M)
         case "speed_grip",    plotSpeedGrip(M)
         case "balance",       plotBalance(M)
+        case "sobol",         plotSobol(getOr(opts,'sobol',struct()),opts)
     end
     setPlotFont(f);
+end
+
+function plotSobol(sobol,opts)
+responses = string(fieldnames(sobol));
+keep = false(size(responses));
+for i = 1:numel(responses)
+    name = lower(responses(i));
+    keep(i) = contains(name,"point") || contains(name,"score") || ...
+        startsWith(name,"t_") || contains(name,"work") || ...
+        contains(name,"energy") || contains(name,"understeer") || ...
+        contains(name,"rebalance");
+end
+responses = responses(keep);
+if isempty(responses)
+    text(.5,.5,'No supported Sobol responses are available.', ...
+        'HorizontalAlignment','center');
+    axis off
+    return
+end
+
+tl = tiledlayout('flow','TileSpacing','compact');
+for i = 1:numel(responses)
+    response = responses(i);
+    S = sobol.(char(response));
+    nexttile
+    bar(categorical(S.parameter),[S.firstOrder S.totalOrder],'grouped');
+    values = [S.firstOrder;S.totalOrder];
+    ylim([min(0,1.05*min(values,[],'omitnan')) ...
+        max(1,1.05*max(values,[],'omitnan'))]);
+    ylabel('Sobol index');
+    legend('First order','Total order','Location','best');
+    xtickangle(35); grid on
+    title(sobolPanelTitle(response,opts),'Interpreter','none');
+end
+title(tl,'Surrogate Sobol sensitivity');
+end
+
+function label = sobolPanelTitle(response,opts)
+family = "quadratic";
+nrmse = NaN;
+if isfield(opts,'preferredModel') && isfield(opts.preferredModel,char(response))
+    family = string(opts.preferredModel.(char(response)));
+end
+if isfield(opts,'validation') && isfield(opts.validation,char(response))
+    V = opts.validation.(char(response));
+    if isfield(V,char(family)) && isfield(V.(char(family)),'normalizedRMSE')
+        nrmse = V.(char(family)).normalizedRMSE;
+    end
+end
+if isfinite(nrmse)
+    label = sprintf('%s (%s, CV NRMSE %.3g)',response,family,nrmse);
+else
+    label = sprintf('%s (%s)',response,family);
+end
 end
 end
 
