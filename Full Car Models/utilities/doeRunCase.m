@@ -32,7 +32,7 @@ try
             error('doeRunCase:unsolvedCar', ...
                 'rampOnly requires solved g-g data and car.comp.')
         end
-        points = cachedPoints(car.comp);
+        [points,cachedScoreBreakdown,hasCachedScore] = cachedPoints(car.comp);
     end
 
     rampResult = [];
@@ -47,7 +47,18 @@ try
     end
 
     [metricRow,~] = doeCaseMetrics(car,caseIndex,rampResult);
-    [~,scoreBreakdown] = doeScoreCase(points,metricRow,study.objective);
+    if runMode == "full"
+        [~,scoreBreakdown] = doeScoreCase(points,metricRow,study.objective);
+        cacheScoreBreakdown(car.comp,scoreBreakdown)
+    elseif hasCachedScore
+        % Ramp-only backfill preserves the full-run event score.  The caller
+        % may later recompute penalties from its appended raw ramp metrics.
+        scoreBreakdown = cachedScoreBreakdown;
+    else
+        % Legacy solved cars did not retain a DOE score payload.  Preserve
+        % their existing behavior using the configured (not default) rules.
+        [~,scoreBreakdown] = doeScoreCase(points,metricRow,study.objective);
+    end
     result.car = car;
     result.accelCar = accelCar;
     result.metricRow = appendScore(metricRow,scoreBreakdown);
@@ -84,13 +95,31 @@ result = struct( ...
     'elapsed',NaN);
 end
 
-function points = cachedPoints(comp)
+function [points,scoreBreakdown,hasScoreBreakdown] = cachedPoints(comp)
 if isempty(comp.points) || ~isstruct(comp.points) || ...
         ~all(isfield(comp.points,{'skidpad','accel','autocross','endurance','total'}))
     error('doeRunCase:missingCachedPoints', ...
         'rampOnly requires cached event points in car.comp.points.')
 end
 points = comp.points;
+hasScoreBreakdown = isfield(points,'doeScoreBreakdown');
+scoreBreakdown = [];
+if hasScoreBreakdown
+    scoreBreakdown = points.doeScoreBreakdown;
+    if ~isstruct(scoreBreakdown)
+        error('doeRunCase:badCachedScore', ...
+            'car.comp.points.doeScoreBreakdown must be a struct.')
+    end
+    points = rmfield(points,'doeScoreBreakdown');
+end
+end
+
+function cacheScoreBreakdown(comp,scoreBreakdown)
+% Keep the DOE payload with Events2's saved event points without altering
+% Car or Events2 properties; result.points remains the raw five-field score.
+points = comp.points;
+points.doeScoreBreakdown = scoreBreakdown;
+comp.points = points;
 end
 
 function points = emptyPoints()

@@ -12,6 +12,9 @@ study.ramps.nRamp = 4;
 study.ramps.nBisect = 1;
 study.ramps.saveFullPoints = false;
 study.numWorkers = 0;
+study.objective.penalties.energy.enabled = true;
+study.objective.penalties.energy.threshold_kJ = 0;
+study.objective.penalties.energy.pointsPerKJ = 0.01;
 
 tic
 serial = doeRunBatch(cars,eventParams,study,1);
@@ -19,18 +22,22 @@ serialElapsed = toc;
 assert(serial{1}.status == "complete")
 assert(isfinite(serial{1}.scoreBreakdown.objective_score))
 assert(~isempty(serial{1}.rampSummary))
+assert(serial{1}.scoreBreakdown.penalty_energy > 0)
 fprintf('DOE ramp batch serial elapsed: %.3f s\n',serialElapsed)
 
+rampStudy = study;
+rampStudy.objective.penalties.energy.pointsPerKJ = 1;
 rampOnly = doeRunBatch({serial{1}.car,serial{1}.accelCar}, ...
-    eventParams,study,1,"rampOnly");
+    eventParams,rampStudy,1,"rampOnly");
 assert(rampOnly{1}.status == "complete")
 assert(isequal(rampOnly{1}.points,serial{1}.points))
-assert(abs(rampOnly{1}.scoreBreakdown.objective_score - ...
-    serial{1}.scoreBreakdown.objective_score) < 1e-8)
+assert(isequal(rampOnly{1}.scoreBreakdown,serial{1}.scoreBreakdown))
 
-failed = doeRunCase([],[],eventParams,study,99);
-assert(failed.status == "failed")
-assert(strlength(failed.errorIdentifier) > 0)
+mixed = doeRunBatch({serial{1}.car,serial{1}.accelCar;[] ,[]}, ...
+    eventParams,rampStudy,[1;99],"rampOnly");
+assert(mixed{1}.status == "complete")
+assert(mixed{2}.status == "failed")
+assert(strlength(mixed{2}.errorIdentifier) > 0)
 
 if license('test','Distrib_Computing_Toolbox')
     study.numWorkers = min(2,feature('numcores'));
@@ -40,10 +47,32 @@ if license('test','Distrib_Computing_Toolbox')
     assert(all(cellfun(@(x) x.status == "complete",parallel)))
     a = serial{1}.rampSummary;
     b = parallel{1}.rampSummary;
-    assert(max(abs(a.K_linear-b.K_linear),[],'omitnan') < 1e-8)
+    assertPointsEqual(serial{1}.points,parallel{1}.points)
+    assertRampSummaryEqual(a,b)
     assert(abs(serial{1}.scoreBreakdown.objective_score - ...
         parallel{1}.scoreBreakdown.objective_score) < 1e-8)
     fprintf('DOE ramp batch parallel elapsed: %.3f s\n',parallelElapsed)
 else
     fprintf('DOE ramp batch parallel elapsed: skipped (no Parallel Computing Toolbox)\n')
+end
+
+function assertPointsEqual(a,b)
+names = {'skidpad','accel','autocross','endurance','total'};
+for i = 1:numel(names)
+    assert(abs(a.(names{i})-b.(names{i})) < 1e-8)
+end
+end
+
+function assertRampSummaryEqual(a,b)
+assert(isequal(a.Properties.VariableNames,b.Properties.VariableNames))
+assert(height(a) == height(b))
+isNumeric = varfun(@isnumeric,a,'OutputFormat','uniform');
+names = a.Properties.VariableNames(isNumeric);
+for i = 1:numel(names)
+    x = a.(names{i});
+    y = b.(names{i});
+    finite = isfinite(x);
+    assert(isequal(finite,isfinite(y)))
+    assert(all(abs(x(finite)-y(finite)) < 1e-8,'all'))
+end
 end
