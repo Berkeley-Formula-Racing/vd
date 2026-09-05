@@ -282,7 +282,7 @@ end
 function [U,selection,nextRandomState] = spaceFillingBatch(state,n)
 candidateCount = max(1000,20*n);
 previous = rng;
-restore = onCleanup(@() rng(previous)); %#ok<NASGU>
+restore = onCleanup(@() rng(previous));
 rng(state.randomState)
 candidates = rand(candidateCount,size(state.U,2));
 nextRandomState = rng;
@@ -294,7 +294,7 @@ for j = 1:n
     distances = nearestDistances(candidates,reference);
     [nearest(j),pick] = max(distances);
     U(j,:) = candidates(pick,:);
-    reference = [reference; U(j,:)]; %#ok<AGROW>
+    reference = [reference; U(j,:)];
     candidates(pick,:) = [];
 end
 selection = table(repmat(string(state.resolvedStudy.mode),n,1), ...
@@ -397,10 +397,10 @@ points = struct('skidpad',NaN,'accel',NaN,'autocross',NaN, ...
 end
 
 function writeResults(path,state)
-carCell = state.carCell; %#ok<NASGU>
-designTable = state.designTable; %#ok<NASGU>
-eventParams = state.eventParams; %#ok<NASGU>
-metricTable = state.metricTable; %#ok<NASGU>
+carCell = state.carCell;
+designTable = state.designTable;
+eventParams = state.eventParams;
+metricTable = state.metricTable;
 rampData = state.rampData; %#ok<NASGU>
 study = state.study; %#ok<NASGU>
 selectionHistory = state.selectionHistory; %#ok<NASGU>

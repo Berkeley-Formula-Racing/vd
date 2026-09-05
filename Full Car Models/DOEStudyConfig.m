@@ -1,13 +1,11 @@
 function study = DOEStudyConfig()
-%DOESTUDYCONFIG User-editable settings and ranges for an adaptive DOE study.
-
 study.name = "vehicle_design_2026";
 study.mode = "sensitivity";
 study.randomSeed = 1;
 study.initialCases = 128;
-study.batchSize = 64;
+study.batchSize = 16;
 study.maxCases = 512;
-study.numWorkers = 16;
+study.numWorkers = 12;
 study.allowSerialFallback = false;
 study.resume = true;
 study.parameters = table( ...

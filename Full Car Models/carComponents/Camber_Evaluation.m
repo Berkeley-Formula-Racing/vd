@@ -1,11 +1,12 @@
 function camber = Camber_Evaluation(long_vel, yaw_rate, steer_angle_1, steer_angle_2, ...
-                                    static_camber_f, static_camber_r, ccVal_f, ccVal_r)
+                                    static_camber_f, static_camber_r, ccVal_f, ccVal_r, ...
+                                    config, rideCompressionIn)
 
-    % --- constants & tunables ---
-    roll_grad_deg_per_g = 0.68;
+    % All tunable kinematic values come from carConfig via Car.
     g0 = 9.81;
-    rear_out_deg_per_deg = 0.58;
-    rear_in_deg_per_deg  = -0.592;
+    roll_grad_deg_per_g = config.roll_gradient_deg_per_g;
+    rear_out_deg_per_deg = config.rear_roll_camber_outer_deg_per_deg;
+    rear_in_deg_per_deg  = config.rear_roll_camber_inner_deg_per_deg;
 
     % --- direction & roll ---
     dir     = sign(yaw_rate);
@@ -46,6 +47,26 @@ function camber = Camber_Evaluation(long_vel, yaw_rate, steer_angle_1, steer_ang
     sign_comp  = [-dir;  dir; -dir;  dir];
     c_fromcomp = [ccVal_f; ccVal_f; ccVal_r; ccVal_r] .* ay_g .* sign_comp;
 
+    % Positive bump compression is static ride height minus current height.
+    % The input is a signed physical-camber gain: negative adds more negative
+    % camber in bump. Mirror it left/right in the tire-frame convention.
+    staticSign = [-1; 1; -1; 1];
+    rideGain = [config.ride_camber_front_deg_per_in; ...
+                config.ride_camber_front_deg_per_in; ...
+                config.ride_camber_rear_deg_per_in; ...
+                config.ride_camber_rear_deg_per_in];
+    rideCompressionIn = rideCompressionIn(:);
+    if numel(rideCompressionIn) == 2
+        rideCompression = [rideCompressionIn(1); rideCompressionIn(1); ...
+                           rideCompressionIn(2); rideCompressionIn(2)];
+    elseif numel(rideCompressionIn) == 4
+        rideCompression = rideCompressionIn;
+    else
+        error('Camber_Evaluation:rideCompression', ...
+            'rideCompressionIn must contain F/R axle values or four corner values.')
+    end
+    c_fromride = staticSign .* rideGain .* rideCompression;
+
     % --- rear roll->camber ---
     % SAE convention (see yaw moment equation in Car.equations): tires 1/3 are
     % left, positive yaw rate is a right turn, so dir >= 0 puts the LEFT wheels
@@ -72,10 +93,9 @@ function camber = Camber_Evaluation(long_vel, yaw_rate, steer_angle_1, steer_ang
     % (sign_comp(1) = -dir). So "leaning outboard" is negative on the left,
     % hence static negative camber -- which leans the left wheel INBOARD --
     % must be positive there. Every dynamic term above is already antisymmetric.
-    staticSign = [-1; 1; -1; 1];
     camber        = zeros(4,1);
-    camber(1)     = staticSign(1)*static_camber_f + cam_FL      + c_fromcomp(1);
-    camber(2)     = staticSign(2)*static_camber_f + cam_FR      + c_fromcomp(2);
-    camber(3)     = staticSign(3)*static_camber_r + cam_RL_roll + c_fromcomp(3);
-    camber(4)     = staticSign(4)*static_camber_r + cam_RR_roll + c_fromcomp(4);
+    camber(1)     = staticSign(1)*static_camber_f + cam_FL      + c_fromcomp(1) + c_fromride(1);
+    camber(2)     = staticSign(2)*static_camber_f + cam_FR      + c_fromcomp(2) + c_fromride(2);
+    camber(3)     = staticSign(3)*static_camber_r + cam_RL_roll + c_fromcomp(3) + c_fromride(3);
+    camber(4)     = staticSign(4)*static_camber_r + cam_RR_roll + c_fromcomp(4) + c_fromride(4);
 end

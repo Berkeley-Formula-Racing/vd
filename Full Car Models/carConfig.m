@@ -35,6 +35,16 @@ carParams.I_zz = [83.28];%, 82.28]; %kg-m^2
 carParams.ackermann = [1]; %expressed as exponent for current ackermann curve
 carParams.camber_compliance_f =  0; %lateral deg/G
 carParams.camber_compliance_r =  0;
+% Camber kinematics. The front roll/steer surface remains the fitted TTC
+% model; the rear roll gains below were formerly hidden in Camber_Evaluation.
+% Ride-camber gains are signed deg/in of wheel bump compression: negative
+% increases negative physical camber under bump. Leave at zero until the
+% suspension kinematic model or measured data supplies them.
+carParams.roll_gradient_deg_per_g = 0.68;
+carParams.rear_roll_camber_outer_deg_per_deg = 0.58;
+carParams.rear_roll_camber_inner_deg_per_deg = -0.592;
+carParams.ride_camber_front_deg_per_in = 0;
+carParams.ride_camber_rear_deg_per_in  = 0;
 carParams.static_r_toe = [0]; %toe in deg, toe out - negative
 
 % Rotating inertia (kg-m^2).
@@ -60,6 +70,17 @@ carParams.I_driveline = 0;
 
 carParams.Crr = 0.014;
 
+% Ride-height model. Rates are spring rates at the damper, with motion ratio
+% defined as shock travel / wheel travel. The map looks up height changes in
+% inches relative to its CFD reference, so static and map-reference heights
+% both start at zero: the first aero query is the map's (0,0) row.
+carParams.spring_rate_front_lb_in = 300;
+carParams.spring_rate_rear_lb_in  = 250;
+carParams.motion_ratio_front = 0.847;
+carParams.motion_ratio_rear  = 0.984;
+carParams.static_front_ride_height_in = [-0.25 0 0.25];
+carParams.static_rear_ride_height_in  = [-0.25 0 0.25];
+
 % aero parameters (updated 6/6/22)
 aeroParams = struct();
 aeroParams.cda = [1.48]; % m^2 (1.88)
@@ -74,6 +95,15 @@ aeroParams.acc_cla_p_deg_p = 0; % NOT USED - see note above
 aeroParams.acc_D_p_deg_p = 0;   % NOT USED - see note above
 
 aeroParams.distribution = 0.418; % proportion of downforce in front
+% Main aero-model switch. true uses the ride-height coupled aeromap below;
+% false uses the static cla/cda/distribution values immediately above.
+aeroParams.use_aeromap = true;
+aeroParams.map_path = fullfile(fileparts(mfilename('fullpath')),'aeromap_b26.csv');
+% These are independent of the car's static ride heights. Set them to the
+% CAD F/R heights used for CFD once known; leave both at zero to make the
+% (0,0) aeromap point the static baseline.
+aeroParams.map_reference_front_ride_height_in = 0;
+aeroParams.map_reference_rear_ride_height_in  = 0;
 
 % KTM engine parameters (updated 5/1/19)
 eParams = struct();

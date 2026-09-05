@@ -47,7 +47,8 @@ function R = rampSweep(car,opts)
 %
 % output  R: struct with
 %           .points   table, one row per solved ramp point: every field of
-%                     Car.metrics plus the ramp-derived columns below
+%                     Car.metrics plus the ramp-derived columns below,
+%                     including CUOsteerFromYaw_deg (signed, degrees)
 %           .perSpeed table, one row per speed: the scalars you plot over vCar
 %           .settings what was actually run
 %
@@ -56,8 +57,8 @@ function R = rampSweep(car,opts)
 %         stiffness split -- both load transfers scale linearly with Ay, so
 %         their ratio is constant in BOTH Ay and speed. A flat mech_balance
 %         line is correct, not a bug.
-%   CoP   (front downforce fraction) is a constant too, by definition of the
-%         static aero model.
+%   CoP   (front downforce fraction) is constant with static aero. With the
+%         ride-height aeromap enabled it may move with speed and ride height.
 % So the balance shift with speed comes from neither of those directly. It
 % comes from downforce growing the axle loads while the load transfer at a
 % given Ay does not, and from drag transferring load rearward. That is what
@@ -304,6 +305,10 @@ m.radius = v/max(abs(x(5)),eps);
 m.steer_ackermann = (180/pi)*car.W_b/m.radius;
 % the classic understeer measure: steer held above what pure geometry needs
 m.steer_excess = m.steer_avg - m.steer_ackermann;
+% yaw-derived road-wheel steer is signed, unlike steer_ackermann above. This
+% lets the same metric work for left and right turns.
+[m.CUOsteerFromYaw_deg,m.steer_from_yaw_deg] = ...
+    cuoSteerFromYaw(m.steer_avg,x(5),v,car.W_b);
 
 % --- axle slip angles ---
 % magnitudes, so the result does not depend on the sign convention: the front
@@ -364,11 +369,12 @@ end
 end
 
 %% ------------------------------------------------------------------------
-function s = summariseRamp(ramp,v,ayLim,linearFrac,~,g)
+function s = summariseRamp(ramp,v,ayLim,linearFrac,car,g)
 % collapse one ramp into the scalars that get plotted over vCar
 
 gLat  = [ramp.gLat].';
 exc   = [ramp.steer_excess].';
+cuo   = [ramp.CUOsteerFromYaw_deg].';
 yawr  = [ramp.yaw_rate].';
 steer = [ramp.steer_avg].';
 
@@ -399,6 +405,7 @@ s.ramp_complete = s.gLat_top/max(s.gLat_max,eps);
 % never has at any single Ay.
 lin = gLat <= linearFrac*s.gLat_max;
 [s.K_linear,s.K_r2] = fitSlope(gLat(lin),exc(lin));
+s.CUOsteerFromYaw_linear_deg = mean(cuo(lin),'omitnan');
 % terminal gradient, over the top quarter of the ramp's SPAN rather than a
 % fixed three points: near the limit the steer excess curves hard, so a
 % three-point fit rides the local noise and swings tens of deg/g between
@@ -424,10 +431,26 @@ s.yaw_gain_linear = fitSlope(steer(lin),yawr(lin));
 iLim = numel(gLat);
 
 s.mech_balance      = ramp(iLim).LLTD;        % constant in Ay and in speed
-s.aero_balance      = ramp(iLim).CoP;         % constant, static aero
+s.aero_balance      = ramp(iLim).CoP;
 s.downforce         = ramp(iLim).downforce;
+s.aero_downforce_front_N = ramp(iLim).aero_downforce_front_N;
+s.aero_downforce_rear_N  = ramp(iLim).aero_downforce_rear_N;
 s.downforce_frac    = ramp(iLim).downforce_frac;
 s.drag_decel        = ramp(iLim).drag_decel;
+
+% Axle-average map heights and camber magnitude at the sustainable ramp
+% limit. Signed L/R camber is intentionally not averaged: the vehicle uses
+% mirrored signs, so a signed average would incorrectly report zero camber.
+s.front_ride_height_in = ramp(iLim).front_ride_height_in;
+s.rear_ride_height_in  = ramp(iLim).rear_ride_height_in;
+s.pitch_angle_deg = atan2d( ...
+    (s.front_ride_height_in-s.rear_ride_height_in)*0.0254,car.W_b);
+s.front_shock_travel_in = shockTravel(car.rideHeightAero, ...
+    s.front_ride_height_in,'front');
+s.rear_shock_travel_in = shockTravel(car.rideHeightAero, ...
+    s.rear_ride_height_in,'rear');
+s.front_camber_deg = mean(abs([ramp(iLim).gamma_1 ramp(iLim).gamma_2]));
+s.rear_camber_deg  = mean(abs([ramp(iLim).gamma_3 ramp(iLim).gamma_4]));
 
 s.front_Fz_frac_mid   = ramp(iMid).front_Fz_frac;
 s.front_Fz_frac_limit = ramp(iLim).front_Fz_frac;
@@ -442,6 +465,7 @@ s.alpha_balance_limit = ramp(iLim).alpha_balance;
 
 s.beta_limit    = ramp(iLim).beta;
 s.steer_limit   = ramp(iLim).steer_avg;
+s.CUOsteerFromYaw_limit_deg = ramp(iLim).CUOsteerFromYaw_deg;
 s.min_Fz_limit  = ramp(iLim).min_Fz;      % negative => a wheel has lifted
 s.roll_limit    = ramp(iLim).roll_angle;
 
@@ -472,6 +496,18 @@ k  = p(1);
 yh = polyval(p,x);
 ss = sum((y-mean(y)).^2);
 if ss > 0, r2 = 1 - sum((y-yh).^2)/ss; else, r2 = NaN; end
+end
+
+function travelIn = shockTravel(config,rideHeightIn,axle)
+% Positive is compression from the configured static ride height. The motion
+% ratio convention in carConfig is shock travel / wheel travel.
+staticName = ['static_' axle '_ride_height_in'];
+motionName = ['motion_ratio_' axle];
+if ~isstruct(config) || ~isfield(config,staticName) || ~isfield(config,motionName)
+    travelIn = NaN;
+    return
+end
+travelIn = (config.(staticName)-rideHeightIn)*config.(motionName);
 end
 
 function v = getOr(s,f,d)

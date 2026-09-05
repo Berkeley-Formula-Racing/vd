@@ -21,6 +21,13 @@ classdef Car
         static_r_toe
         camber_compliance_f
         camber_compliance_r
+        % Values are supplied by carConfig. The defaults retain the previous
+        % model for old saved cars that predate this configuration struct.
+        camberKinematics = struct('roll_gradient_deg_per_g',0.68, ...
+            'rear_roll_camber_outer_deg_per_deg',0.58, ...
+            'rear_roll_camber_inner_deg_per_deg',-0.592, ...
+            'ride_camber_front_deg_per_in',0, ...
+            'ride_camber_rear_deg_per_in',0)
         aero
         powertrain
         tire
@@ -59,6 +66,11 @@ classdef Car
         % unaffected; carConfig sets the real value.
         Crr = 0;
 
+        % Ride-height-dependent aero configuration. carConfig stores spring
+        % rates at the damper and converts them to wheel rates using MR^2.
+        % Disabled by default so saved cars retain static-aero behaviour.
+        rideHeightAero = struct('enabled',false);
+
         Iyy
         Ixx   % needs to be about roll center
         k     % spring rate (assumed same over all tires) N/m
@@ -96,7 +108,7 @@ classdef Car
     methods
         function obj = Car(mass,wheelbase,weight_dist,track_width,wheel_radius,cg_height,...
                 roll_center_height_front,roll_center_height_rear,R_sf,I_zz,static_gamma_f,static_gamma_r,camber_compliance_f,camber_compliance_r,aero,powertrain,tire,ackermann,static_r_toe,...
-                gripScaleF,gripScaleR,I_wheel,I_driveline,Crr)
+                gripScaleF,gripScaleR,I_wheel,I_driveline,Crr,rideHeightAero,camberKinematics)
             % gripScaleF/R and the two inertias are optional and default to
             % the values declared above, so a call written before they existed
             % still builds a car that behaves as it did then
@@ -127,6 +139,12 @@ classdef Car
             if nargin >= 22 && ~isempty(I_wheel),      obj.I_wheel      = I_wheel;      end
             if nargin >= 23 && ~isempty(I_driveline),  obj.I_driveline  = I_driveline;  end
             if nargin >= 24 && ~isempty(Crr),          obj.Crr          = Crr;          end
+            if nargin >= 25 && ~isempty(rideHeightAero)
+                obj.rideHeightAero = rideHeightAero;
+            end
+            if nargin >= 26 && ~isempty(camberKinematics)
+                obj.camberKinematics = camberKinematics;
+            end
         end
 
         function m = rotatingMass(obj,current_gear)
@@ -200,10 +218,14 @@ classdef Car
 
             % only assemble the diagnostics struct when a caller asks for it:
             % this runs inside every fmincon function evaluation
+            needRideCamber = obj.hasRideCamber();
             if nargout >= 16
-                [Fz, Fzvirtual, ssInfo] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
+                [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
+            elseif needRideCamber
+                [Fz,Fzvirtual,downforce,drag,wheelRideHeights] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
             else
-                [Fz, Fzvirtual] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
+                [Fz,Fzvirtual,downforce,drag] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
+                wheelRideHeights = [];
             end
 
             % slip angles (small angle assumption)
@@ -221,7 +243,10 @@ classdef Car
 
 
             %gamma = [obj.static_gamma obj.static_gamma obj.static_gamma obj.static_gamma];
-            gamma = Camber_Evaluation(long_vel, yaw_rate, steer_angle_1, steer_angle_2, obj.static_gamma_f, obj.static_gamma_r, obj.camber_compliance_f, obj.camber_compliance_r).';
+            gamma = Camber_Evaluation(long_vel, yaw_rate, steer_angle_1, steer_angle_2, ...
+                obj.static_gamma_f, obj.static_gamma_r, obj.camber_compliance_f, ...
+                obj.camber_compliance_r,obj.camberKinematics, ...
+                obj.rideCompression(wheelRideHeights)).';
 
             %disp(gamma);
             %disp("------------");
@@ -240,12 +265,12 @@ classdef Car
             % correct. This is the single place longitudinal force is summed,
             % so putting it here reaches the g-g solvers, the accel-event
             % lookup and the lap solver alike. Zero Crr is a no-op.
-            F_rr = obj.Crr * (obj.M*obj.g + obj.aero.lift(long_vel));
+            F_rr = obj.Crr * (obj.M*obj.g + downforce);
 
             % M + rotatingMass, not M: the tyre force has to accelerate the
             % spinning parts as well as the car. Zero inertias reduce this to
             % the old expression exactly.
-            long_accel = (sum(Fx)-obj.aero.drag(long_vel)-F_rr)*(1/(obj.M+obj.rotatingMass(current_gear)))+yaw_rate*lat_vel;
+            long_accel = (sum(Fx)-drag-F_rr)*(1/(obj.M+obj.rotatingMass(current_gear)))+yaw_rate*lat_vel;
             yaw_accel = ((Fx(1)-Fx(2))*obj.t_f/2+(Fx(3)-Fx(4))*obj.t_r/2+(Fy(1)+Fy(2))*obj.l_f-(Fy(3)+Fy(4))*obj.l_r)*(1/obj.I_zz);
             %yaw_accel = ((Fy(1)+Fy(2))*obj.l_f-(Fy(3)+Fy(4))*obj.l_r)*(1/obj.I_zz);
 
@@ -291,14 +316,25 @@ classdef Car
             m.current_gear = current_gear;
 
             % --- aero ---
-            % no pitch column: aero is static, and the old pitch estimate came
-            % from hardcoded ride rates via an unconverged solve
             m.downforce = ss.downforce;
             m.drag      = ss.drag;
-            m.ClA       = obj.aero.cla;
-            m.CdA       = obj.aero.cda;
-            m.CoP       = obj.aero.D_f;      % front downforce fraction
+            m.ClA       = ss.ClA;
+            m.CdA       = ss.CdA;
+            m.CoP       = ss.CoP;             % front downforce fraction
             m.LoD       = ss.downforce/max(ss.drag,eps);
+            m.aero_downforce_front_N = ss.aero_downforce_front_N;
+            m.aero_downforce_rear_N  = ss.aero_downforce_rear_N;
+            m.front_ride_height_in = ss.front_ride_height_in;
+            m.rear_ride_height_in  = ss.rear_ride_height_in;
+            m.front_ride_height_offset_in = ss.front_ride_height_offset_in;
+            m.rear_ride_height_offset_in  = ss.rear_ride_height_offset_in;
+            m.ride_height_FL_in = ss.wheel_ride_height_in(1);
+            m.ride_height_FR_in = ss.wheel_ride_height_in(2);
+            m.ride_height_RL_in = ss.wheel_ride_height_in(3);
+            m.ride_height_RR_in = ss.wheel_ride_height_in(4);
+            m.aero_iterations = ss.aero_iterations;
+            m.aero_residual_in = ss.aero_residual_in;
+            m.aero_outside_map = ss.aero_outside_map;
 
             % --- load distribution ---
             m.Fz_front_axle = ss.Fz_front_axle;
@@ -496,38 +532,26 @@ classdef Car
             xdot(14) = ((T(4)-Fx(4)*obj.R)*(obj.Jw+obj.Jm*(Gr/2)^2) - (T(3)-Fx(3)*obj.R)*obj.Jm*(Gr/2)^2)*(1/denom);
         end
 
-        function [Fz_f, Fz_r] = FzForces(obj,longVel,T)
-            % STATIC AERO: ClA, CdA and the front/rear split are constants.
-            % Pitch dependence is deliberately not modeled -- there is no aero
-            % map to calibrate cla_p_deg_p / D_p_deg_p against, and the
-            % previous pitch path was inert (both coefficients zero) while
-            % costing an extra load-transfer solve. Aero.pd_lift/pd_drag and
-            % the *_p_deg_p properties are kept for when a map exists; see
-            % ssForces for what has to be restored.
-            %
-            % weight split by moment balance about each axle; downforce is
-            % already a force and is split directly by aero distribution
-            downforce = obj.aero.lift(longVel);
-            Fz_front_static = (obj.M*9.81*obj.l_r)/obj.W_b + downforce*obj.aero.D_f;
-            Fz_rear_static = (obj.M*9.81*obj.l_f)/obj.W_b + downforce*obj.aero.D_r;
-            % net longitudinal force on the chassis: tractive/braking force at
-            % the contact patches (sum(T)/R, neglecting wheel dynamics) less
-            % drag. Drag is assumed to act at cg height (no CoP height modeled)
-            long_load_transfer = (sum(T)/obj.R-obj.aero.drag(longVel))*(obj.h_g/obj.W_b);
-            Fz_f = Fz_front_static - long_load_transfer;
-            Fz_r = Fz_rear_static + long_load_transfer;
+        function [Fz_f,Fz_r,aeroInfo] = FzForces(obj,longVel,T)
+            % Coupled F/R ride-height aero. The static branch intentionally
+            % keeps legacy behaviour for saved cars and acceleration aero.
+            if obj.hasRideHeightAero()
+                aeroInfo = obj.solveRideHeightAero(longVel,T);
+            else
+                coeff = obj.aero.coefficients(0,0);
+                aeroInfo = obj.aeroLoadsAtHeights(longVel,T,coeff,NaN,NaN,0,0);
+            end
+            Fz_f = aeroInfo.Fz_front_axle;
+            Fz_r = aeroInfo.Fz_rear_axle;
         end
 
-        function [Fz, Fzvirtual, ssInfo] = ssForces(obj,longVel,yawRate,T,steer_angle)
-            % third output ssInfo exposes the intermediate load-transfer terms
-            % for metric logging; existing 2-output callers are unaffected
+        function [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo] = ssForces(obj,longVel,yawRate,T,steer_angle)
+            % Fifth output is the numeric corner ride-height vector needed by
+            % ride-camber. Sixth exposes diagnostic load-transfer terms.
 
-            % Static aero: axle loads come straight out, no pitch iteration.
-            % To restore pitch dependence you need (a) a converged pitch solve
-            % -- the old single Picard step overshot the fixed point by ~24%
-            % -- (b) ride rates fed from carConfig rather than hardcoded, and
-            % (c) real cla_p_deg_p / D_p_deg_p from an aero map.
-            [Fz_front, Fz_rear] = FzForces(obj,longVel,T);
+            [Fz_front,Fz_rear,aeroInfo] = FzForces(obj,longVel,T);
+            downforce = aeroInfo.downforce;
+            drag = aeroInfo.drag;
 
 
             lat_load_transfer_front = (yawRate*longVel*obj.M)/obj.t_f*((obj.l_r*obj.h_rf)/obj.W_b+...
@@ -552,7 +576,13 @@ classdef Car
             epsilon = 10;
             Fz = (Fzvirtual + sqrt(Fzvirtual.^2 + epsilon))./2;
 
-            if nargout > 2
+            wheelRideHeights = [];
+            if nargout > 4
+                wheelRideHeights = obj.wheelRideHeights(Fzvirtual,aeroInfo);
+            end
+            % Keep struct construction out of the fmincon hot path, which
+            % requests only Fz/Fzvirtual/downforce/drag unless ride camber is on.
+            if nargout > 5
                 ssInfo.Fz_front_axle = Fz_front;
                 ssInfo.Fz_rear_axle = Fz_rear;
                 ssInfo.lat_load_transfer_front = lat_load_transfer_front;
@@ -564,10 +594,174 @@ classdef Car
                 else
                     ssInfo.LLTD = lat_load_transfer_front/totalLLT;
                 end
-                ssInfo.downforce = obj.aero.lift(longVel);
-                ssInfo.drag = obj.aero.drag(longVel);
-                ssInfo.long_load_transfer = (sum(T)/obj.R-ssInfo.drag)*(obj.h_g/obj.W_b);
+                ssInfo.downforce = downforce;
+                ssInfo.drag = drag;
+                ssInfo.long_load_transfer = aeroInfo.long_load_transfer;
+                ssInfo.ClA = aeroInfo.cla;
+                ssInfo.CdA = aeroInfo.cda;
+                ssInfo.CoP = aeroInfo.D_f;
+                ssInfo.aero_downforce_front_N = aeroInfo.downforce_front;
+                ssInfo.aero_downforce_rear_N = aeroInfo.downforce_rear;
+                ssInfo.front_ride_height_in = aeroInfo.frontRideHeightIn;
+                ssInfo.rear_ride_height_in = aeroInfo.rearRideHeightIn;
+                ssInfo.front_ride_height_offset_in = aeroInfo.frontOffsetIn;
+                ssInfo.rear_ride_height_offset_in = aeroInfo.rearOffsetIn;
+                ssInfo.wheel_ride_height_in = wheelRideHeights;
+                ssInfo.aero_iterations = aeroInfo.iterations;
+                ssInfo.aero_residual_in = aeroInfo.residualIn;
+                ssInfo.aero_outside_map = aeroInfo.outsideMap;
             end
+        end
+
+        function tf = hasRideHeightAero(obj)
+            cfg = obj.rideHeightAero;
+            tf = isstruct(cfg) && isfield(cfg,'enabled') && cfg.enabled && ...
+                isfield(cfg,'wheel_rate_front_Npm') && ...
+                isfield(cfg,'wheel_rate_rear_Npm') && ...
+                obj.aero.hasMap();
+        end
+
+        function tf = hasRideCamber(obj)
+            cfg = obj.camberKinematics;
+            tf = obj.hasRideHeightAero() && isstruct(cfg) && ...
+                isfield(cfg,'ride_camber_front_deg_per_in') && ...
+                isfield(cfg,'ride_camber_rear_deg_per_in') && ...
+                any([cfg.ride_camber_front_deg_per_in,cfg.ride_camber_rear_deg_per_in] ~= 0);
+        end
+
+        function compressionIn = rideCompression(obj,wheelRideHeights)
+            if isempty(wheelRideHeights) || any(~isfinite(wheelRideHeights)) || ...
+                    ~obj.hasRideCamber()
+                compressionIn = [0;0];
+                return
+            end
+            cfg = obj.rideHeightAero;
+            staticHeights = [cfg.static_front_ride_height_in; ...
+                cfg.static_front_ride_height_in;cfg.static_rear_ride_height_in; ...
+                cfg.static_rear_ride_height_in];
+            compressionIn = staticHeights-wheelRideHeights(:);
+        end
+
+        function info = solveRideHeightAero(obj,longVel,T)
+            % Solve r = height - height(load(height)) = 0 with a damped
+            % two-variable Newton method. This avoids the unconverged one-step
+            % pitch update the old model used.
+            cfg = obj.rideHeightAero;
+            heights = [cfg.static_front_ride_height_in; ...
+                       cfg.static_rear_ride_height_in];
+            [res,info] = obj.aeroRideResidual(heights,longVel,T);
+            toleranceIn = 1e-7;
+            maxIterations = 12;
+            iterations = 0;
+
+            while max(abs(res)) > toleranceIn && iterations < maxIterations
+                iterations = iterations + 1;
+                h = 1e-4;
+                J = zeros(2,2);
+                for j = 1:2
+                    plus = heights;  plus(j) = plus(j) + h;
+                    minus = heights; minus(j) = minus(j) - h;
+                    rPlus = obj.aeroRideResidual(plus,longVel,T);
+                    rMinus = obj.aeroRideResidual(minus,longVel,T);
+                    J(:,j) = (rPlus-rMinus)/(2*h);
+                end
+                if all(isfinite(J),'all') && rcond(J) > 1e-10
+                    step = -J\res;
+                else
+                    step = -0.5*res;
+                end
+                step = max(min(step,0.25),-0.25); % inches per iteration
+
+                oldNorm = norm(res,inf);
+                accepted = false;
+                for lineSearch = 1:6
+                    candidate = heights + step;
+                    [candidateRes,candidateInfo] = obj.aeroRideResidual(candidate,longVel,T);
+                    if norm(candidateRes,inf) < oldNorm
+                        heights = candidate;
+                        res = candidateRes;
+                        info = candidateInfo;
+                        accepted = true;
+                        break
+                    end
+                    step = 0.5*step;
+                end
+                if ~accepted
+                    heights = heights - 0.5*res;
+                    [res,info] = obj.aeroRideResidual(heights,longVel,T);
+                end
+            end
+            info.iterations = iterations;
+            info.residualIn = max(abs(res));
+            info.converged = info.residualIn <= toleranceIn;
+        end
+
+        function [res,info] = aeroRideResidual(obj,heights,longVel,T)
+            cfg = obj.rideHeightAero;
+            coeff = obj.aero.coefficients( ...
+                heights(1)-cfg.map_reference_front_ride_height_in, ...
+                heights(2)-cfg.map_reference_rear_ride_height_in);
+            info = obj.aeroLoadsAtHeights(longVel,T,coeff,heights(1),heights(2),0,0);
+            targetFront = cfg.static_front_ride_height_in - ...
+                ((info.Fz_front_axle-info.static_front_load_N)/2) / ...
+                cfg.wheel_rate_front_Npm / 0.0254;
+            targetRear = cfg.static_rear_ride_height_in - ...
+                ((info.Fz_rear_axle-info.static_rear_load_N)/2) / ...
+                cfg.wheel_rate_rear_Npm / 0.0254;
+            res = heights - [targetFront;targetRear];
+        end
+
+        function info = aeroLoadsAtHeights(obj,longVel,T,coeff,frontHeightIn,rearHeightIn,iterations,residualIn)
+            staticFront = obj.M*obj.g*obj.l_r/obj.W_b;
+            staticRear  = obj.M*obj.g*obj.l_f/obj.W_b;
+            dynamicPressure = obj.aero.rho/2*longVel^2;
+            downforce = dynamicPressure*coeff.cla;
+            drag = dynamicPressure*coeff.cda;
+            longLoadTransfer = (sum(T)/obj.R-drag)*(obj.h_g/obj.W_b);
+
+            info.static_front_load_N = staticFront;
+            info.static_rear_load_N = staticRear;
+            info.Fz_front_axle = staticFront + downforce*coeff.D_f - longLoadTransfer;
+            info.Fz_rear_axle  = staticRear + downforce*coeff.D_r + longLoadTransfer;
+            info.downforce = downforce;
+            info.drag = drag;
+            info.downforce_front = downforce*coeff.D_f;
+            info.downforce_rear = downforce*coeff.D_r;
+            info.long_load_transfer = longLoadTransfer;
+            info.cla = coeff.cla;
+            info.cda = coeff.cda;
+            info.D_f = coeff.D_f;
+            info.D_r = coeff.D_r;
+            info.frontRideHeightIn = frontHeightIn;
+            info.rearRideHeightIn = rearHeightIn;
+            info.frontOffsetIn = coeff.frontOffsetIn;
+            info.rearOffsetIn = coeff.rearOffsetIn;
+            info.outsideMap = coeff.outsideMap;
+            info.iterations = iterations;
+            info.residualIn = residualIn;
+            info.converged = false;
+        end
+
+        function heights = wheelRideHeights(obj,Fzvirtual,aeroInfo)
+            if ~obj.hasRideHeightAero()
+                heights = nan(1,4);
+                return
+            end
+            cfg = obj.rideHeightAero;
+            staticLoads = [aeroInfo.static_front_load_N/2, ...
+                aeroInfo.static_front_load_N/2,aeroInfo.static_rear_load_N/2, ...
+                aeroInfo.static_rear_load_N/2];
+            wheelRates = [cfg.wheel_rate_front_Npm,cfg.wheel_rate_front_Npm, ...
+                cfg.wheel_rate_rear_Npm,cfg.wheel_rate_rear_Npm];
+            staticHeights = [cfg.static_front_ride_height_in, ...
+                cfg.static_front_ride_height_in,cfg.static_rear_ride_height_in, ...
+                cfg.static_rear_ride_height_in];
+            % Fzvirtual already contains the TOTAL corner load change from
+            % static, including the axle-average aero/load-transfer term.
+            % Starting from axleHeights would subtract that average deflection
+            % a second time and make the wheel-height mean disagree with the
+            % coupled F/R height used by the aeromap.
+            heights = staticHeights - (Fzvirtual-staticLoads)./wheelRates/0.0254;
         end
 
         function plotGG(car)
