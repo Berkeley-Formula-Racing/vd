@@ -26,3 +26,17 @@ verifyGreaterThan(testCase,aero.cda,0);
 verifyGreaterThanOrEqual(testCase,aero.D_f,0);
 verifyLessThanOrEqual(testCase,aero.D_f,1);
 end
+
+function testCorrectionsApplyToEveryInterpolatedMapPoint(testCase)
+modelRoot = fileparts(which('carConfig'));
+baseMap = AeroMap(fullfile(modelRoot,'aeromap_b26.csv'));
+correctedMap = baseMap.withCorrections(1.10,0.90,0.04);
+
+base = baseMap.evaluate(-0.30,0.20);
+actual = correctedMap.evaluate(-0.30,0.20);
+
+verifyEqual(testCase,actual.cla,1.10*base.cla,'AbsTol',1e-12);
+verifyEqual(testCase,actual.cda,0.90*base.cda,'AbsTol',1e-12);
+verifyEqual(testCase,actual.D_f,base.D_f+0.04,'AbsTol',1e-12);
+verifyEqual(testCase,actual.D_r,1-actual.D_f,'AbsTol',1e-12);
+end

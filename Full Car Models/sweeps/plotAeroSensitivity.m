@@ -2,8 +2,8 @@ function plotAeroSensitivity(S,param,mode,vSlices)
 % Plots aero sensitivity over the four operating axes: vCar, gLat, gLong and
 % theta (the g-g polar angle).
 %
-% inputs  S:        output of aeroSensitivity
-%         param:    'ClA' | 'CdA' | 'CoP'  (default: first one available)
+% inputs  S:        output of aeroSensitivity or aeroMapSensitivity
+%         param:    a sensitivity field name (default: first one available)
 %         mode:     'both' (default) | 'continuous' | 'discrete'
 %                     continuous - interpolated surfaces and smooth lines
 %                     discrete   - markers/stems at the solved grid points
@@ -37,7 +37,7 @@ end
 
 wantC = any(strcmp(mode,{'both','continuous'}));
 wantD = any(strcmp(mode,{'both','discrete'}));
-unit  = unitLabel(param);
+unit  = aeroSensitivityUnit(S,param,'g');
 
 %% ---- Figure 1: theta axis ----
 figure('Name',sprintf('%s sensitivity: envelope vs theta',param), ...
@@ -138,7 +138,7 @@ if ~isempty(tf)
     yv = cellfun(@(f) P.(f),tf);
     bar(categorical(names,names),yv);
     grid on; box on;
-    ylabel(sprintf('d(time)/d%s   [s / %s]',param,unit));
+    ylabel(sprintf('d(time)/d%s   [%s]',param,unit));
     title(sprintf('Lap time sensitivity to %s (negative = faster)',param));
 end
 end
@@ -189,13 +189,4 @@ end
 
 function s = onlyIf(tf)
 if tf, s = 'on'; else, s = 'off'; end
-end
-
-function u = unitLabel(param)
-switch param
-    case 'ClA', u = 'g per m^2 ClA';
-    case 'CdA', u = 'g per m^2 CdA';
-    case 'CoP', u = 'g per unit front balance';
-    otherwise,  u = 'per unit';
-end
 end

@@ -9,6 +9,9 @@ classdef AeroMap
         claInterpolator
         cdaInterpolator
         copInterpolator
+        claScale = 1
+        cdaScale = 1
+        copOffset = 0
     end
 
     methods
@@ -49,15 +52,28 @@ classdef AeroMap
         end
 
         function aero = evaluate(obj,frontOffsetIn,rearOffsetIn)
-            aero.cla = obj.claInterpolator(frontOffsetIn,rearOffsetIn);
-            aero.cda = obj.cdaInterpolator(frontOffsetIn,rearOffsetIn);
-            aero.D_f = min(max(obj.copInterpolator(frontOffsetIn,rearOffsetIn)/100,0),1);
+            aero.cla = obj.claScale*obj.claInterpolator(frontOffsetIn,rearOffsetIn);
+            aero.cda = obj.cdaScale*obj.cdaInterpolator(frontOffsetIn,rearOffsetIn);
+            aero.D_f = min(max(obj.copInterpolator(frontOffsetIn,rearOffsetIn)/100 + ...
+                obj.copOffset,0),1);
             aero.D_r = 1-aero.D_f;
             aero.frontOffsetIn = frontOffsetIn;
             aero.rearOffsetIn = rearOffsetIn;
             aero.outsideMap = frontOffsetIn < obj.frontRangeIn(1) || ...
                 frontOffsetIn > obj.frontRangeIn(2) || ...
                 rearOffsetIn < obj.rearRangeIn(1) || rearOffsetIn > obj.rearRangeIn(2);
+        end
+
+        function obj = withCorrections(obj,claScale,cdaScale,copOffset)
+            validateattributes(claScale,{'numeric'},{'scalar','finite','positive'}, ...
+                mfilename,'claScale');
+            validateattributes(cdaScale,{'numeric'},{'scalar','finite','positive'}, ...
+                mfilename,'cdaScale');
+            validateattributes(copOffset,{'numeric'},{'scalar','finite'}, ...
+                mfilename,'copOffset');
+            obj.claScale = claScale;
+            obj.cdaScale = cdaScale;
+            obj.copOffset = copOffset;
         end
     end
 end

@@ -2,8 +2,7 @@ function plotAeroOverlay(S,param,event,nBins,mode)
 % Where on the lap a change in an aero parameter actually buys time.
 %
 % One figure, four panels (vCar, gLat, gLong, theta). The y axis is LAP TIME
-% DELTA per unit of the parameter -- seconds per m^2 of ClA, seconds per unit
-% of balance for CoP. Negative is faster.
+% DELTA per unit of the parameter. Negative is faster.
 %
 %   BARS  - TIME SAVED per bin, in seconds, by actually making the baseline
 %           -> fastest change (left axis). Taller is better; a bar below the
@@ -40,7 +39,7 @@ function plotAeroOverlay(S,param,event,nBins,mode)
 % but the magnitude is not.
 %
 % inputs  S:      output of aeroSensitivity (needs .traces AND .times)
-%         param:  'ClA' | 'CdA' | 'CoP'
+%         param:  a sensitivity field name
 %         event:  'autocross' (default) | 'endurance'
 %         nBins:  bar count (default 12)
 %         mode:   'seconds' (default) | 'fraction'
@@ -250,7 +249,7 @@ if isempty(signWarn) && isfinite(mCont) && isfinite(mDisc) && abs(mDisc) > 0
     if r2 < 0.5 || r2 > 2
         signWarn = sprintf(['\\newline[!] multi-level slope %+.4g disagrees with the ' ...
             'two-case %+.4g [%s]: the compare case is not representative'], ...
-            -mCont, -mDisc, unitLabel(param));
+            -mCont, -mDisc, aeroSensitivityUnit(S,param,'time'));
     end
 end
 % three short lines rather than two long ones: the two-line form ran off both
@@ -260,10 +259,10 @@ end
 % parameters and what S.sens holds. Both are signed as time SAVED.
 sgtitle(sprintf(['%s on %s, case %d \\rightarrow %d (\\Delta%s = %+.4g)%s\n' ...
     'this change saves: attributed %+.4g s vs lap sim %+.4g s\n' ...
-    'per unit %s: %+.4g vs %+.4g [%s]  |  covers %.0f%% of the lap%s'], ...
+    'sensitivity to %s: %+.4g vs %+.4g [%s]  |  covers %.0f%% of the lap%s'], ...
     param, event, base, cmp, param, dpc, note, ...
     -aDp.total, -mDisc*dpc, ...
-    param, -aD.total, -mDisc, unitLabel(param), ...
+    param, -aD.total, -mDisc, aeroSensitivityUnit(S,param,'time'), ...
     100*aD.coverage, [rep signWarn]), 'FontSize',10);
 end
 
@@ -324,13 +323,4 @@ yq = interp1(xu,c(ia)/tot,xq,'previous',NaN);
 yq = reshape(yq,size(xq));
 yq(xq <  xu(1))   = 0;
 yq(xq >= xu(end)) = 1;
-end
-
-function u = unitLabel(param)
-switch param
-    case 'ClA', u = 's per m^2';
-    case 'CdA', u = 's per m^2';
-    case 'CoP', u = 's per unit balance';
-    otherwise,  u = 's per unit';
-end
 end
