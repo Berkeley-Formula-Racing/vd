@@ -96,11 +96,12 @@ lb = [steer_angle_bounds(1),throttle_bounds(1),long_vel_bounds(1),lat_vel_bounds
 ub = [steer_angle_bounds(2),throttle_bounds(2),long_vel_bounds(2),lat_vel_bounds(2),...
     yaw_rate_bounds(2),kappa_1_bounds(2),kappa_2_bounds(2),kappa_3_bounds(2),kappa_4_bounds(2)];
 
-% objective function: longitudinal acceleration (forwards)
-f = @(P) -car.long_accel(P);
-
-% constrained to lateral acceleration value
-constraint = @(P) car.constraint4(P,lat_accel_value);
+% Objective and constraint queries often use the same state. Cache the full
+% vehicle evaluation so their repeated coupled aero/ride-height solve is exact
+% but performed once.
+evaluator = steadyStateEvaluator(car);
+f = @(P) -evaluator.evaluate(P).longAccel;
+constraint = @(P) steadyStateConstraint4(evaluator.evaluate(P),P,lat_accel_value);
 
 % default algorithm is interior-point
 %
@@ -120,7 +121,7 @@ for k = 1:numel(seeds)
     % fmincon does not hand it back
     [ck,ceqk] = constraint(xk);
     resk = max([max(abs(ceqk)), max(ck), 0]);
-    valk = car.long_accel(xk);
+    valk = evaluator.evaluate(xk).longAccel;
 
     if isempty(x) || preferNew(flagk,resk,valk,exitflag,bestRes,bestVal,FEAS_TOL)
         x = xk; exitflag = flagk; bestRes = resk; bestVal = valk;

@@ -9,9 +9,19 @@ setup_paths
 runLapTimes = true;
 loadFromPrev = false;
 numWorkers = 12;
-loadName = "aeromap_sensitivity.mat";
-saveName = "aeromap_sensitivity.mat";
-figPath = "figures/aeromap_sensitivity";
+fastScreening = false;
+ggOpts = struct('fastScreening',fastScreening,'continuation',true);
+studyDir = fileparts(mfilename('fullpath'));
+if fastScreening
+    saveName = fullfile(studyDir,"aeromap_sensitivity_fast_continuation.mat");
+    figPath = fullfile(studyDir,"figures","aeromap_sensitivity_fast");
+else
+    % Keep the f7904c3 production result as an independent baseline for the
+    % continuation benchmark. Optimized results get their own cache.
+    saveName = fullfile(studyDir,"aeromap_sensitivity_continuation.mat");
+    figPath = fullfile(studyDir,"figures","aeromap_sensitivity");
+end
+loadName = saveName;
 figOpts = struct('formats',{{'png'}},'resolution',200,'stamp',false);
 
 % Ride-height values are inch changes from the map-reference baseline.
@@ -26,9 +36,12 @@ levels.CoPOffset = [-0.06 -0.03 0.03 0.06];
 
 [configuredCars,eventParams] = carConfig();
 [carCell,plan] = aeroMapStarCases(configuredCars,levels);
-mapFingerprint = fingerprint(carCell{1,1});
+mapFingerprint = fingerprint(carCell{1,1},ggOpts);
 numCases = size(carCell,1);
 fprintf('aeromap sensitivity study: %d independent cases\n',numCases);
+if fastScreening
+    fprintf('  FAST SCREENING grid: 2 m/s velocity spacing, 10 lateral points\n');
+end
 disp(plan)
 
 tic
@@ -46,7 +59,7 @@ if ~haveGG
     fprintf('  g-g for %d cases ...\n',numCases);
     solved = cell(numCases,1);
     parfor (i = 1:numCases,numWorkers)
-        solved{i} = makeGG(gg2(carCell{i,1},0),carCell{i,1});
+        solved{i} = makeGG(gg2(carCell{i,1},0,ggOpts),carCell{i,1});
     end
     for i = 1:numCases, carCell{i,1} = solved{i}; end
     fprintf('  g-g done (%.0f s elapsed)\n',toc)
@@ -92,14 +105,19 @@ saveFigures(figPath,[],figOpts)
 events = 'g-g';
 if runLapTimes, events = 'g-g+skidpad+accel+autocross+endurance'; end
 simLog.finish(job,'events',events,'workers',numWorkers,'nCases',numCases, ...
-    'car',carCell{1,1},'details',sprintf('cache=%s map=%s', ...
-    char(saveName),char(mapFingerprint.path)));
+    'car',carCell{1,1},'details',sprintf('cache=%s map=%s grid=%s', ...
+    char(saveName),char(mapFingerprint.path),gridLabel(mapFingerprint.grid)));
 
-function f = fingerprint(car)
+function f = fingerprint(car,ggOpts)
 path = char(car.aero.map.sourcePath);
 file = dir(path);
 if isempty(file), error('AeroMapSensitivityStudy:mapMissing','cannot read %s',path); end
-f = struct('path',string(path),'bytes',file.bytes,'modified',file.datenum);
+f = struct('path',string(path),'bytes',file.bytes,'modified',file.datenum, ...
+    'grid',ggGrid(car.max_vel,ggOpts),'continuation',ggOpts.continuation);
+end
+
+function label = gridLabel(grid)
+if grid.fastScreening, label = 'fast'; else, label = 'production'; end
 end
 
 function [cars,times,traces,haveGG,haveTimes] = loadCache(name,plan,fingerprint)

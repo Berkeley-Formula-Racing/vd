@@ -4,6 +4,10 @@
 # lap traces, and regenerable by setting loadFromPrev = false.
 aero_sweep.mat
 
+# AeroMapSensitivityStudy caches. Keep production baselines locally, but do
+# not add their large, reproducible solver states and lap traces to source.
+aeromap_sensitivity*.mat
+
 # run_grip_sweep solve cache. Same story: regenerable, and large.
 grip_sweep.mat
 

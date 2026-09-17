@@ -1,4 +1,4 @@
-function paramArr = gg2(car,numWorkers)
+function paramArr = gg2(car,numWorkers,opts)
 % creates velocity-dependent g-g diagram 
 % describes max lateral acceleration, max longitudinal acceleration for
 %   certain velocity
@@ -7,9 +7,18 @@ function paramArr = gg2(car,numWorkers)
 %   optimization point). 
 %   rows: different longitudinal velocities, columns: different lat accels
 
-minV = 5; maxV = car.max_vel;
-longVinterval = 1; % m/s
-latAgrid = 20;
+if nargin < 3, opts = struct(); end
+grid = ggGrid(car.max_vel,opts);
+longVelArr = grid.velocity;
+latAgrid = grid.lateralCount;
+useContinuation = optionOr(opts,'continuation',false);
+validateattributes(useContinuation,{'numeric','logical'}, ...
+    {'scalar','real','finite','binary'},mfilename,'opts.continuation');
+useContinuation = logical(useContinuation);
+if useContinuation && numWorkers ~= 0
+    error('gg2:continuationWithWorkers', ...
+        'continuation requires numWorkers = 0; parallelize at the case level.');
+end
 
 % maxV is car.max_vel, not max_vel-0.5. That 0.5 standoff dates to the 2019
 % first revision with no explanation, and the obvious reason for it -- that the
@@ -33,38 +42,75 @@ latAgrid = 20;
 % some others -- and two velocity rows that close are coincident to the
 % scatteredInterpolant the lap sim triangulates, which unique() will not
 % collapse because they are not equal. Snapping bounds the last interval to
-% [0.25, 1.25] m/s and costs nothing.
-longVelArr = minV:longVinterval:maxV;
-if isempty(longVelArr)
-    longVelArr = maxV;                       % max_vel below minV: one row
-elseif maxV - longVelArr(end) > 0.25*longVinterval
-    longVelArr(end+1) = maxV;
-else
-    longVelArr(end) = maxV;
-end
+% [0.25, 1.25] times the selected velocity interval and costs nothing.
 paramArr(numel(longVelArr),latAgrid) = ParamSet();
 
-% iterate through velocities
-parfor (c1 = 1:numel(longVelArr),numWorkers) %parfor
-    longVel = longVelArr(c1);
-    [maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0] = max_lat_accel(longVel,car);
-    latAccelArr = linspace(0.1,maxLatLatAccel-0.1,latAgrid);
-    row = ParamSet();
-    row(numel(latAccelArr)) = ParamSet();
-    % iterate through lateral accelerations
-    for c2 = 1:numel(latAccelArr)
-        latAccel = latAccelArr(c2);
-        %disp([longVel, latAccel]);
-        %disp('here1')
-        [xAccel,longAccel,longAccelx0] = max_long_accel_cornering(longVel,latAccel,car);
-        %disp('here2')
-        [xBraking,longDecel,brakingDecelx0] = max_braking_decel_cornering(longVel,latAccel,car);
-        %disp('here3');
-        carParams = ParamSet(car,longVel); 
-        carParams = carParams.setMaxLatParams(maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0);
-        carParams = carParams.setMaxAccelParams(xAccel,longAccel,latAccel,longAccelx0);
-        carParams = carParams.setMaxDecelParams(xBraking,longDecel,latAccel,brakingDecelx0);
-        row(c2) = carParams;
+if useContinuation
+    maxLatStart = [];
+    for c1 = 1:numel(longVelArr)
+        [row,maxLatStart] = solveRow(longVelArr(c1),latAgrid,car,maxLatStart,true);
+        paramArr(c1,:) = row;
     end
-    paramArr(c1,:) = row;
+else
+    parfor (c1 = 1:numel(longVelArr),numWorkers)
+        paramArr(c1,:) = solveRow(longVelArr(c1),latAgrid,car,[],false);
+    end
+end
+
+end
+
+function [row,nextMaxLatStart] = solveRow(longVel,latAgrid,car,maxLatStart,useContinuation)
+if useContinuation && ~isempty(maxLatStart)
+    [maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0] = ...
+        max_lat_accel(longVel,car,maxLatStart);
+else
+    [maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0] = max_lat_accel(longVel,car);
+end
+if solved(maxLatx(1))
+    nextMaxLatStart = maxLatx0;
+else
+    nextMaxLatStart = maxLatStart;
+end
+
+latAccelArr = linspace(0.1,maxLatLatAccel-0.1,latAgrid);
+row = ParamSet();
+row(numel(latAccelArr)) = ParamSet();
+accelStart = [];
+brakingStart = [];
+for c2 = 1:numel(latAccelArr)
+    latAccel = latAccelArr(c2);
+    if useContinuation && ~isempty(accelStart)
+        [xAccel,longAccel,longAccelx0] = ...
+            max_long_accel_cornering(longVel,latAccel,car,accelStart);
+    else
+        [xAccel,longAccel,longAccelx0] = max_long_accel_cornering(longVel,latAccel,car);
+    end
+    if solved(xAccel(1)), accelStart = longAccelx0; end
+
+    if useContinuation && ~isempty(brakingStart)
+        [xBraking,longDecel,brakingDecelx0] = ...
+            max_braking_decel_cornering(longVel,latAccel,car,brakingStart);
+    else
+        [xBraking,longDecel,brakingDecelx0] = ...
+            max_braking_decel_cornering(longVel,latAccel,car);
+    end
+    if solved(xBraking(1)), brakingStart = brakingDecelx0; end
+
+    carParams = ParamSet(car,longVel);
+    carParams = carParams.setMaxLatParams(maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0);
+    carParams = carParams.setMaxAccelParams(xAccel,longAccel,latAccel,longAccelx0);
+    carParams = carParams.setMaxDecelParams(xBraking,longDecel,latAccel,brakingDecelx0);
+    row(c2) = carParams;
+end
+end
+
+function tf = solved(exitflag)
+tf = exitflag == 1 || exitflag == 2;
+end
+
+function value = optionOr(opts,name,default)
+if ~isstruct(opts) || numel(opts) ~= 1
+    error('gg2:badOptions','opts must be a scalar struct.');
+end
+if isfield(opts,name), value = opts.(name); else, value = default; end
 end
