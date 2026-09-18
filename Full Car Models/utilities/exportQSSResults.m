@@ -57,7 +57,7 @@ end
 function writeHdf5(result,path)
 writeJson(path,'/manifest_json',result.manifest);
 for i = 1:numel(result.tracks)
-    t = result.tracks(i); root = ['/tracks/'h5Name(t.id)];
+    t = result.tracks(i); root = ['/tracks/' h5Name(t.id)];
     writeJson(path,[root '/metadata_json'],t.metadata);
     writeVector(path,[root '/distance_m'],t.distance_m,'double');
     writeVector(path,[root '/curvature_per_m'],t.curvature_per_m,'double');
@@ -65,7 +65,7 @@ for i = 1:numel(result.tracks)
     if isfield(t,'y_m') && ~isempty(t.y_m), writeVector(path,[root '/y_m'],t.y_m,'double'); end
 end
 for i = 1:numel(result.cases)
-    c = result.cases(i); croot = ['/cases/'h5Name(c.id)];
+    c = result.cases(i); croot = ['/cases/' h5Name(c.id)];
     writeJson(path,[croot '/metadata_json'],c.metadata);
     writeJson(path,[croot '/setup_json'],c.setup);
     if isfield(c,'envelope') && ~isempty(c.envelope)
@@ -180,14 +180,14 @@ if ~isfield(manifest,'schema_version') || ~strcmp(char(string(manifest.schema_ve
     error('exportQSSResults:badManifestVersion','Written schema version is not 1.0.');
 end
 for i = 1:numel(result.tracks)
-    root = ['/tracks/'h5Name(result.tracks(i).id)];
+    root = ['/tracks/' h5Name(result.tracks(i).id)];
     mustExist(path,[root '/metadata_json']); mustExist(path,[root '/distance_m']); mustExist(path,[root '/curvature_per_m']);
 end
 for i = 1:numel(result.cases)
-    c = result.cases(i); root = ['/cases/'h5Name(c.id)];
+    c = result.cases(i); root = ['/cases/' h5Name(c.id)];
     mustExist(path,[root '/metadata_json']); mustExist(path,[root '/setup_json']);
     for j = 1:numel(c.laps)
-        lap = c.laps(j); lr = [root '/laps/'h5Name(lap.id)];
+        lap = c.laps(j); lr = [root '/laps/' h5Name(lap.id)];
         mustExist(path,[lr '/metadata_json']);
         for a = 1:numel(lap.axes)
             ar = [lr '/axes/' h5Name(lap.axes(a).id)];

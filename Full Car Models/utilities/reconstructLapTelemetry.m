@@ -192,13 +192,13 @@ if numel(curvature)>2
     slope=diff(curvature);
     for i=2:numel(curvature)-1
         if (slope(i-1)>=0 && slope(i)<=0) || (slope(i-1)<=0 && slope(i)>=0)
-            indices(end+1)=[i i+1]; %#ok<AGROW>
+            indices(end+1:end+2)=[i i+1]; %#ok<AGROW>
         end
     end
 end
 transition = [find(diff(gear)~=0);find(diff(shiftMask)~=0);find(diff(signTransition(longAccel))~=0)];
 for i=1:numel(transition)
-    k=transition(i)+1; indices(end+1)=[max(k-1,1) min(k+1,n)]; %#ok<AGROW>
+    k=transition(i)+1; indices(end+1:end+2)=[max(k-1,1) min(k+1,n)]; %#ok<AGROW>
 end
 indices=unique(indices,'stable'); indices=indices(:);
 end
@@ -411,11 +411,24 @@ candidate=struct('P',[],'eval_count',0,'exitflag',0,'info',emptySolveInfo(),'met
 end
 
 function diagnostics=emptyDiagnostics(n)
-diagnostics=struct('status',repmat({'unavailable'},n,1),'valid',false(n,1),'mode',repmat({'unknown'},n,1), ...
-    'failure_reason',repmat({'not_evaluated'},n,1),'eval_count',nan(n,1), ...
-    'acceleration_residual_mps2',nan(n,1),'yaw_acceleration_residual_radps2',nan(n,1), ...
-    'torque_residual_Nm',nan(n,1),'min_virtual_load_N',nan(n,1),'aero_residual_in',nan(n,1), ...
-    'target_long_accel_mps2',nan(n,1),'target_lat_accel_mps2',nan(n,1),'distance_m',nan(n,1),'time_s',nan(n,1));
+% Assign fields after constructing the scalar struct.  Passing cell arrays
+% directly to struct(...) expands them into a struct array, which prevents
+% indexed updates such as diagnostics.mode{j} below.
+diagnostics = struct();
+diagnostics.status = repmat({'unavailable'},n,1);
+diagnostics.valid = false(n,1);
+diagnostics.mode = repmat({'unknown'},n,1);
+diagnostics.failure_reason = repmat({'not_evaluated'},n,1);
+diagnostics.eval_count = nan(n,1);
+diagnostics.acceleration_residual_mps2 = nan(n,1);
+diagnostics.yaw_acceleration_residual_radps2 = nan(n,1);
+diagnostics.torque_residual_Nm = nan(n,1);
+diagnostics.min_virtual_load_N = nan(n,1);
+diagnostics.aero_residual_in = nan(n,1);
+diagnostics.target_long_accel_mps2 = nan(n,1);
+diagnostics.target_lat_accel_mps2 = nan(n,1);
+diagnostics.distance_m = nan(n,1);
+diagnostics.time_s = nan(n,1);
 end
 
 function diagnostics=setUnavailable(diagnostics,j,reason)

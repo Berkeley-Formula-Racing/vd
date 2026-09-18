@@ -39,8 +39,9 @@ verifyEqual(testCase,h5read(actual, ...
     '/cases/baseline/laps/flying/channels/steering_angle_rad/values'), ...
     [0.1;0.2;0.3],'AbsTol',0);
 metadata = native2unicode(h5read(actual, ...
-    '/cases/baseline/laps/flying/metadata_json'),'UTF-8');
-verifyTrue(testCase,contains(string(metadata),'βeta'));
+    '/cases/baseline/metadata_json'),'UTF-8');
+beta = native2unicode(uint8([206 178]),'UTF-8');
+verifyTrue(testCase,any(contains(string(metadata),beta)));
 end
 
 function testReconstructionFlagsUnavailablePointsWithoutInterpolation(testCase)
@@ -69,12 +70,13 @@ end
 function source = syntheticSource()
 source = struct();
 source.source_type = 'plain_study';
+beta = native2unicode(uint8([206 178]),'UTF-8');
 source.track = struct('id','unit_track','metadata',struct( ...
-    'name','Béta track','geometry_source','curvature'), ...
+    'name',[beta 'eta track'],'geometry_source','curvature'), ...
     'distance_m',[0;2;4;6;8], ...
     'curvature_per_m',[0;0.02;0.02;0;-0.01]);
 source.case_id = 'baseline';
-source.case_metadata = struct('label','βeta case');
+source.case_metadata = struct('label',[beta 'eta case']);
 source.setup = struct('mass_kg',250);
 source.laps = struct();
 source.laps(1).id = 'flying';
