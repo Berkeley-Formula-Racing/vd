@@ -54,3 +54,39 @@ verifyThat(testCase,run.perSpeed.reason(2), ...
         value = cancelRequested;
     end
 end
+
+function testOmittedModeMatchesRampSweepDefault(testCase)
+[cars,~] = carConfig();
+settings = struct("speeds",5,"nRamp",3,"nBisect",0,"verbose",false);
+direct = rampSweep(cars{1,1},settings);
+run = rampSpeed.runLateralRamp(cars{1,1},settings, ...
+    struct("id","baseline","label","baseline","carRole","lap"),struct());
+
+verifyEqual(testCase,string(direct.settings.mode),"balanced");
+verifyEqual(testCase,run.mode,"balanced");
+verifyEqual(testCase,string(run.raw.settings.mode),run.mode);
+verifyEqual(testCase,run.settings.mode,run.mode);
+end
+
+function testSkippedSpeedRetainsPerSpeedErrorDiagnostics(testCase)
+[cars,~] = carConfig();
+settings = struct("speeds",[0 5],"nRamp",3,"nBisect",0, ...
+    "mode","coast","verbose",false);
+run = rampSpeed.runLateralRamp(cars{1,1},settings, ...
+    struct("id","baseline","label","baseline","carRole","lap"),struct());
+
+verifyFalse(testCase,run.perSpeed.valid(1));
+verifyEqual(testCase,run.perSpeed.status(1),"failed");
+verifyTrue(testCase,isfield(run.raw,"speedErrors"));
+errors = run.raw.speedErrors;
+verifyGreaterThanOrEqual(testCase,numel(errors),1);
+errorIndex = find([errors.speed_index] == 1,1);
+verifyNotEmpty(testCase,errorIndex);
+speedError = errors(errorIndex);
+verifyTrue(testCase,isfield(speedError,"stack"));
+verifyThat(testCase,run.perSpeed.reason(1), ...
+    matlab.unittest.constraints.ContainsSubstring(string(speedError.identifier)));
+verifyThat(testCase,run.perSpeed.reason(1), ...
+    matlab.unittest.constraints.ContainsSubstring(string(speedError.message)));
+verifyEqual(testCase,run.runMeta.speedErrors,errors);
+end

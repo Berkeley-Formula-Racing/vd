@@ -66,6 +66,12 @@ runMeta.completed = datetime('now');
 requested = requestedSpeeds(settings,raw);
 normalizationSettings = settings;
 normalizationSettings.speeds = normalizationSpeeds(raw,requested).';
+normalizationSettings.mode = effectiveMode(settings,raw);
+diagnostics = fillSpeedErrorSpeeds(speedErrorsForRun(raw,failure),requested);
+if isstruct(raw)
+    raw.speedErrors = diagnostics;
+end
+runMeta.speedErrors = diagnostics;
 run = rampSpeed.normalizeRampResult(raw,"lateral",normalizationSettings, ...
     caseInfo,runMeta);
 
@@ -73,8 +79,10 @@ run = rampSpeed.normalizeRampResult(raw,"lateral",normalizationSettings, ...
 % vector used when rampSweep defaults were requested.
 run.settings = settings;
 run.settings.speeds = requested.';
+run.settings.mode = run.mode;
 run.runMeta.requestedSpeeds_mps = requested;
-run.perSpeed = rebuildPerSpeed(run,raw,requested,missingReason(failure,run));
+run.perSpeed = rebuildPerSpeed(run,raw,requested,diagnostics, ...
+    missingReason(failure,run));
 if ~isempty(failure)
     run.status = runMeta.status;
 end
@@ -146,7 +154,7 @@ if numel(candidate) == n
 end
 end
 
-function T = rebuildPerSpeed(run,raw,requested,reason)
+function T = rebuildPerSpeed(run,raw,requested,diagnostics,reason)
 templateSettings = run.settings;
 templateSettings.speeds = requested.';
 template = rampSpeed.makeRun("lateral",run.mode,templateSettings, ...
@@ -171,7 +179,15 @@ end
 missing = ~used;
 T.valid(missing) = false;
 T.status(missing) = "failed";
-T.reason(missing) = repmat(string(reason),sum(missing),1);
+missingReasons = repmat(string(reason),nTarget,1);
+for i = 1:numel(diagnostics)
+    target = diagnostics(i).speed_index;
+    if isfinite(target) && target >= 1 && target <= nTarget && ...
+            target == fix(target)
+        missingReasons(target) = formatSpeedError(diagnostics(i));
+    end
+end
+T.reason(missing) = missingReasons(missing);
 T.speed_mps = requested;
 end
 
@@ -191,6 +207,7 @@ raw.perSpeed = table();
 raw.points = table();
 raw.settings = settings;
 raw.status = status;
+raw.speedErrors = exceptionSpeedErrors(ME);
 raw.error = struct("identifier",string(ME.identifier), ...
     "message",string(ME.message));
 end
@@ -198,4 +215,84 @@ end
 function tf = isHandledRampError(ME)
 tf = any(strcmp(ME.identifier,["rampSweep:cancelled", ...
     "rampSweep:noSolution","rampSpeed:noSolution"]));
+end
+
+function mode = effectiveMode(settings,raw)
+mode = "";
+if isfield(settings,"mode") && ~isempty(settings.mode)
+    mode = string(settings.mode);
+elseif isstruct(raw) && isfield(raw,"settings") && ...
+        isstruct(raw.settings) && isfield(raw.settings,"mode") && ...
+        ~isempty(raw.settings.mode)
+    mode = string(raw.settings.mode);
+end
+if isempty(mode) || strlength(mode(1)) == 0
+    mode = "balanced";
+else
+    mode = lower(mode(1));
+end
+end
+
+function errors = speedErrorsForRun(raw,failure)
+errors = emptySpeedErrors();
+if isstruct(raw) && isfield(raw,"speedErrors") && ...
+        ~isempty(raw.speedErrors)
+    errors = raw.speedErrors;
+elseif ~isempty(failure)
+    errors = exceptionSpeedErrors(failure);
+end
+end
+
+function errors = fillSpeedErrorSpeeds(errors,requested)
+for i = 1:numel(errors)
+    target = errors(i).speed_index;
+    if isfinite(target) && target >= 1 && target <= numel(requested) && ...
+            target == fix(target) && ~isfinite(errors(i).speed_mps)
+        errors(i).speed_mps = requested(target);
+    end
+end
+end
+
+function errors = exceptionSpeedErrors(ME)
+errors = emptySpeedErrors();
+if isempty(ME) || isempty(ME.cause)
+    return
+end
+for i = 1:numel(ME.cause)
+    cause = ME.cause{i};
+    identifier = string(cause.identifier);
+    if startsWith(identifier,"rampSweep:speed:")
+        speedIndex = str2double(extractAfter(identifier,"rampSweep:speed:"));
+        original = cause;
+        if ~isempty(cause.cause)
+            original = cause.cause{1};
+        end
+        errors(end+1) = struct( ...
+            "speed_index",speedIndex, ...
+            "speed_mps",NaN, ...
+            "identifier",string(original.identifier), ...
+            "message",string(original.message), ...
+            "stack",original.stack); %#ok<AGROW>
+    else
+        nested = exceptionSpeedErrors(cause);
+        if ~isempty(nested)
+            errors(end+1:end+numel(nested)) = nested;
+        end
+    end
+end
+end
+
+function reason = formatSpeedError(entry)
+identifier = string(entry.identifier);
+message = string(entry.message);
+if strlength(identifier) > 0
+    reason = identifier + ": " + message;
+else
+    reason = message;
+end
+end
+
+function errors = emptySpeedErrors()
+errors = struct('speed_index',{},'speed_mps',{},'identifier',{}, ...
+    'message',{},'stack',{});
 end

@@ -94,6 +94,8 @@ rows = {};
 perSpeed = struct([]);
 cancelled = false;
 completedSpeeds = 0;
+speedErrors = emptySpeedErrors();
+speedCauses = cell(0,1);
 
 for iv = 1:numel(speeds)
     v = speeds(iv);
@@ -111,13 +113,23 @@ for iv = 1:numel(speeds)
     % --- limit at this speed, which sets the top of the ramp ---
     lastwarn('');
     ayLim = NaN; xLim = [];
+    hasLimitError = false;
     try
         [~,ayLim,~,xLim] = max_lat_accel(v,car);
     catch ME
+        hasLimitError = true;
+        speedErrors(end+1) = makeSpeedError(iv,v,ME); %#ok<AGROW>
+        speedCauses{end+1,1} = ME; %#ok<AGROW>
         if verbose, fprintf('  v=%5.1f  limit solve failed (%s)\n',v,ME.message); end
     end
     if ~isfinite(ayLim) || ayLim <= 0
         if verbose, fprintf('  v=%5.1f  no lateral limit found, skipping\n',v); end
+        if ~hasLimitError
+            diagnostic = MException('rampSweep:noSolution', ...
+                sprintf('no lateral limit found at speed %.6g m/s.',v));
+            speedErrors(end+1) = makeSpeedError(iv,v,diagnostic); %#ok<AGROW>
+            speedCauses{end+1,1} = []; %#ok<AGROW>
+        end
         continue
     end
 
@@ -168,6 +180,10 @@ for iv = 1:numel(speeds)
 
     if isempty(ramp)
         if verbose, fprintf('  v=%5.1f  ramp did not converge anywhere\n',v); end
+        diagnostic = MException('rampSweep:noSolution', ...
+            sprintf('no ramp point converged at speed %.6g m/s.',v));
+        speedErrors(end+1) = makeSpeedError(iv,v,diagnostic); %#ok<AGROW>
+        speedCauses{end+1,1} = []; %#ok<AGROW>
         continue
     end
 
@@ -240,14 +256,24 @@ if isempty(rows)
         error('rampSweep:cancelled', ...
             'ramp sweep cancelled before any speed was solved.');
     end
-    error('rampSweep:noSolution', ...
-        ['not one ramp point converged across %d speeds. Check that the car ' ...
-         'solves at all -- max_lat_accel on its own is the place to start.'], ...
-        numel(speeds));
+    message = sprintf(['not one ramp point converged across %d speeds. Check ' ...
+        'that the car solves at all -- max_lat_accel on its own is the place ' ...
+        'to start.'],numel(speeds));
+    failure = MException('rampSweep:noSolution',message);
+    for i = 1:numel(speedErrors)
+        wrapper = MException(sprintf('rampSweep:speed:%d', ...
+            speedErrors(i).speed_index),char(speedErrors(i).message));
+        if ~isempty(speedCauses{i})
+            wrapper = addCause(wrapper,speedCauses{i});
+        end
+        failure = addCause(failure,wrapper);
+    end
+    throw(failure);
 end
 
 R.points   = vertcat(rows{:});
 R.perSpeed = struct2table(perSpeed);
+R.speedErrors = speedErrors;
 R.settings = struct('speeds',speeds,'nRamp',nRamp,'ayMaxFrac',ayMaxFrac, ...
     'ayMinFrac',ayMinFrac,'linearFrac',linearFrac,'mode',lower(mode));
 if cancelled
@@ -549,4 +575,15 @@ end
 
 function v = getOr(s,f,d)
 if isfield(s,f), v = s.(f); else, v = d; end
+end
+
+function errors = emptySpeedErrors()
+errors = struct('speed_index',{},'speed_mps',{},'identifier',{}, ...
+    'message',{},'stack',{});
+end
+
+function entry = makeSpeedError(speedIndex,speed,ME)
+entry = struct('speed_index',speedIndex,'speed_mps',speed, ...
+    'identifier',string(ME.identifier),'message',string(ME.message), ...
+    'stack',ME.stack);
 end
