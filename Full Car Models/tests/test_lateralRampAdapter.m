@@ -91,35 +91,33 @@ verifyThat(testCase,run.perSpeed.reason(1), ...
 verifyEqual(testCase,run.runMeta.speedErrors,errors);
 end
 
-function testOmittedSettingsSpeedsRetainCancelledDefaultGridGap(testCase)
+function testOmittedSettingsSpeedsRetainDefaultGridDiagnostics(testCase)
 [cars,~] = carConfig();
-settings = struct("nRamp",3,"nBisect",0,"mode","coast", ...
-    "verbose",false);
-cancelRequested = false;
-callbacks = struct("onProgress",@captureProgress, ...
-    "isCancelled",@isCancelled);
+settings = struct("nRamp",1,"nBisect",0,"mode","balanced", ...
+    "ayMinFrac",0.99,"ayMaxFrac",1,"verbose",false);
 run = rampSpeed.runLateralRamp(cars{1,1},settings, ...
-    struct("id","baseline","label","baseline","carRole","lap"),callbacks);
+    struct("id","baseline","label","baseline","carRole","lap"),struct());
 
 requested = (5:2.5:30).';
-verifyEqual(testCase,string(run.raw.status),"cancelled");
+verifyEqual(testCase,string(run.raw.status),"completed");
 verifyEqual(testCase,run.raw.settings.speeds,requested.', ...
     "AbsTol",1e-12);
 verifyEqual(testCase,run.perSpeed.speed_mps,requested,"AbsTol",1e-12);
 verifyEqual(testCase,height(run.perSpeed),numel(requested));
-verifyTrue(testCase,run.perSpeed.valid(1));
-verifyFalse(testCase,run.perSpeed.valid(2));
-verifyEqual(testCase,run.perSpeed.status(2),"failed");
-verifyThat(testCase,run.perSpeed.reason(2), ...
-    matlab.unittest.constraints.ContainsSubstring("cancel"));
-
-    function captureProgress(event)
-        if isfield(event,"completedSpeeds") && event.completedSpeeds >= 1
-            cancelRequested = true;
-        end
-    end
-
-    function value = isCancelled()
-        value = cancelRequested;
-    end
+verifyTrue(testCase,any(run.perSpeed.valid));
+verifyTrue(testCase,isfield(run.raw,"speedErrors"));
+errors = run.raw.speedErrors;
+verifyGreaterThanOrEqual(testCase,numel(errors),1);
+errorIndex = find([errors.speed_index] == 1,1);
+verifyNotEmpty(testCase,errorIndex);
+speedError = errors(errorIndex);
+target = speedError.speed_index;
+verifyFalse(testCase,run.perSpeed.valid(target));
+verifyEqual(testCase,run.perSpeed.status(target),"failed");
+verifyTrue(testCase,isfield(speedError,"stack"));
+verifyThat(testCase,run.perSpeed.reason(target), ...
+    matlab.unittest.constraints.ContainsSubstring(string(speedError.identifier)));
+verifyThat(testCase,run.perSpeed.reason(target), ...
+    matlab.unittest.constraints.ContainsSubstring(string(speedError.message)));
+verifyEqual(testCase,run.runMeta.speedErrors,errors);
 end
