@@ -27,3 +27,13 @@ verifyEqual(testCase,S.rear_shock_travel_in, ...
     (cars{1,1}.rideHeightAero.static_rear_ride_height_in-S.rear_ride_height_in) ...
     *cars{1,1}.rideHeightAero.motion_ratio_rear,'AbsTol',1e-12);
 end
+
+function testRawSpeedIndexIdentifiesPerSpeedAndPointRows(testCase)
+[cars,~] = carConfig();
+R = rampSweep(cars{1,1},struct('speeds',5,'nRamp',3,'nBisect',0, ...
+    'mode','coast','verbose',false));
+
+verifyEqual(testCase,R.perSpeed.speed_index,1);
+verifyTrue(testCase,ismember('speed_index',R.points.Properties.VariableNames));
+verifyTrue(testCase,all(R.points.speed_index == 1));
+end

@@ -79,6 +79,8 @@ mode       = getOr(opts,'mode','balanced');
 ceqTol     = getOr(opts,'ceqTol',1e-2);
 nBisect    = getOr(opts,'nBisect',6);
 verbose    = getOr(opts,'verbose',true);
+progressFcn = getOr(opts,'progressFcn',[]);
+cancelFcn   = getOr(opts,'cancelFcn',[]);
 
 if ~any(strcmpi(mode,{'balanced','coast'}))
     error('rampSweep:badMode','mode must be ''balanced'' or ''coast''');
@@ -90,9 +92,21 @@ g = car.g;
 
 rows = {};
 perSpeed = struct([]);
+cancelled = false;
+completedSpeeds = 0;
 
 for iv = 1:numel(speeds)
     v = speeds(iv);
+
+    if ~isempty(cancelFcn) && cancelFcn()
+        cancelled = true;
+        break
+    end
+    if ~isempty(progressFcn)
+        progressFcn(struct("phase","speed","speedIndex",iv, ...
+            "speed_mps",v,"completedSpeeds",completedSpeeds, ...
+            "requestedSpeeds",numel(speeds)));
+    end
 
     % --- limit at this speed, which sets the top of the ramp ---
     lastwarn('');
@@ -148,6 +162,7 @@ for iv = 1:numel(speeds)
 
         m = car.metrics(x);
         m = addRampFields(m,car,x,ay,exitflag,ceqMax,v,g);
+        m.speed_index = iv;
         if isempty(ramp), ramp = m; else, ramp(end+1) = m; end %#ok<AGROW>
     end
 
@@ -180,6 +195,7 @@ for iv = 1:numel(speeds)
             if hit
                 ayOK = aym;
                 best = addRampFields(car.metrics(x),car,x,aym,exitflag,ceqMax,v,g);
+                best.speed_index = iv;
                 x0 = x;
             else
                 ayBad = aym;
@@ -190,7 +206,19 @@ for iv = 1:numel(speeds)
 
     rows{end+1} = struct2table(ramp); %#ok<AGROW>
     s = summariseRamp(ramp,v,ayLim,linearFrac,car,g);
+    s.speed_index = iv;
     if isempty(perSpeed), perSpeed = s; else, perSpeed(end+1) = s; end %#ok<AGROW>
+
+    completedSpeeds = completedSpeeds + 1;
+    if ~isempty(progressFcn)
+        progressFcn(struct("phase","speed","speedIndex",iv, ...
+            "speed_mps",v,"completedSpeeds",completedSpeeds, ...
+            "requestedSpeeds",numel(speeds)));
+    end
+    if ~isempty(cancelFcn) && cancelFcn()
+        cancelled = true;
+        break
+    end
 
     if verbose
         flag = '';
@@ -208,6 +236,10 @@ for iv = 1:numel(speeds)
 end
 
 if isempty(rows)
+    if cancelled
+        error('rampSweep:cancelled', ...
+            'ramp sweep cancelled before any speed was solved.');
+    end
     error('rampSweep:noSolution', ...
         ['not one ramp point converged across %d speeds. Check that the car ' ...
          'solves at all -- max_lat_accel on its own is the place to start.'], ...
@@ -218,6 +250,11 @@ R.points   = vertcat(rows{:});
 R.perSpeed = struct2table(perSpeed);
 R.settings = struct('speeds',speeds,'nRamp',nRamp,'ayMaxFrac',ayMaxFrac, ...
     'ayMinFrac',ayMinFrac,'linearFrac',linearFrac,'mode',lower(mode));
+if cancelled
+    R.status = "cancelled";
+else
+    R.status = "completed";
+end
 end
 
 %% ------------------------------------------------------------------------
