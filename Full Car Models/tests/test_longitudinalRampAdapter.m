@@ -85,3 +85,68 @@ verifyThat(testCase,run.perSpeed.reason(2), ...
     matlab.unittest.constraints.ContainsSubstring("failed"));
 verifyGreaterThanOrEqual(testCase,numel(run.runMeta.speedErrors),1);
 end
+
+function testRunStatusDistinguishesMixedAndAllFailedSpeeds(testCase)
+[cars,~] = carConfig();
+caseInfo = struct("id","accel","label","accel","carRole","acceleration");
+
+mixed = rampSpeed.runLongitudinalRamp(cars{1,2}, ...
+    struct("speeds",[5 NaN],"verbose",false),caseInfo,struct());
+allFailed = rampSpeed.runLongitudinalRamp(cars{1,2}, ...
+    struct("speeds",NaN,"verbose",false),caseInfo,struct());
+
+verifyEqual(testCase,mixed.status,"partial");
+verifyTrue(testCase,mixed.perSpeed.valid(1));
+verifyFalse(testCase,mixed.perSpeed.valid(2));
+verifyEqual(testCase,allFailed.status,"failed");
+verifyFalse(testCase,any(allFailed.perSpeed.valid));
+end
+
+function testNonconvergedSpeedsAreFailedDiagnostics(testCase)
+[cars,~] = carConfig();
+settings = struct("speeds",[5 10],"verbose",false, ...
+    "solverOptions",struct("maxFunctionEvaluations",1, ...
+    "constraintTolerance",1e-2,"stepTolerance",1e-10,"display","off"));
+run = rampSpeed.runLongitudinalRamp(cars{1,2},settings, ...
+    struct("id","limited","label","limited","carRole","acceleration"),struct());
+
+verifyEqual(testCase,run.status,"failed");
+verifyFalse(testCase,any(run.perSpeed.valid));
+verifyFalse(testCase,run.raw.diagnostics(1).success);
+verifyFalse(testCase,run.raw.diagnostics(2).success);
+verifyGreaterThanOrEqual(testCase,numel(run.runMeta.speedErrors),2);
+diagnostic = run.raw.diagnostics(1);
+verifyTrue(testCase,isfinite(diagnostic.exitflag));
+verifyTrue(testCase,~isempty(diagnostic.state));
+verifyTrue(testCase,all(isfinite(diagnostic.state(:))));
+verifyTrue(testCase,~isempty(diagnostic.c));
+verifyTrue(testCase,~isempty(diagnostic.ceq));
+verifyTrue(testCase,isstruct(diagnostic.metrics));
+verifyTrue(testCase,isfinite(diagnostic.max_equality_residual));
+verifyTrue(testCase,isfinite(diagnostic.max_inequality_violation));
+verifyEqual(testCase,diagnostic.error_identifier,"rampSpeed:nonconverged");
+verifyThat(testCase,diagnostic.error_message, ...
+    matlab.unittest.constraints.ContainsSubstring("nonconverged solver result"));
+verifyEqual(testCase,run.runMeta.speedErrors(1).identifier, ...
+    "rampSpeed:nonconverged");
+verifyThat(testCase,run.runMeta.speedErrors(1).message, ...
+    matlab.unittest.constraints.ContainsSubstring("exitflag"));
+end
+
+function testProgressCountsOnlySolvedSpeeds(testCase)
+[cars,~] = carConfig();
+events = struct("phase",{}, "speedIndex",{}, ...
+    "speed_mps",{}, "completedSpeeds",{}, "requestedSpeeds",{});
+run = rampSpeed.runLongitudinalRamp(cars{1,2}, ...
+    struct("speeds",[NaN 5],"verbose",false), ...
+    struct("id","progress","label","progress","carRole","acceleration"), ...
+    struct("onProgress",@captureProgress));
+
+verifyEqual(testCase,run.status,"partial");
+verifyEqual(testCase,[events.speedIndex],[1 2 2]);
+verifyEqual(testCase,[events.completedSpeeds],[0 0 1]);
+
+    function captureProgress(event)
+        events(end+1) = event;
+    end
+end

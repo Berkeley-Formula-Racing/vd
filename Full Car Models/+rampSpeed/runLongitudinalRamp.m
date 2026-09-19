@@ -55,51 +55,83 @@ diagnosticRows = repmat(blankDiagnostic(),n,1);
 speedErrors = emptySpeedErrors();
 previousState = [];
 cancelled = false;
+completedSpeeds = 0;
 
 for i = 1:n
     speed = speeds(i);
     if cancellationRequested(cancelFcn)
         cancelled = true;
-        for j = i:n
-            rows(j) = blankRow(speeds(j),j, ...
-                "cancelled before this speed was solved");
-            diagnosticRows(j) = failedDiagnostic(speeds(j),j,[], ...
-                "rampSpeed:cancelled", ...
-                "cancelled before this speed was solved",[]);
-        end
+        [rows,diagnosticRows] = fillCancelledRows(rows,diagnosticRows, ...
+            speeds,i);
         break
+    end
+
+    if ~isempty(progressFcn)
+        progressFcn(struct("phase","speed","speedIndex",i, ...
+            "speed_mps",speed,"completedSpeeds",completedSpeeds, ...
+            "requestedSpeeds",n));
     end
 
     try
         if isempty(previousState)
-            [~,longAccel,previousState,diagnostics] = ...
+            [~,longAccel,candidateState,diagnostics] = ...
                 max_long_accel(speed,car,[],solverOptions);
         else
-            [~,longAccel,previousState,diagnostics] = ...
+            [~,longAccel,candidateState,diagnostics] = ...
                 max_long_accel(speed,car,previousState,solverOptions);
         end
-        rows(i) = solvedRow(speed,i,longAccel,diagnostics,car, ...
-            stateTolerance);
-        diagnosticRows(i) = solvedDiagnostic(speed,i,diagnostics);
+        [isFeasible,failureMessage] = solverDiagnosticsFeasible( ...
+            diagnostics,solverOptions);
+        if isFeasible
+            previousState = candidateState;
+            rows(i) = solvedRow(speed,i,longAccel,diagnostics,car, ...
+                stateTolerance);
+            diagnosticRows(i) = solvedDiagnostic(speed,i,diagnostics);
+            completedSpeeds = completedSpeeds + 1;
+            if ~isempty(progressFcn)
+                progressFcn(struct("phase","speed","speedIndex",i, ...
+                    "speed_mps",speed, ...
+                    "completedSpeeds",completedSpeeds, ...
+                    "requestedSpeeds",n));
+            end
+        else
+            previousState = [];
+            failureIdentifier = "rampSpeed:nonconverged";
+            rows(i) = blankRow(speed,i, ...
+                failureIdentifier + ": " + failureMessage);
+            speedErrors(end+1) = makeDiagnosticSpeedError(i,speed, ...
+                failureIdentifier,failureMessage); %#ok<AGROW>
+            diagnosticRows(i) = failedDiagnostic(speed,i,diagnostics, ...
+                failureIdentifier,failureMessage,[]);
+            runMeta.errors(end+1,1) = failureMessage;
+        end
     catch ME
         rows(i) = blankRow(speed,i, ...
             "speed solve failed: " + string(ME.message));
         speedErrors(end+1) = makeSpeedError(i,speed,ME); %#ok<AGROW>
-        diagnosticRows(i) = failedDiagnostic(speeds(i),i,[], ...
+        diagnosticRows(i) = failedDiagnostic(speed,i,[], ...
             string(ME.identifier),string(ME.message),ME.stack);
         runMeta.errors(end+1,1) = string(ME.message);
         previousState = [];
     end
 
-    if ~isempty(progressFcn)
-        progressFcn(struct("phase","speed","speedIndex",i, ...
-            "speed_mps",speed,"completedSpeeds",i, ...
-            "requestedSpeeds",n));
+    if ~cancelled && cancellationRequested(cancelFcn)
+        cancelled = true;
+        [rows,diagnosticRows] = fillCancelledRows(rows,diagnosticRows, ...
+            speeds,i+1);
+        break
     end
 end
 
+validRows = [rows.valid].';
 if cancelled
     runStatus = "cancelled";
+elseif isempty(validRows)
+    runStatus = "completed";
+elseif ~any(validRows)
+    runStatus = "failed";
+elseif any(~validRows)
+    runStatus = "partial";
 else
     runStatus = "completed";
 end
@@ -195,6 +227,71 @@ if ~isempty(cancelFcn)
             "callbacks.isCancelled must return a scalar logical.");
     end
     tf = logical(value);
+end
+end
+
+function [rows,diagnosticRows] = fillCancelledRows(rows,diagnosticRows, ...
+    speeds,startIndex)
+for j = startIndex:numel(speeds)
+    rows(j) = blankRow(speeds(j),j, ...
+        "cancelled before this speed was solved");
+    diagnosticRows(j) = failedDiagnostic(speeds(j),j,[], ...
+        "rampSpeed:cancelled", ...
+        "cancelled before this speed was solved",[]);
+end
+end
+
+function [tf,message] = solverDiagnosticsFeasible(diagnostics,solverOptions)
+exitflag = NaN;
+maxInequalityViolation = NaN;
+maxEqualityResidual = NaN;
+state = [];
+if isstruct(diagnostics) && isscalar(diagnostics)
+    if isfield(diagnostics,"exitflag")
+        exitflag = diagnostics.exitflag;
+    end
+    if isfield(diagnostics,"max_inequality_violation")
+        maxInequalityViolation = diagnostics.max_inequality_violation;
+    end
+    if isfield(diagnostics,"max_equality_residual")
+        maxEqualityResidual = diagnostics.max_equality_residual;
+    end
+    if isfield(diagnostics,"state")
+        state = diagnostics.state;
+    end
+end
+if ~isscalar(exitflag)
+    exitflag = NaN;
+end
+if ~isscalar(maxInequalityViolation)
+    maxInequalityViolation = NaN;
+end
+if ~isscalar(maxEqualityResidual)
+    maxEqualityResidual = NaN;
+end
+constraintTolerance = numericSetting(solverOptions, ...
+    {"constraintTolerance"},1e-2);
+validExitflag = isnumeric(exitflag) && isfinite(exitflag) && ...
+    any(exitflag == [1 2]);
+finiteState = isnumeric(state) && ~isempty(state) && ...
+    all(isfinite(state(:)));
+finiteResiduals = isnumeric(maxInequalityViolation) && ...
+    isfinite(maxInequalityViolation) && ...
+    isnumeric(maxEqualityResidual) && isfinite(maxEqualityResidual);
+validTolerance = isnumeric(constraintTolerance) && ...
+    isscalar(constraintTolerance) && isfinite(constraintTolerance) && ...
+    constraintTolerance >= 0;
+tf = validExitflag && finiteState && finiteResiduals && ...
+    validTolerance && ...
+    maxInequalityViolation <= constraintTolerance && ...
+    maxEqualityResidual <= constraintTolerance;
+if tf
+    message = "";
+else
+    message = sprintf(['nonconverged solver result: exitflag=%g, ' ...
+        'max equality residual=%g, max inequality violation=%g, ' ...
+        'tolerance=%g'],exitflag,maxEqualityResidual, ...
+        maxInequalityViolation,constraintTolerance);
 end
 end
 
@@ -412,11 +509,21 @@ record.max_equality_residual = diagnostics.max_equality_residual;
 record.metrics = diagnostics.metrics;
 end
 
-function record = failedDiagnostic(speed,speedIndex,state,identifier,message,stack)
+function record = failedDiagnostic(speed,speedIndex,diagnostics, ...
+    identifier,message,stack)
 record = blankDiagnostic();
 record.speed_index = speedIndex;
 record.speed_mps = speed;
-record.state = state;
+if ~isempty(diagnostics)
+    record.state = diagnostics.state;
+    record.exitflag = diagnostics.exitflag;
+    record.c = diagnostics.c;
+    record.ceq = diagnostics.ceq;
+    record.max_inequality_violation = ...
+        diagnostics.max_inequality_violation;
+    record.max_equality_residual = diagnostics.max_equality_residual;
+    record.metrics = diagnostics.metrics;
+end
 record.error_identifier = string(identifier);
 record.error_message = string(message);
 record.error_stack = stack;
@@ -431,4 +538,10 @@ function entry = makeSpeedError(speedIndex,speed,ME)
 entry = struct('speed_index',speedIndex,'speed_mps',speed, ...
     'identifier',string(ME.identifier),'message',string(ME.message), ...
     'stack',ME.stack);
+end
+
+function entry = makeDiagnosticSpeedError(speedIndex,speed,identifier,message)
+entry = struct('speed_index',speedIndex,'speed_mps',speed, ...
+    'identifier',string(identifier),'message',string(message), ...
+    'stack',[]);
 end
