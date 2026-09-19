@@ -17,6 +17,7 @@ from typing import Any
 
 import numpy as np
 
+from .channel_catalog import channel_group as catalog_channel_group, default_channel_ids
 from .schema import AxisData, CaseData, ChannelData, LapData, ResultFile, TrackData
 
 
@@ -160,19 +161,7 @@ def delta_time_seconds(
 
 
 def _channel_group(channel_id: str, channel: ChannelData | None = None) -> str:
-    metadata = channel.metadata if channel is not None else None
-    value = channel_id.lower()
-    label = metadata.label.lower() if metadata is not None else ""
-    text = f"{value} {label}"
-    if any(token in text for token in ("speed", "velocity", "accel", "yaw", "slip", "kinematic")):
-        return "Vehicle dynamics"
-    if any(token in text for token in ("steer", "throttle", "brake", "control", "demand", "pedal", "torque")):
-        return "Controls"
-    if any(token in text for token in ("wheel", "tire", "tyre", "suspension", "damper", "load")):
-        return "Wheels and suspension"
-    if any(token in text for token in ("delta", "lap", "sector", "time")):
-        return "Lap metrics"
-    return "Other"
+    return catalog_channel_group(channel_id, channel)
 
 
 class ViewerModel:
@@ -181,22 +170,30 @@ class ViewerModel:
     def __init__(self, results: ResultInput | None = None, *, delta_time_provider: DeltaTimeProvider | None = None) -> None:
         self.results = _result_map(results)
         self.result_name = next(iter(self.results), None)
+        self.datum_result_name: str | None = None
         self.case_id, self.lap_id = _first_case_lap(self.current_result)
         self.reference_lap_id = self.lap_id
         self.comparison_lap_id: str | None = None
         self.axis_mode = "time"
+        self.display_mode = "absolute"
         self.distance_offset_m = 0.0
         self.time_offset_s = 0.0
         self.cursor_index = 0
         self.selected_channel_ids: list[str] = []
         self._missing_channels: list[str] = []
         self._comparison_error: str | None = None
+        self._delta_cache_key: tuple[Any, ...] | None = None
+        self._delta_cache: tuple[float | None, str | None] | None = None
         self.delta_time_provider = delta_time_provider
         self._select_default_channels()
 
     @property
     def current_result(self) -> ResultFile | None:
         return self.results.get(self.result_name) if self.result_name is not None else None
+
+    @property
+    def datum_result(self) -> ResultFile | None:
+        return self.results.get(self.datum_result_name) if self.datum_result_name is not None else None
 
     @property
     def current_case(self) -> CaseData | None:
@@ -223,12 +220,46 @@ class ViewerModel:
         return case.laps.get(self.comparison_lap_id)
 
     @property
+    def datum_lap(self) -> LapData | None:
+        """Return the datum lap matching the active case and lap IDs."""
+
+        result = self.datum_result
+        if result is None or self.reference_lap_id is None:
+            return None
+        case = result.cases.get(self.case_id) if self.case_id is not None else None
+        if case is not None and self.reference_lap_id in case.laps:
+            return case.laps[self.reference_lap_id]
+        for candidate_case in result.cases.values():
+            if self.reference_lap_id in candidate_case.laps:
+                return candidate_case.laps[self.reference_lap_id]
+        return None
+
+    @property
     def available_channels(self) -> dict[str, ChannelData]:
         channels: dict[str, ChannelData] = {}
-        for lap in (self.reference_lap, self.comparison_lap):
+        for lap in (self.reference_lap, self.comparison_lap, self.datum_lap):
             if lap is not None:
                 channels.update(lap.channels)
         return channels
+
+    @property
+    def datum_missing_channels(self) -> list[str]:
+        if self.display_mode != "delta" or self.datum_result_name is None or self.datum_lap is None:
+            return []
+        return [channel_id for channel_id in self.selected_channel_ids if channel_id not in self.datum_lap.channels]
+
+    @property
+    def delta_missing_channels(self) -> list[str]:
+        if self.display_mode != "delta" or self.datum_result_name is None or self.datum_lap is None:
+            return []
+        active = self.reference_lap or self.current_lap
+        return [
+            channel_id
+            for channel_id in self.selected_channel_ids
+            if active is None
+            or channel_id not in active.channels
+            or channel_id not in self.datum_lap.channels
+        ]
 
     @property
     def missing_channels(self) -> list[str]:
@@ -265,20 +296,34 @@ class ViewerModel:
 
     @property
     def delta_seconds(self) -> float | None:
-        value, error = _delta_time_result(
-            self.reference_lap,
-            self.comparison_lap,
-            self.delta_time_provider,
-            {
-                # Delta time is a physical-distance comparison even when the
-                # plot x-axis is switched to time.
-                "mode": "distance",
-                "distance_offset_m": self.distance_offset_m,
-                "time_offset_s": self.time_offset_s,
-            },
+        cache_key = (
+            id(self.reference_lap),
+            id(self.comparison_lap),
+            id(self.delta_time_provider),
+            self.distance_offset_m,
+            self.time_offset_s,
         )
+        if self._delta_cache_key != cache_key or self._delta_cache is None:
+            self._delta_cache = _delta_time_result(
+                self.reference_lap,
+                self.comparison_lap,
+                self.delta_time_provider,
+                {
+                    # Delta time is a physical-distance comparison even when the
+                    # plot x-axis is switched to time.
+                    "mode": "distance",
+                    "distance_offset_m": self.distance_offset_m,
+                    "time_offset_s": self.time_offset_s,
+                },
+            )
+            self._delta_cache_key = cache_key
+        value, error = self._delta_cache
         self._comparison_error = error
         return value
+
+    def _invalidate_delta_cache(self) -> None:
+        self._delta_cache_key = None
+        self._delta_cache = None
 
     @property
     def comparison_error(self) -> str | None:
@@ -333,8 +378,17 @@ class ViewerModel:
         self.reference_lap_id = self.lap_id
         self.comparison_lap_id = None
         self._comparison_error = None
+        self._invalidate_delta_cache()
         self.cursor_index = 0
         self._select_default_channels()
+
+    def set_datum_result(self, result_name: str | None) -> None:
+        if result_name is not None and result_name not in self.results:
+            raise KeyError(f"unknown datum result: {result_name}")
+        self.datum_result_name = result_name
+
+    def set_display_mode(self, mode: str) -> None:
+        self.display_mode = "delta" if mode == "delta" else "absolute"
 
     def select_lap(self, case_id: str, lap_id: str) -> None:
         result = self.current_result
@@ -345,6 +399,7 @@ class ViewerModel:
         self.reference_lap_id = lap_id
         self.comparison_lap_id = None
         self._comparison_error = None
+        self._invalidate_delta_cache()
         self.cursor_index = 0
         self._select_default_channels()
 
@@ -360,6 +415,7 @@ class ViewerModel:
         self.lap_id = reference_lap_id
         self.comparison_lap_id = comparison_lap_id
         self._comparison_error = None
+        self._invalidate_delta_cache()
         self.cursor_index = min(self.cursor_index, max(0, len(_preferred_axis(self.reference_lap).time_s) - 1)) if _preferred_axis(self.reference_lap) is not None else 0
         self._select_default_channels(keep_existing=True)
 
@@ -379,6 +435,7 @@ class ViewerModel:
         if time_offset_s is not None:
             self.time_offset_s = float(time_offset_s)
         self._comparison_error = None
+        self._invalidate_delta_cache()
 
     def set_cursor_index(self, index: int) -> int:
         axis = _preferred_axis(self.reference_lap or self.current_lap)
@@ -408,36 +465,14 @@ class ViewerModel:
         if keep_existing and self.selected_channel_ids:
             self.set_selected_channels(self.selected_channel_ids)
             return
-        preferred: list[str] = []
-        exact_order = (
-            "speed_mps",
-            "long_accel_mps2",
-            "lat_accel_mps2",
-            "control",
-            "control_demand",
-            "steering",
-            "steering_angle_rad",
-            "delta_time_s",
-            "delta_s",
-            "lap_delta_time_s",
-            # The fixture has gear in place of control/delta, keeping the
-            # default view useful while preserving the required core channels.
-            "gear",
-        )
-        for channel_id in exact_order:
-            if channel_id in available and channel_id not in preferred:
-                preferred.append(channel_id)
-        for channel_id, channel in available.items():
-            text = f"{channel_id} {channel.metadata.label}".lower()
-            if any(token in text for token in ("control", "demand", "delta")) and channel_id not in preferred:
-                preferred.append(channel_id)
+        preferred = default_channel_ids(available)
         if not preferred:
             preferred = list(available)[:4]
         self.set_selected_channels(preferred)
 
 
 try:  # Keep ViewerModel importable for non-Qt tooling and headless validation.
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import QEvent, Qt
     from PySide6.QtGui import QAction
     from PySide6.QtWidgets import (
         QApplication,
@@ -458,7 +493,7 @@ try:  # Keep ViewerModel importable for non-Qt tooling and headless validation.
     )
     import pyqtgraph as pg
 
-    from .widgets import ChannelSelector, DeltaDisplay, PlaybackController, PlotStack, QualityPanel, SetupComparisonTable, TrackMapWidget
+    from .widgets import ChannelSelector, DeltaDisplay, PlotStack, QualityPanel, SetupComparisonTable, TrackMapWidget
 
     _QT_AVAILABLE = True
     _QT_IMPORT_ERROR: Exception | None = None
@@ -482,7 +517,9 @@ if _QT_AVAILABLE:
         ) -> None:
             super().__init__(parent)
             self.setWindowTitle("QSS Telemetry Viewer")
-            self.resize(1440, 900)
+            self._normal_geometry = None
+            self._was_fullscreen = False
+            self._set_initial_window_size()
             self.model = ViewerModel(result if result is not None else results, delta_time_provider=delta_time_provider)
             self._build_ui()
             self._populate_browser()
@@ -508,6 +545,14 @@ if _QT_AVAILABLE:
         def comparison_lap(self) -> LapData | None:
             return self.model.comparison_lap
 
+        @property
+        def datum_result_name(self) -> str | None:
+            return self.model.datum_result_name
+
+        @property
+        def display_mode(self) -> str:
+            return self.model.display_mode
+
         def _build_ui(self) -> None:
             central = QWidget(self)
             self.setCentralWidget(central)
@@ -515,26 +560,48 @@ if _QT_AVAILABLE:
             root.setContentsMargins(8, 8, 8, 8)
             root.setSpacing(6)
 
-            toolbar = QHBoxLayout()
+            toolbar = QVBoxLayout()
+            top_toolbar = QHBoxLayout()
+            bottom_toolbar = QHBoxLayout()
+            toolbar.addLayout(top_toolbar)
+            toolbar.addLayout(bottom_toolbar)
             self.open_button = QPushButton("Open result…", self)
             self.export_csv_button = QPushButton("Export CSV…", self)
             self.export_screenshot_button = QPushButton("Screenshot…", self)
+            self.fullscreen_button = QPushButton("Fullscreen", self)
+            self.fullscreen_button.setCheckable(True)
+            self.fullscreen_button.setToolTip("Toggle fullscreen (F11)")
             self.axis_mode_combo = QComboBox(self)
             self.axis_mode_combo.addItem("Time", "time")
             self.axis_mode_combo.addItem("Distance", "distance")
-            self.play_button = QPushButton("Play", self)
-            self.speed_combo = QComboBox(self)
-            for speed in (0.25, 0.5, 1.0, 2.0, 4.0, 8.0):
-                self.speed_combo.addItem(f"{speed:g}×", speed)
-            self.speed_combo.setCurrentIndex(2)
-            self.cursor_time_label = QLabel("t=— · s=—", self)
+            self.waveform_mode_combo = QComboBox(self)
+            self.waveform_mode_combo.addItem("Absolute", "absolute")
+            self.waveform_mode_combo.addItem("Δ to datum", "delta")
+            self.datum_result_combo = QComboBox(self)
+            self.datum_result_combo.setToolTip("Result used as the waveform datum")
+            self.zoom_in_button = QPushButton("Zoom +", self)
+            self.zoom_in_button.setToolTip("Zoom in on all waveform panels")
+            self.zoom_out_button = QPushButton("Zoom −", self)
+            self.zoom_out_button.setToolTip("Zoom out on all waveform panels")
+            self.fit_zoom_button = QPushButton("Fit", self)
+            self.fit_zoom_button.setToolTip("Fit all waveform panels to the lap")
+            self.cursor_time_label = QLabel("t=— · sLap=—", self)
             self.delta_label = DeltaDisplay(self)
-            toolbar.addWidget(self.open_button)
-            toolbar.addWidget(self.export_csv_button)
-            toolbar.addWidget(self.export_screenshot_button)
-            toolbar.addSpacing(12)
-            toolbar.addWidget(QLabel("Axis:", self))
-            toolbar.addWidget(self.axis_mode_combo)
+            top_toolbar.addWidget(self.open_button)
+            top_toolbar.addWidget(self.export_csv_button)
+            top_toolbar.addWidget(self.export_screenshot_button)
+            top_toolbar.addWidget(self.fullscreen_button)
+            top_toolbar.addSpacing(12)
+            top_toolbar.addWidget(QLabel("Axis:", self))
+            top_toolbar.addWidget(self.axis_mode_combo)
+            top_toolbar.addWidget(QLabel("Waveform:", self))
+            top_toolbar.addWidget(self.waveform_mode_combo)
+            top_toolbar.addWidget(QLabel("Datum:", self))
+            top_toolbar.addWidget(self.datum_result_combo)
+            top_toolbar.addWidget(self.zoom_in_button)
+            top_toolbar.addWidget(self.zoom_out_button)
+            top_toolbar.addWidget(self.fit_zoom_button)
+            top_toolbar.addStretch(1)
             self.reference_lap_combo = QComboBox(self)
             self.reference_lap_combo.setToolTip("Reference lap")
             self.comparison_lap_combo = QComboBox(self)
@@ -551,20 +618,18 @@ if _QT_AVAILABLE:
             self.time_offset_spin.setSingleStep(0.05)
             self.time_offset_spin.setSuffix(" s")
             self.time_offset_spin.setToolTip("Manual comparison time offset")
-            toolbar.addWidget(QLabel("Ref:", self))
-            toolbar.addWidget(self.reference_lap_combo)
-            toolbar.addWidget(QLabel("Compare:", self))
-            toolbar.addWidget(self.comparison_lap_combo)
-            toolbar.addWidget(QLabel("Δs:", self))
-            toolbar.addWidget(self.distance_offset_spin)
-            toolbar.addWidget(QLabel("Δt:", self))
-            toolbar.addWidget(self.time_offset_spin)
-            toolbar.addWidget(self.play_button)
-            toolbar.addWidget(self.speed_combo)
-            toolbar.addStretch(1)
-            toolbar.addWidget(self.cursor_time_label)
-            toolbar.addSpacing(12)
-            toolbar.addWidget(self.delta_label)
+            bottom_toolbar.addWidget(QLabel("Ref:", self))
+            bottom_toolbar.addWidget(self.reference_lap_combo)
+            bottom_toolbar.addWidget(QLabel("Compare:", self))
+            bottom_toolbar.addWidget(self.comparison_lap_combo)
+            bottom_toolbar.addWidget(QLabel("Δs:", self))
+            bottom_toolbar.addWidget(self.distance_offset_spin)
+            bottom_toolbar.addWidget(QLabel("Δt:", self))
+            bottom_toolbar.addWidget(self.time_offset_spin)
+            bottom_toolbar.addStretch(1)
+            bottom_toolbar.addWidget(self.cursor_time_label)
+            bottom_toolbar.addSpacing(12)
+            bottom_toolbar.addWidget(self.delta_label)
             root.addLayout(toolbar)
 
             self.case_lap_tree = QTreeWidget(self)
@@ -613,22 +678,84 @@ if _QT_AVAILABLE:
             self.cursor_slider.setMaximum(0)
             root.addWidget(self.cursor_slider)
 
-            self.playback_controller = PlaybackController(0, self)
+            self.fullscreen_action = QAction("Toggle fullscreen", self)
+            self.fullscreen_action.setShortcut("F11")
+            self.fullscreen_action.setCheckable(True)
+            self.addAction(self.fullscreen_action)
             self.open_button.clicked.connect(self.open_result_dialog)
             self.export_csv_button.clicked.connect(self.export_csv_dialog)
             self.export_screenshot_button.clicked.connect(self.export_screenshot_dialog)
             self.axis_mode_combo.currentIndexChanged.connect(self._axis_changed)
+            self.waveform_mode_combo.currentIndexChanged.connect(self._waveform_mode_changed)
+            self.datum_result_combo.currentIndexChanged.connect(self._datum_result_changed)
             self.reference_lap_combo.currentIndexChanged.connect(self._reference_lap_changed)
             self.comparison_lap_combo.currentIndexChanged.connect(self._comparison_lap_changed)
             self.distance_offset_spin.valueChanged.connect(self._offsets_changed)
             self.time_offset_spin.valueChanged.connect(self._offsets_changed)
-            self.play_button.clicked.connect(self.playback_controller.toggle)
-            self.speed_combo.currentIndexChanged.connect(self._speed_changed)
             self.cursor_slider.valueChanged.connect(self.set_cursor_index)
+            self.plot_stack.cursorValueChanged.connect(self.set_cursor_value)
+            self.zoom_in_button.clicked.connect(self.plot_stack.zoom_in)
+            self.zoom_out_button.clicked.connect(self.plot_stack.zoom_out)
+            self.fit_zoom_button.clicked.connect(self.plot_stack.fit_x_range)
+            self.fullscreen_button.toggled.connect(self.set_fullscreen)
+            self.fullscreen_action.triggered.connect(self._toggle_fullscreen)
             self.case_lap_tree.itemClicked.connect(self._browser_item_clicked)
             self.channel_selector.channelsChanged.connect(self._channels_changed)
-            self.playback_controller.indexChanged.connect(self._playback_index_changed)
-            self.playback_controller.playingChanged.connect(self._playing_changed)
+
+        def _set_initial_window_size(self) -> None:
+            """Choose a usable normal size without overflowing a small screen."""
+
+            screen = self.screen() or QApplication.primaryScreen()
+            if screen is None:
+                self.resize(1440, 900)
+                return
+            available = screen.availableGeometry()
+            width = min(1440, max(640, available.width() - 32))
+            height = min(900, max(480, available.height() - 32))
+            self.resize(width, height)
+
+        def _toggle_fullscreen(self) -> None:
+            self.set_fullscreen(not self.isFullScreen())
+
+        def set_fullscreen(self, enabled: bool) -> None:
+            """Enter/leave fullscreen while preserving the user's normal size."""
+
+            enabled = bool(enabled)
+            if enabled:
+                if not self.isFullScreen():
+                    self._normal_geometry = self.geometry()
+                    self.showFullScreen()
+            else:
+                if self.isFullScreen():
+                    self.showNormal()
+                if self._normal_geometry is not None and self._normal_geometry.isValid():
+                    self.setGeometry(self._normal_geometry)
+            self._sync_fullscreen_controls()
+
+        def _sync_fullscreen_controls(self) -> None:
+            checked = self.isFullScreen()
+            for control in (
+                getattr(self, "fullscreen_button", None),
+                getattr(self, "fullscreen_action", None),
+            ):
+                if control is None:
+                    continue
+                control.blockSignals(True)
+                control.setChecked(checked)
+                control.blockSignals(False)
+
+        def changeEvent(self, event: QEvent) -> None:
+            if event.type() == QEvent.Type.WindowStateChange:
+                now_fullscreen = self.isFullScreen()
+                if now_fullscreen and not self._was_fullscreen and (
+                    self._normal_geometry is None or not self._normal_geometry.isValid()
+                ):
+                    self._normal_geometry = self.geometry()
+                elif self._was_fullscreen and not now_fullscreen and self._normal_geometry is not None:
+                    self.setGeometry(self._normal_geometry)
+                self._was_fullscreen = now_fullscreen
+                self._sync_fullscreen_controls()
+            super().changeEvent(event)
 
         def _populate_browser(self) -> None:
             self.case_lap_tree.clear()
@@ -671,24 +798,41 @@ if _QT_AVAILABLE:
                 self.reference_lap_combo.blockSignals(False)
                 self.comparison_lap_combo.blockSignals(False)
 
-        def _refresh_view(self, *, reset_playback: bool = False) -> None:
-            self._populate_lap_combos()
-            lap = self.model.reference_lap or self.model.current_lap
-            if reset_playback:
-                self.playback_controller.pause()
-            sample_count = len(_preferred_axis(lap).time_s) if _preferred_axis(lap) is not None else 0
-            self.playback_controller.set_sample_count(sample_count, reset=reset_playback)
-            self.cursor_slider.setMaximum(max(0, sample_count - 1))
-            self.channel_selector.set_channels(self.model.available_channels, self.model.selected_channel_ids)
-            self.map_widget.set_track(self.model.track)
+        def _populate_datum_combo(self) -> None:
+            self.datum_result_combo.blockSignals(True)
+            try:
+                self.datum_result_combo.clear()
+                self.datum_result_combo.addItem("(none)", None)
+                for result_name in self.model.results:
+                    self.datum_result_combo.addItem(result_name, result_name)
+                index = self.datum_result_combo.findData(self.model.datum_result_name)
+                self.datum_result_combo.setCurrentIndex(max(0, index))
+            finally:
+                self.datum_result_combo.blockSignals(False)
+
+        def _refresh_plots(self) -> None:
             self.plot_stack.set_data(
                 self.model.reference_lap or self.model.current_lap,
                 self.model.selected_channel_ids,
                 comparison_lap=self.model.comparison_lap,
+                datum_lap=self.model.datum_lap,
+                display_mode=self.model.display_mode,
                 axis_mode=self.model.axis_mode,
                 cursor_value=self.model.cursor_value,
                 comparison_offset=self.model.distance_offset_m if self.model.axis_mode == "distance" else self.model.time_offset_s,
             )
+
+        def _refresh_view(self, *, reset_playback: bool = False) -> None:
+            self._populate_lap_combos()
+            self._populate_datum_combo()
+            lap = self.model.reference_lap or self.model.current_lap
+            if reset_playback:
+                self.model.set_cursor_index(0)
+            sample_count = len(_preferred_axis(lap).time_s) if _preferred_axis(lap) is not None else 0
+            self.cursor_slider.setMaximum(max(0, sample_count - 1))
+            self.channel_selector.set_channels(self.model.available_channels, self.model.selected_channel_ids)
+            self.map_widget.set_track(self.model.track)
+            self._refresh_plots()
             self._refresh_info()
             self._update_cursor_widgets()
             if lap is None:
@@ -712,9 +856,20 @@ if _QT_AVAILABLE:
         def _update_status(self) -> None:
             if self.model.missing_channels:
                 self.status_label.setText("Selected channel(s) not available: " + ", ".join(self.model.missing_channels))
+            elif self.model.display_mode == "delta" and self.model.datum_result_name is None:
+                self.status_label.setText("Delta mode requires a datum result.")
+            elif self.model.display_mode == "delta" and self.model.datum_lap is None:
+                self.status_label.setText("Datum result has no matching case/lap for the active waveform.")
+            elif self.model.delta_missing_channels:
+                self.status_label.setText("Delta channel(s) not available in both laps: " + ", ".join(self.model.delta_missing_channels))
+            elif self.plot_stack.delta_errors:
+                details = "; ".join(f"{channel}: {error}" for channel, error in self.plot_stack.delta_errors.items())
+                self.status_label.setText("Delta unavailable: " + details)
             elif self.model.comparison_lap is not None and self.model.comparison_error:
                 self.status_label.setText("Comparison unavailable: " + self.model.comparison_error)
             elif self.model.comparison_lap is not None:
+                self.status_label.setText("")
+            else:
                 self.status_label.setText("")
 
         def _update_cursor_widgets(self) -> None:
@@ -725,7 +880,7 @@ if _QT_AVAILABLE:
             distance_m = self.model.cursor_distance_m
             time_text = "—" if time_s is None else f"{time_s:.3f} s"
             distance_text = "—" if distance_m is None else f"{distance_m:.3f} m"
-            self.cursor_time_label.setText(f"t={time_text} · s={distance_text}")
+            self.cursor_time_label.setText(f"t={time_text} · sLap={distance_text}")
             self.plot_stack.set_cursor_value(self.model.cursor_value)
             self.map_widget.set_marker_distance(distance_m)
 
@@ -742,28 +897,9 @@ if _QT_AVAILABLE:
 
         def _channels_changed(self, channel_ids: list[str]) -> None:
             self.model.set_selected_channels(channel_ids)
-            self.plot_stack.set_data(
-                self.model.reference_lap or self.model.current_lap,
-                self.model.selected_channel_ids,
-                comparison_lap=self.model.comparison_lap,
-                axis_mode=self.model.axis_mode,
-                cursor_value=self.model.cursor_value,
-                comparison_offset=self.model.distance_offset_m if self.model.axis_mode == "distance" else self.model.time_offset_s,
-            )
+            self._refresh_plots()
             self._refresh_info()
             self._update_status()
-
-        def _playback_index_changed(self, index: int) -> None:
-            self.model.set_cursor_index(index)
-            self._update_cursor_widgets()
-
-        def _playing_changed(self, playing: bool) -> None:
-            self.play_button.setText("Pause" if playing else "Play")
-
-        def _speed_changed(self, index: int) -> None:
-            value = self.speed_combo.itemData(index)
-            if value is not None:
-                self.playback_controller.set_speed(float(value))
 
         def _offsets_changed(self, value: float) -> None:
             del value
@@ -771,14 +907,7 @@ if _QT_AVAILABLE:
                 distance_offset_m=self.distance_offset_spin.value(),
                 time_offset_s=self.time_offset_spin.value(),
             )
-            self.plot_stack.set_data(
-                self.model.reference_lap or self.model.current_lap,
-                self.model.selected_channel_ids,
-                comparison_lap=self.model.comparison_lap,
-                axis_mode=self.model.axis_mode,
-                cursor_value=self.model.cursor_value,
-                comparison_offset=self.model.distance_offset_m if self.model.axis_mode == "distance" else self.model.time_offset_s,
-            )
+            self._refresh_plots()
             self._refresh_info()
             self._update_status()
 
@@ -805,26 +934,32 @@ if _QT_AVAILABLE:
             if mode is None:
                 return
             self.model.set_axis_mode(str(mode))
-            self.plot_stack.set_data(
-                self.model.reference_lap or self.model.current_lap,
-                self.model.selected_channel_ids,
-                comparison_lap=self.model.comparison_lap,
-                axis_mode=self.model.axis_mode,
-                cursor_value=self.model.cursor_value,
-                comparison_offset=self.model.distance_offset_m if self.model.axis_mode == "distance" else self.model.time_offset_s,
-            )
+            self._refresh_plots()
             self._update_cursor_widgets()
+            self._update_status()
+
+        def _datum_result_changed(self, index: int) -> None:
+            if index < 0:
+                return
+            result_name = self.datum_result_combo.itemData(index)
+            self.model.set_datum_result(str(result_name) if result_name is not None else None)
+            self._refresh_view(reset_playback=False)
+
+        def _waveform_mode_changed(self, index: int) -> None:
+            mode = self.waveform_mode_combo.itemData(index)
+            if mode is None:
+                return
+            self.model.set_display_mode(str(mode))
+            self._refresh_plots()
             self._update_status()
 
         def set_cursor_index(self, index: int) -> int:
             bounded = self.model.set_cursor_index(index)
-            self.playback_controller.set_index(bounded)
             self._update_cursor_widgets()
             return bounded
 
         def set_cursor_value(self, value: float) -> int:
             index = self.model.set_cursor_value(value)
-            self.playback_controller.set_index(index)
             self._update_cursor_widgets()
             return index
 
@@ -835,6 +970,25 @@ if _QT_AVAILABLE:
             else:
                 self.model.set_axis_mode(mode)
                 self._axis_changed(-1)
+
+        def select_result(self, result_name: str) -> None:
+            self.model.select_result(result_name)
+            self._populate_browser()
+            self._refresh_view(reset_playback=True)
+
+        def set_datum_result(self, result_name: str | None) -> None:
+            self.model.set_datum_result(result_name)
+            self._populate_datum_combo()
+            self._refresh_view(reset_playback=False)
+
+        def set_display_mode(self, mode: str) -> None:
+            normalized = "delta" if mode == "delta" else "absolute"
+            index = self.waveform_mode_combo.findData(normalized)
+            if index >= 0:
+                self.waveform_mode_combo.setCurrentIndex(index)
+            else:
+                self.model.set_display_mode(normalized)
+                self._waveform_mode_changed(-1)
 
         def set_selected_channels(self, channel_ids: Iterable[str]) -> list[str]:
             requested = list(channel_ids)
@@ -953,7 +1107,6 @@ if _QT_AVAILABLE:
             return target
 
         def closeEvent(self, event: Any) -> None:
-            self.playback_controller.pause()
             super().closeEvent(event)
 
 

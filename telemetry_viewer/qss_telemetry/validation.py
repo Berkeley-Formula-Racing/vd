@@ -114,7 +114,7 @@ def _check_json_dataset(dataset: h5py.Dataset, path: str, issues: list[Validatio
         issues.append(_issue(path, f"{object_name} JSON must be a one-dimensional uint8 dataset", "json_encoding"))
         return None
     try:
-        value = bytes(array.tolist()).decode("utf-8")
+        value = array.tobytes().decode("utf-8")
         value = __import__("json").loads(value)
     except (UnicodeDecodeError, ValueError, TypeError) as error:
         issues.append(_issue(path, f"malformed {object_name} JSON: {error}", "json_decode"))

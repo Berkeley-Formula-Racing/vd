@@ -32,7 +32,10 @@ def _json_payload(value: Any, path: str) -> bytes:
 
     array = np.asarray(value)
     if array.ndim == 1 and array.dtype == np.dtype(np.uint8):
-        return bytes(array.tolist())
+        # Avoid materializing one Python integer per metadata byte.  Large lap
+        # metadata (notably node-to-segment mappings) makes ``tolist`` a
+        # measurable part of load time.
+        return array.tobytes()
     if isinstance(value, bytes):
         return value
     if isinstance(value, str):

@@ -8,36 +8,8 @@ from typing import Any
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QLineEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
+from ..channel_catalog import channel_group
 from ..schema import ChannelData
-
-
-def channel_group(channel_id: str, channel: ChannelData | None = None) -> str:
-    """Return a friendly group for a self-describing channel."""
-
-    metadata = channel.metadata if channel is not None else None
-    explicit = ""
-    if metadata is not None:
-        # Exporters may provide a group as an additional metadata field.  The
-        # shared v1 fields remain sufficient when it is absent.
-        explicit = str(getattr(metadata, "group", "") or "")
-        if not explicit and hasattr(metadata, "as_dict"):
-            explicit = str(metadata.as_dict().get("group", "") or "")
-    if explicit:
-        return explicit.title()
-
-    value = channel_id.lower()
-    label = metadata.label.lower() if metadata is not None else ""
-    haystack = f"{value} {label}"
-    if any(token in haystack for token in ("speed", "velocity", "accel", "yaw", "slip", "kinematic")):
-        return "Vehicle dynamics"
-    if any(token in haystack for token in ("steer", "throttle", "brake", "control", "demand", "pedal", "torque")):
-        return "Controls"
-    if any(token in haystack for token in ("wheel", "tire", "tyre", "suspension", "damper", "load")):
-        return "Wheels and suspension"
-    if any(token in haystack for token in ("delta", "lap", "sector", "time")):
-        return "Lap metrics"
-    return "Other"
-
 
 class ChannelSelector(QWidget):
     """A checkable channel tree with a search field and group checkboxes.

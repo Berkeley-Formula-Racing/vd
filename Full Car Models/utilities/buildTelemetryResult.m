@@ -403,7 +403,11 @@ track.distance_m = double(fieldVector(source,{'distance_m','distance','s','arcle
 track.curvature_per_m = double(fieldVector(source,{'curvature_per_m','curvature','kappa_track'}));
 if isempty(track.distance_m), error('buildTelemetryResult:badTrack','Track %s has no distance.',track.id); end
 if isempty(track.curvature_per_m), track.curvature_per_m = zeros(size(track.distance_m)); end
-track.distance_m = track.distance_m(:); track.curvature_per_m = coordinateToLength(track.curvature_per_m,numel(track.distance_m));
+track.distance_m = track.distance_m(:);
+% Curvature is a signed field, not a coordinate.  Do not run it through
+% coordinateToLength: its monotonicity repair uses cummax and silently turns
+% every right-hand bend into non-negative curvature.
+track.curvature_per_m = vectorToLength(track.curvature_per_m,numel(track.distance_m));
 if isfield(source,'x_m') && ~isempty(source.x_m), track.x_m = double(source.x_m(:)); end
 if isfield(source,'y_m') && ~isempty(source.y_m), track.y_m = double(source.y_m(:)); end
 end
@@ -562,6 +566,27 @@ elseif n==1, value=coord(1);
 else, value=linspace(coord(1),coord(end),n).'; end
 if any(~isfinite(value)), value=fillmissing(value,'linear','EndValues','nearest'); end
 if any(diff(value)<0), value=cummax(value); end
+end
+
+function value = vectorToLength(data,n)
+%VECTOR TOLENGTH Resize a sampled signal without changing its sign.
+data = double(data(:));
+if n<=0
+    value = zeros(0,1);
+elseif isempty(data)
+    value = zeros(n,1);
+elseif numel(data)==n
+    value = data;
+elseif n==1
+    value = data(1);
+elseif numel(data)==1
+    value = repmat(data,n,1);
+else
+    sourceX = linspace(0,1,numel(data));
+    targetX = linspace(0,1,n);
+    value = interp1(sourceX,data,targetX,'linear').';
+end
+if any(~isfinite(value)), value=fillmissing(value,'linear','EndValues','nearest'); end
 end
 
 function id = chooseAxisId(axes,time,distance,n)
