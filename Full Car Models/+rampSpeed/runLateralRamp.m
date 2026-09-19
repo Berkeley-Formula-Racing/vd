@@ -94,6 +94,13 @@ if isfield(settings,"speeds") && ~isempty(settings.speeds)
     return
 end
 
+if isstruct(raw) && isfield(raw,"settings") && ...
+        isstruct(raw.settings) && isfield(raw.settings,"speeds") && ...
+        ~isempty(raw.settings.speeds)
+    value = double(raw.settings.speeds(:));
+    return
+end
+
 value = rawSpeeds(raw);
 if isempty(value)
     value = (5:2.5:30).';

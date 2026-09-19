@@ -90,3 +90,36 @@ verifyThat(testCase,run.perSpeed.reason(1), ...
     matlab.unittest.constraints.ContainsSubstring(string(speedError.message)));
 verifyEqual(testCase,run.runMeta.speedErrors,errors);
 end
+
+function testOmittedSettingsSpeedsRetainCancelledDefaultGridGap(testCase)
+[cars,~] = carConfig();
+settings = struct("nRamp",3,"nBisect",0,"mode","coast", ...
+    "verbose",false);
+cancelRequested = false;
+callbacks = struct("onProgress",@captureProgress, ...
+    "isCancelled",@isCancelled);
+run = rampSpeed.runLateralRamp(cars{1,1},settings, ...
+    struct("id","baseline","label","baseline","carRole","lap"),callbacks);
+
+requested = (5:2.5:30).';
+verifyEqual(testCase,string(run.raw.status),"cancelled");
+verifyEqual(testCase,run.raw.settings.speeds,requested.', ...
+    "AbsTol",1e-12);
+verifyEqual(testCase,run.perSpeed.speed_mps,requested,"AbsTol",1e-12);
+verifyEqual(testCase,height(run.perSpeed),numel(requested));
+verifyTrue(testCase,run.perSpeed.valid(1));
+verifyFalse(testCase,run.perSpeed.valid(2));
+verifyEqual(testCase,run.perSpeed.status(2),"failed");
+verifyThat(testCase,run.perSpeed.reason(2), ...
+    matlab.unittest.constraints.ContainsSubstring("cancel"));
+
+    function captureProgress(event)
+        if isfield(event,"completedSpeeds") && event.completedSpeeds >= 1
+            cancelRequested = true;
+        end
+    end
+
+    function value = isCancelled()
+        value = cancelRequested;
+    end
+end
