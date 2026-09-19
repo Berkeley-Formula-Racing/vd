@@ -78,7 +78,7 @@ P.aero_residual_in = [0.02;0.03];
 P.aero_outside_map = [false;false];
 P.Fz_front_axle = [500;520];
 P.Fz_rear_axle = [400;410];
-P.min_Fz = [-2;-1];
+P.min_Fz = [200;205];
 P.LLTD = [0.52;0.52];
 P.LLT_front = [30;35];
 P.LLT_rear = [20;22];
@@ -104,4 +104,28 @@ P.T_3 = [100;110]; P.T_4 = [100;110];
 P.omega_1 = [120;130]; P.omega_2 = [120;130];
 P.omega_3 = [130;140]; P.omega_4 = [130;140];
 fixture.legacyRampResult.points = P;
+
+longitudinalRaw = struct();
+longitudinalRaw.settings = struct('speeds',speeds.');
+longitudinalRaw.perSpeed = table(speeds,[2.5;2.2],[0;0],[0;0], ...
+    [0;0],[0;0],[0.08;0.09],[0.08;0.09],[1;1],[0.001;0.001], ...
+    [0;0],'VariableNames',{ ...
+    'long_vel','long_accel','lat_accel','steer_angle','lat_vel', ...
+    'yaw_rate','kappa_3','kappa_4','exitflag','max_ceq', ...
+    'max_inequality_violation'});
+longitudinalRaw.points = longitudinalRaw.perSpeed;
+fixture.legacyLongitudinalResult = longitudinalRaw;
+
+fixedTimestamp = datetime(2026,1,1,0,0,0);
+fixture.lateralRun = rampSpeed.normalizeRampResult( ...
+    fixture.legacyRampResult,"lateral",fixture.legacyRampResult.settings, ...
+    fixture.cases(1),struct('source',"makeRampFixture"));
+fixture.longitudinalRun = rampSpeed.normalizeRampResult( ...
+    fixture.legacyLongitudinalResult,"longitudinal", ...
+    fixture.legacyLongitudinalResult.settings, ...
+    fixture.cases(2),struct('source',"makeRampFixture"));
+fixture.lateralRun.runMeta.created = fixedTimestamp;
+fixture.lateralRun.runMeta.completed = fixedTimestamp;
+fixture.longitudinalRun.runMeta.created = fixedTimestamp;
+fixture.longitudinalRun.runMeta.completed = fixedTimestamp;
 end

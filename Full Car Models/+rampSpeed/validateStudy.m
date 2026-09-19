@@ -70,7 +70,8 @@ end
 if isfield(run,'status')
     status = lower(string(run.status));
     allowed = ["pending","running","completed","complete", ...
-        "failed","cancelled","partial","warning"];
+        "failed","cancelled","partial","warning","unknown","missing", ...
+        "invalid"];
     if ~isscalar(status) || ~any(status == allowed)
         issues(end+1) = "invalid run status: " + string(run.status);
     end
@@ -79,7 +80,9 @@ if isfield(run,'perSpeed')
     if ~istable(run.perSpeed)
         issues(end+1) = sprintf('run.perSpeed must be a table (run %d)',index);
     else
-        issues = validateColumns(run.perSpeed.Properties.VariableNames,index,issues);
+        catalog = schemaCatalog();
+        issues = validateColumns(run.perSpeed.Properties.VariableNames, ...
+            catalog.perSpeed,index,issues);
         if ~any(strcmp(run.perSpeed.Properties.VariableNames,'speed_mps'))
             issues(end+1) = sprintf('missing canonical perSpeed column: speed_mps (run %d)',index);
         end
@@ -89,7 +92,9 @@ if isfield(run,'points')
     if ~istable(run.points)
         issues(end+1) = sprintf('run.points must be a table (run %d)',index);
     else
-        issues = validateColumns(run.points.Properties.VariableNames,index,issues);
+        catalog = schemaCatalog();
+        issues = validateColumns(run.points.Properties.VariableNames, ...
+            catalog.points,index,issues);
     end
 end
 if isfield(run,'runMeta') && (~isstruct(run.runMeta) || ~isscalar(run.runMeta))
@@ -97,19 +102,17 @@ if isfield(run,'runMeta') && (~isstruct(run.runMeta) || ~isscalar(run.runMeta))
 end
 end
 
-function issues = validateColumns(names,index,issues)
+function issues = validateColumns(names,catalog,index,issues)
 names = string(names);
-for i = 1:numel(names)
-    name = names(i);
-    if isNonSiName(name)
-        issues(end+1) = sprintf('non-SI canonical column: %s (run %d)',name,index);
-    end
+unknown = setdiff(names,string(catalog),'stable');
+for i = 1:numel(unknown)
+    issues(end+1) = sprintf('non-SI canonical column: %s (run %d)', ...
+        unknown(i),index);
 end
 end
 
-function tf = isNonSiName(name)
-lowerName = lower(string(name));
-tf = endsWith(lowerName,["_in","_deg","_g"]) || ...
-    any(lowerName == ["vcar","glat","glong","downforce","drag","cla", ...
-    "cda","cop","mech_balance","aero_balance","min_fz"]);
+function catalog = schemaCatalog()
+template = rampSpeed.makeRun("lateral","coast",struct(),struct());
+catalog.perSpeed = string(template.perSpeed.Properties.VariableNames);
+catalog.points = string(template.points.Properties.VariableNames);
 end

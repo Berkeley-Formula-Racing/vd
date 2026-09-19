@@ -26,7 +26,7 @@ end
 rawPerSpeed = block(raw,'perSpeed');
 rawSpeedCount = blockHeight(rawPerSpeed);
 rawSpeed = firstNumeric(rawPerSpeed,rawSpeedCount, ...
-    {'speed_mps','vCar','speed'},1);
+    {'speed_mps','vCar','speed','long_vel'},1);
 requested = requestedSpeeds(settings);
 if isempty(requested)
     requested = rawSpeed;
@@ -37,6 +37,9 @@ end
 if numel(requested) < rawSpeedCount
     requested(end+1:rawSpeedCount,1) = rawSpeed(numel(requested)+1:rawSpeedCount);
 end
+
+[rawPerSpeed,sourcePresent,matchReasons,unusedRawSpeeds,tolerance] = ...
+    alignPerSpeed(rawPerSpeed,requested,settings);
 
 settingsForRun = settings;
 settingsForRun.speeds = requested(:).';
@@ -55,19 +58,23 @@ run.runMeta = mergeStruct(run.runMeta,runMeta);
 run.runMeta.source = getString(run.runMeta,'source',"rampSpeed.normalizeRampResult");
 run.runMeta.requestedSpeeds_mps = requested(:);
 run.runMeta.lateralMetricsApplicable = type == "lateral";
+if ~isfield(runMeta,'created')
+    run.runMeta.created = datetime.empty;
+end
+if ~isfield(runMeta,'completed')
+    run.runMeta.completed = datetime.empty;
+end
+run.runMeta.speedMatchTolerance_mps = tolerance;
+run.runMeta.speedMatchPolicy = "first unused raw row within absolute tolerance";
+if ~isempty(unusedRawSpeeds)
+    run.runMeta.warnings(end+1,1) = "unused raw speed row(s): " + ...
+        join(string(unusedRawSpeeds),", ");
+end
 
 T = run.perSpeed;
 n = height(T);
-sourcePresent = (1:n).' <= rawSpeedCount;
 rawSpeedCount = n;
-speed = firstNumeric(rawPerSpeed,rawSpeedCount, ...
-    {'speed_mps','vCar','speed'},1);
-if isempty(speed)
-    speed = requested;
-else
-    speed = fillMissing(speed,requested);
-end
-T.speed_mps = fitRows(speed,n);
+T.speed_mps = requested;
 
 T.valid = firstLogical(rawPerSpeed,rawSpeedCount,{'valid'},sourcePresent);
 T.valid = fitLogical(T.valid,n) & sourcePresent;
@@ -80,12 +87,16 @@ T.reason = firstString(rawPerSpeed,rawSpeedCount,{'reason'},strings(rawSpeedCoun
 T.reason = fitString(T.reason,n);
 missingReason = strlength(strtrim(T.reason)) == 0 & ~T.valid;
 T.reason(missingReason) = "missing source result";
+hasMatchReason = strlength(strtrim(matchReasons)) > 0;
+T.reason(hasMatchReason) = matchReasons(hasMatchReason);
 
 g = 9.80665;
-T.aLat_mps2 = firstNumeric(rawPerSpeed,rawSpeedCount,{'aLat_mps2'},1);
+T.aLat_mps2 = firstNumeric(rawPerSpeed,rawSpeedCount, ...
+    {'aLat_mps2','lat_accel'},1);
 T.aLat_mps2 = fillMissing(T.aLat_mps2,firstNumeric(rawPerSpeed,rawSpeedCount, ...
     {'gLat','gLat_top'},g));
-T.aLong_mps2 = firstNumeric(rawPerSpeed,rawSpeedCount,{'aLong_mps2'},1);
+T.aLong_mps2 = firstNumeric(rawPerSpeed,rawSpeedCount, ...
+    {'aLong_mps2','long_accel'},1);
 T.aLong_mps2 = fillMissing(T.aLong_mps2,firstNumeric(rawPerSpeed,rawSpeedCount, ...
     {'gLong','gLong_max'},g));
 T.engine_rpm = firstNumeric(rawPerSpeed,rawSpeedCount,{'engine_rpm'},1);
@@ -204,31 +215,43 @@ T.rear_camber_rad = fillMissing(T.rear_camber_rad, ...
 T.min_Fz_limit_N = firstNumeric(rawPerSpeed,rawSpeedCount, ...
     {'min_Fz_limit_N','min_Fz_limit'},1);
 T.max_constraint_residual = firstNumeric(rawPerSpeed,rawSpeedCount, ...
-    {'max_constraint_residual','max_ceq'},1);
+    {'max_constraint_residual','max_equality_residual','max_ceq'},1);
 T.n_exitflag1 = firstNumeric(rawPerSpeed,rawSpeedCount,{'n_exitflag1','n_exit1'},1);
 T.n_exitflag2 = firstNumeric(rawPerSpeed,rawSpeedCount,{'n_exitflag2','n_exit2'},1);
 
 % Longitudinal diagnostics and pure-Ay enforcement flags.
 T.aLong_max_mps2 = firstNumeric(rawPerSpeed,rawSpeedCount, ...
-    {'aLong_max_mps2','aLong_max'},1);
+    {'aLong_max_mps2','aLong_max','long_accel'},1);
 T.aLong_max_mps2 = fillMissing(T.aLong_max_mps2, ...
     firstNumeric(rawPerSpeed,rawSpeedCount,{'gLong_max'},g));
 T.aLat_achieved_mps2 = firstNumeric(rawPerSpeed,rawSpeedCount, ...
-    {'aLat_achieved_mps2','aLat_achieved'},1);
+    {'aLat_achieved_mps2','aLat_achieved','lat_accel'},1);
 T.aLat_achieved_mps2 = fillMissing(T.aLat_achieved_mps2, ...
     firstNumeric(rawPerSpeed,rawSpeedCount,{'aLat_mps2'},1));
 T.aLat_force_residual_mps2 = firstNumeric(rawPerSpeed,rawSpeedCount, ...
     {'aLat_force_residual_mps2','aLat_force_residual', ...
     'lat_accel_residual_mps2','lat_accel_residual'},1);
+zeroTolerance = getNumericSetting(settings, ...
+    {'zeroStateTolerance','stateTolerance'},1e-12);
 T.pure_ay0 = firstLogical(rawPerSpeed,rawSpeedCount,{'pure_ay0'}, ...
-    finite(T.aLat_achieved_mps2) & abs(T.aLat_achieved_mps2) <= 1e-12);
+    finite(T.aLat_achieved_mps2) & abs(T.aLat_achieved_mps2) <= zeroTolerance);
+steerRad = firstNumeric(rawPerSpeed,rawSpeedCount,{'steer_rad'},1);
+steerRad = fillMissing(steerRad,firstNumeric(rawPerSpeed,rawSpeedCount, ...
+    {'steer_angle','steer_avg'},pi/180));
+latVelocity = firstNumeric(rawPerSpeed,rawSpeedCount, ...
+    {'lat_velocity_mps','lat_vel'},1);
+yawRate = firstNumeric(rawPerSpeed,rawSpeedCount,{'yaw_rate_rps','yaw_rate'},1);
 T.steer_zero = firstLogical(rawPerSpeed,rawSpeedCount,{'steer_zero'}, ...
-    false(rawSpeedCount,1));
+    finite(steerRad) & abs(steerRad) <= zeroTolerance);
 T.lat_velocity_zero = firstLogical(rawPerSpeed,rawSpeedCount, ...
-    {'lat_velocity_zero'},false(rawSpeedCount,1));
+    {'lat_velocity_zero'},finite(latVelocity) & abs(latVelocity) <= zeroTolerance);
 T.yaw_rate_zero = firstLogical(rawPerSpeed,rawSpeedCount,{'yaw_rate_zero'}, ...
-    false(rawSpeedCount,1));
+    finite(yawRate) & abs(yawRate) <= zeroTolerance);
 T.rear_slip_ratio = firstNumeric(rawPerSpeed,rawSpeedCount,{'rear_slip_ratio'},1);
+rearKappa3 = firstNumeric(rawPerSpeed,rawSpeedCount,{'kappa_3','kappa_RL'},1);
+rearKappa4 = firstNumeric(rawPerSpeed,rawSpeedCount,{'kappa_4','kappa_RR'},1);
+rearKappa = meanAvailable(rearKappa3,rearKappa4);
+T.rear_slip_ratio = fillMissing(T.rear_slip_ratio,rearKappa);
 T.throttle_upper_active = firstLogical(rawPerSpeed,rawSpeedCount, ...
     {'throttle_upper_active'},finite(T.throttle) & T.throttle >= 1-1e-9);
 T.rear_slip_upper_active = firstLogical(rawPerSpeed,rawSpeedCount, ...
@@ -238,11 +261,21 @@ T.traction_limited = firstLogical(rawPerSpeed,rawSpeedCount, ...
     {'traction_limited'},T.rear_slip_upper_active);
 T.lateral_metrics_applicable(:) = type == "lateral";
 
+perSpeedInequality = firstNumeric(rawPerSpeed,rawSpeedCount, ...
+    {'max_inequality_violation','max_constraint_violation'},1);
+perSpeedInequality = fillMissing(perSpeedInequality, ...
+    boundViolationFromMinLoad(T.min_Fz_N));
+[T.valid,T.status,T.reason] = gateValidity(rawPerSpeed,T.valid,T.status, ...
+    T.reason,sourcePresent,settings, ...
+    firstNumeric(rawPerSpeed,rawSpeedCount,{'exitflag'},1), ...
+    T.max_constraint_residual,perSpeedInequality, ...
+    T.n_exitflag1,T.n_exitflag2,matchReasons);
+
 if type == "longitudinal"
     T = clearLateralMetrics(T);
 end
 run.perSpeed = T;
-run.points = normalizePoints(block(raw,'points'),type);
+run.points = normalizePoints(block(raw,'points'),type,settings);
 
 sourceStatus = firstString(raw,1,{'status'},"");
 if isfield(runMeta,'status') && ~isempty(runMeta.status)
@@ -254,7 +287,83 @@ elseif n > 0 && any(T.valid)
 else
     run.status = "failed";
 end
-run.runMeta.completed = datetime('now');
+end
+
+function [valid,status,reason] = gateValidity(data,valid,status,reason, ...
+        sourcePresent,settings,exitflag,residual,inequality, ...
+        nExitflag1,nExitflag2,matchReasons)
+n = numel(valid);
+valid = fitLogical(valid,n);
+status = fitString(status,n);
+reason = fitString(reason,n);
+sourcePresent = fitLogical(sourcePresent,n);
+exitflag = fitRows(exitflag,n);
+residual = fitRows(residual,n);
+inequality = fitRows(inequality,n);
+nExitflag1 = fitRows(nExitflag1,n);
+nExitflag2 = fitRows(nExitflag2,n);
+matchReasons = fitString(matchReasons,n);
+
+[rawValid,hasValid] = readField(data,'valid',n);
+if hasValid
+    explicitValid = toLogical(rawValid,n);
+else
+    explicitValid = false(n,1);
+end
+rawStatus = firstString(data,n,{'status'},strings(n,1));
+
+residualTolerance = getNumericSetting(settings, ...
+    {'ceqTol','residualTolerance','constraintTolerance'},1e-2);
+inequalityTolerance = getNumericSetting(settings, ...
+    {'inequalityTolerance','constraintTolerance','ceqTol'}, ...
+    residualTolerance);
+
+hasExit = finite(exitflag);
+exitBad = hasExit & ~(exitflag == 1 | exitflag == 2);
+countsKnown = finite(nExitflag1) | finite(nExitflag2);
+countGood = (finite(nExitflag1) & nExitflag1 > 0) | ...
+    (finite(nExitflag2) & nExitflag2 > 0);
+countBad = countsKnown & ~countGood;
+residualKnown = finite(residual);
+residualBad = residualKnown & residual > residualTolerance;
+inequalityKnown = finite(inequality);
+inequalityBad = inequalityKnown & inequality > inequalityTolerance;
+rawStatusLower = lower(strtrim(rawStatus));
+statusBad = ismember(rawStatusLower,["failed","invalid","cancelled"]);
+explicitBad = hasValid & ~explicitValid;
+
+bad = sourcePresent & (exitBad | countBad | residualBad | ...
+    inequalityBad | statusBad | explicitBad);
+evidence = residualKnown | inequalityKnown | countsKnown;
+good = sourcePresent & ~bad & evidence;
+unknown = sourcePresent & ~bad & ~evidence;
+missing = ~sourcePresent;
+
+valid = good;
+status(good) = "complete";
+status(bad) = "invalid";
+status(unknown) = "unknown";
+status(missing) = "missing";
+
+for i = 1:n
+    if strlength(strtrim(matchReasons(i))) > 0
+        reason(i) = matchReasons(i);
+    elseif bad(i) && strlength(strtrim(reason(i))) == 0
+        if exitBad(i) || countBad(i)
+            reason(i) = "solver exit flag is not feasible";
+        elseif residualBad(i)
+            reason(i) = "constraint residual exceeds tolerance";
+        elseif inequalityBad(i)
+            reason(i) = "bound violation exceeds tolerance";
+        elseif statusBad(i) || explicitBad(i)
+            reason(i) = "source marked invalid";
+        else
+            reason(i) = "solver feasibility gate rejected row";
+        end
+    elseif unknown(i) && strlength(strtrim(reason(i))) == 0
+        reason(i) = "feasibility evidence unavailable";
+    end
+end
 end
 
 function T = clearLateralMetrics(T)
@@ -272,14 +381,17 @@ end
 T.truncated(:) = false;
 end
 
-function P = normalizePoints(blockData,type)
+function P = normalizePoints(blockData,type,settings)
 n = blockHeight(blockData);
 P = typedTable(n,pointNames(),pointTypes());
 if n == 0
     return
 end
 g = 9.80665;
-P.speed_mps = firstNumeric(blockData,n,{'speed_mps','vCar','speed'},1);
+zeroTolerance = getNumericSetting(settings, ...
+    {'zeroStateTolerance','stateTolerance'},1e-12);
+P.speed_mps = firstNumeric(blockData,n, ...
+    {'speed_mps','vCar','speed','long_vel'},1);
 P.speed_index = firstNumeric(blockData,n,{'speed_index','speedIndex'},1);
 missingIndex = ~finite(P.speed_index);
 P.speed_index(missingIndex) = find(missingIndex);
@@ -300,10 +412,10 @@ P.max_inequality_violation = firstNumeric(blockData,n, ...
     {'max_inequality_violation'},1);
 minFz = firstNumeric(blockData,n,{'min_Fz_N','min_Fz'},1);
 P.max_inequality_violation = fillMissing(P.max_inequality_violation, ...
-    max(-minFz,0));
-P.aLat_mps2 = firstNumeric(blockData,n,{'aLat_mps2'},1);
+    boundViolationFromMinLoad(minFz));
+P.aLat_mps2 = firstNumeric(blockData,n,{'aLat_mps2','lat_accel'},1);
 P.aLat_mps2 = fillMissing(P.aLat_mps2,firstNumeric(blockData,n,{'gLat'},g));
-P.aLong_mps2 = firstNumeric(blockData,n,{'aLong_mps2'},1);
+P.aLong_mps2 = firstNumeric(blockData,n,{'aLong_mps2','long_accel'},1);
 P.aLong_mps2 = fillMissing(P.aLong_mps2,firstNumeric(blockData,n,{'gLong'},g));
 P.steer_rad = firstNumeric(blockData,n,{'steer_rad'},1);
 P.steer_rad = fillMissing(P.steer_rad,firstNumeric(blockData,n, ...
@@ -334,21 +446,22 @@ P.LLT_front_N = firstNumeric(blockData,n,{'LLT_front_N','LLT_front'},1);
 P.LLT_rear_N = firstNumeric(blockData,n,{'LLT_rear_N','LLT_rear'},1);
 P.long_load_transfer_N = firstNumeric(blockData,n, ...
     {'long_load_transfer_N','long_load_transfer'},1);
-P.aLong_max_mps2 = firstNumeric(blockData,n,{'aLong_max_mps2','aLong_max'},1);
+P.aLong_max_mps2 = firstNumeric(blockData,n, ...
+    {'aLong_max_mps2','aLong_max','long_accel'},1);
 P.aLat_achieved_mps2 = firstNumeric(blockData,n, ...
-    {'aLat_achieved_mps2','aLat_achieved'},1);
+    {'aLat_achieved_mps2','aLat_achieved','lat_accel'},1);
 P.aLat_achieved_mps2 = fillMissing(P.aLat_achieved_mps2,P.aLat_mps2);
 P.aLat_force_residual_mps2 = firstNumeric(blockData,n, ...
     {'aLat_force_residual_mps2','aLat_force_residual', ...
     'lat_accel_residual_mps2','lat_accel_residual'},1);
 P.pure_ay0 = firstLogical(blockData,n,{'pure_ay0'}, ...
-    finite(P.aLat_achieved_mps2) & abs(P.aLat_achieved_mps2) <= 1e-12);
+    finite(P.aLat_achieved_mps2) & abs(P.aLat_achieved_mps2) <= zeroTolerance);
 P.steer_zero = firstLogical(blockData,n,{'steer_zero'}, ...
-    finite(P.steer_rad) & abs(P.steer_rad) <= 1e-12);
+    finite(P.steer_rad) & abs(P.steer_rad) <= zeroTolerance);
 P.lat_velocity_zero = firstLogical(blockData,n,{'lat_velocity_zero'}, ...
-    finite(P.lat_velocity_mps) & abs(P.lat_velocity_mps) <= 1e-12);
+    finite(P.lat_velocity_mps) & abs(P.lat_velocity_mps) <= zeroTolerance);
 P.yaw_rate_zero = firstLogical(blockData,n,{'yaw_rate_zero'}, ...
-    finite(P.yaw_rate_rps) & abs(P.yaw_rate_rps) <= 1e-12);
+    finite(P.yaw_rate_rps) & abs(P.yaw_rate_rps) <= zeroTolerance);
 P.lateral_metrics_applicable(:) = type == "lateral";
 
 corners = {'FL','FR','RL','RR'};
@@ -372,6 +485,10 @@ for i = 1:4
     P.(['omega_' code '_rps']) = firstNumeric(blockData,n, ...
         {['omega_' code '_rps'],['omega_' code],['omega_' index]},1);
 end
+[P.valid,P.status] = gateValidity(blockData,P.valid,P.status, ...
+    strings(n,1),true(n,1),settings,P.exitflag, ...
+    P.max_constraint_residual,P.max_inequality_violation, ...
+    NaN(n,1),NaN(n,1),strings(n,1));
 end
 
 function names = pointNames()
@@ -449,6 +566,19 @@ else
 end
 end
 
+function value = getNumericSetting(settings,names,default)
+value = default;
+for i = 1:numel(names)
+    if isfield(settings,names{i}) && ~isempty(settings.(names{i}))
+        candidate = double(settings.(names{i}));
+        if isscalar(candidate)
+            value = candidate;
+            return
+        end
+    end
+end
+end
+
 function data = block(raw,name)
 if istable(raw)
     if nargin < 2 || isempty(name) || strcmp(name,'perSpeed')
@@ -463,12 +593,100 @@ else
 end
 end
 
+function [aligned,sourcePresent,matchReasons,unusedRawSpeeds,tolerance] = ...
+        alignPerSpeed(data,requested,settings)
+rawCount = blockHeight(data);
+n = numel(requested);
+tolerance = getNumericSetting(settings, ...
+    {'speedMatchTolerance_mps','speedTolerance_mps'},1e-9);
+if ~isfinite(tolerance) || tolerance < 0
+    error('rampSpeed:invalidSpeedTolerance', ...
+        'speedMatchTolerance_mps must be a finite non-negative scalar.');
+end
+
+rawSpeed = firstNumeric(data,rawCount, ...
+    {'speed_mps','vCar','speed','long_vel'},1);
+sourceIndex = zeros(n,1);
+used = false(rawCount,1);
+matchReasons = strings(n,1);
+for i = 1:n
+    if ~isfinite(requested(i))
+        matchReasons(i) = "requested speed is not finite";
+        continue
+    end
+    candidates = find(~used & isfinite(rawSpeed) & ...
+        abs(rawSpeed-requested(i)) <= tolerance);
+    if isempty(candidates)
+        matchReasons(i) = "requested speed not returned by solver";
+    else
+        sourceIndex(i) = candidates(1);
+        used(candidates(1)) = true;
+    end
+end
+sourcePresent = sourceIndex > 0;
+unusedRawSpeeds = rawSpeed(~used & isfinite(rawSpeed));
+
+aligned = struct('rampSpeedRowCount',n);
+names = blockNames(data);
+for i = 1:numel(names)
+    [values,found] = readField(data,names{i},rawCount);
+    if found
+        aligned.(names{i}) = reindexValues(values,sourceIndex,n);
+    end
+end
+end
+
+function names = blockNames(data)
+if istable(data)
+    names = data.Properties.VariableNames;
+elseif isstruct(data)
+    names = fieldnames(data).';
+    names(strcmp(names,'rampSpeedRowCount')) = [];
+else
+    names = {};
+end
+end
+
+function values = reindexValues(values,sourceIndex,n)
+if ischar(values)
+    values = string(values);
+end
+if isstring(values)
+    aligned = strings(n,1);
+elseif islogical(values)
+    aligned = false(n,1);
+elseif isnumeric(values)
+    aligned = NaN(n,1);
+elseif isdatetime(values)
+    aligned = NaT(n,1);
+elseif iscell(values)
+    aligned = cell(n,1);
+else
+    aligned = strings(n,1);
+end
+target = find(sourceIndex > 0);
+if isempty(target)
+    values = aligned;
+    return
+end
+if iscell(aligned)
+    aligned(target) = values(sourceIndex(target));
+else
+    aligned(target) = values(sourceIndex(target));
+end
+values = aligned;
+end
+
 function n = blockHeight(data)
 if isempty(data)
     n = 0;
 elseif istable(data)
     n = height(data);
 elseif isstruct(data)
+    if isfield(data,'rampSpeedRowCount')
+        n = double(data.rampSpeedRowCount);
+        return
+    end
     if numel(data) > 1
         n = numel(data);
     else
@@ -674,6 +892,28 @@ primary(missing) = fallback(missing);
 value = primary;
 end
 
+function value = meanAvailable(varargin)
+n = numel(varargin{1});
+value = NaN(n,1);
+sumValue = zeros(n,1);
+count = zeros(n,1);
+for i = 1:nargin
+    candidate = fitRows(varargin{i},n);
+    available = finite(candidate);
+    sumValue(available) = sumValue(available) + candidate(available);
+    count(available) = count(available) + 1;
+end
+hasValue = count > 0;
+value(hasValue) = sumValue(hasValue)./count(hasValue);
+end
+
 function value = finite(x)
 value = ~isnan(x) & ~isinf(x);
+end
+
+function violation = boundViolationFromMinLoad(minLoad)
+minLoad = minLoad(:);
+violation = NaN(numel(minLoad),1);
+known = finite(minLoad);
+violation(known) = max(-minLoad(known),0);
 end
