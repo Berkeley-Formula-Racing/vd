@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qss-telemetry-viewer"
+version = "0.1.0"
+description = "Desktop viewer and interchange tools for QSS lap results"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "h5py>=3.11",
+    "numpy>=2.0",
+    "PySide6>=6.8",
+    "pyqtgraph>=0.13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-qt>=4.4",
+]
+
+[project.scripts]
+qss-telemetry-viewer = "qss_telemetry.app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["qss_telemetry*"]
