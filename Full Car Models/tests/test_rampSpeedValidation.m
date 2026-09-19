@@ -20,6 +20,36 @@ verifyFalse(testCase,ok);
 verifyTrue(testCase,contains(string(issues),"duplicate"));
 end
 
+function testValidationReportsMissingRequiredStudyField(testCase)
+study = makeValidStudy();
+study = rmfield(study,"displayUnits");
+
+[ok,issues] = rampSpeed.validateStudy(study);
+
+verifyFalse(testCase,ok);
+verifyTrue(testCase,contains(string(issues),"missing study field: displayUnits"));
+end
+
+function testValidationReportsMissingRequiredRunField(testCase)
+study = makeValidStudy();
+study.runs = rmfield(study.runs,"raw");
+
+[ok,issues] = rampSpeed.validateStudy(study);
+
+verifyFalse(testCase,ok);
+verifyTrue(testCase,contains(string(issues),"missing run field: raw"));
+end
+
+function testValidationRejectsInvalidRunStatus(testCase)
+study = makeValidStudy();
+study.runs.status = "not-a-status";
+
+[ok,issues] = rampSpeed.validateStudy(study);
+
+verifyFalse(testCase,ok);
+verifyTrue(testCase,contains(string(issues),"invalid run status"));
+end
+
 function testValidationRejectsUnsupportedRunType(testCase)
 study = makeValidStudy();
 study.runs(1).type = "combined";
@@ -103,6 +133,21 @@ verifyThat(testCase,run.perSpeed.reason(2), ...
     matlab.unittest.constraints.ContainsSubstring("requested speed"));
 end
 
+function testNormalizationKeepsRequestedGridWhenRawHasExtraSpeed(testCase)
+fixture = makeRampFixture();
+raw = fixture.legacyRampResult;
+raw.perSpeed.vCar = [5;15];
+
+run = rampSpeed.normalizeRampResult(raw,"lateral", ...
+    struct("speeds",5),fixture.cases(1),struct());
+
+verifyEqual(testCase,height(run.perSpeed),1);
+verifyEqual(testCase,run.perSpeed.speed_mps,5,"AbsTol",1e-12);
+verifyTrue(testCase,run.perSpeed.valid);
+verifyTrue(testCase,any(contains(string(run.runMeta.warnings), ...
+    "unused raw speed row(s): 15")));
+end
+
 function testNormalizationMapsLongitudinalLegacyAliases(testCase)
 fixture = makeRampFixture();
 raw = struct();
@@ -175,6 +220,53 @@ unknownRun = rampSpeed.normalizeRampResult(unknown,"lateral", ...
     struct("speeds",5),fixture.cases(1),struct());
 verifyFalse(testCase,unknownRun.perSpeed.valid);
 verifyEqual(testCase,unknownRun.perSpeed.status,"unknown");
+end
+
+function testPointEqualityResidualGatesValidity(testCase)
+fixture = makeRampFixture();
+raw = struct();
+raw.perSpeed = table(5,1,0,0, ...
+    'VariableNames',{'vCar','exitflag','max_ceq', ...
+    'max_inequality_violation'});
+raw.points = table(5,1,1e-3, ...
+    'VariableNames',{'vCar','exitflag','max_equality_residual'});
+
+accepted = rampSpeed.normalizeRampResult(raw,"lateral", ...
+    struct("speeds",5,"ceqTol",1e-2),fixture.cases(1),struct());
+verifyTrue(testCase,accepted.points.valid);
+verifyEqual(testCase,accepted.points.status,"complete");
+
+raw.points.max_equality_residual = 1;
+rejected = rampSpeed.normalizeRampResult(raw,"lateral", ...
+    struct("speeds",5,"ceqTol",1e-2),fixture.cases(1),struct());
+verifyFalse(testCase,rejected.points.valid);
+verifyEqual(testCase,rejected.points.status,"invalid");
+
+raw.points = table(5,'VariableNames',{'vCar'});
+unknown = rampSpeed.normalizeRampResult(raw,"lateral", ...
+    struct("speeds",5),fixture.cases(1),struct());
+verifyFalse(testCase,unknown.points.valid);
+verifyEqual(testCase,unknown.points.status,"unknown");
+end
+
+function testNegativeMinFzSetsWheelLiftAndBoundInvalidity(testCase)
+fixture = makeRampFixture();
+raw = struct();
+raw.perSpeed = table(5,1,0,0, ...
+    'VariableNames',{'vCar','exitflag','max_ceq', ...
+    'max_inequality_violation'});
+raw.points = table(5,-2,1,0, ...
+    'VariableNames',{'vCar','min_Fz','exitflag', ...
+    'max_constraint_residual'});
+
+run = rampSpeed.normalizeRampResult(raw,"lateral", ...
+    struct("speeds",5,"ceqTol",1e-2),fixture.cases(1),struct());
+
+verifyEqual(testCase,run.points.min_Fz_N,-2,"AbsTol",1e-12);
+verifyTrue(testCase,run.points.wheel_lift);
+verifyEqual(testCase,run.points.max_inequality_violation,2,"AbsTol",1e-12);
+verifyFalse(testCase,run.points.valid);
+verifyEqual(testCase,run.points.status,"invalid");
 end
 
 function testValidationRejectsLegacyPointSpellings(testCase)

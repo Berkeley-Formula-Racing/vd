@@ -34,9 +34,6 @@ end
 if isempty(requested)
     requested = zeros(0,1);
 end
-if numel(requested) < rawSpeedCount
-    requested(end+1:rawSpeedCount,1) = rawSpeed(numel(requested)+1:rawSpeedCount);
-end
 
 [rawPerSpeed,sourcePresent,matchReasons,unusedRawSpeeds,tolerance] = ...
     alignPerSpeed(rawPerSpeed,requested,settings);
@@ -268,7 +265,7 @@ perSpeedInequality = fillMissing(perSpeedInequality, ...
 [T.valid,T.status,T.reason] = gateValidity(rawPerSpeed,T.valid,T.status, ...
     T.reason,sourcePresent,settings, ...
     firstNumeric(rawPerSpeed,rawSpeedCount,{'exitflag'},1), ...
-    T.max_constraint_residual,perSpeedInequality, ...
+    T.max_constraint_residual,NaN(n,1),perSpeedInequality, ...
     T.n_exitflag1,T.n_exitflag2,matchReasons);
 
 if type == "longitudinal"
@@ -290,7 +287,7 @@ end
 end
 
 function [valid,status,reason] = gateValidity(data,valid,status,reason, ...
-        sourcePresent,settings,exitflag,residual,inequality, ...
+        sourcePresent,settings,exitflag,residual,equalityResidual,inequality, ...
         nExitflag1,nExitflag2,matchReasons)
 n = numel(valid);
 valid = fitLogical(valid,n);
@@ -299,6 +296,7 @@ reason = fitString(reason,n);
 sourcePresent = fitLogical(sourcePresent,n);
 exitflag = fitRows(exitflag,n);
 residual = fitRows(residual,n);
+equalityResidual = fitRows(equalityResidual,n);
 inequality = fitRows(inequality,n);
 nExitflag1 = fitRows(nExitflag1,n);
 nExitflag2 = fitRows(nExitflag2,n);
@@ -324,8 +322,9 @@ countsKnown = finite(nExitflag1) | finite(nExitflag2);
 countGood = (finite(nExitflag1) & nExitflag1 > 0) | ...
     (finite(nExitflag2) & nExitflag2 > 0);
 countBad = countsKnown & ~countGood;
-residualKnown = finite(residual);
-residualBad = residualKnown & residual > residualTolerance;
+residualKnown = finite(residual) | finite(equalityResidual);
+residualBad = (finite(residual) & residual > residualTolerance) | ...
+    (finite(equalityResidual) & equalityResidual > residualTolerance);
 inequalityKnown = finite(inequality);
 inequalityBad = inequalityKnown & inequality > inequalityTolerance;
 rawStatusLower = lower(strtrim(rawStatus));
@@ -487,7 +486,8 @@ for i = 1:4
 end
 [P.valid,P.status] = gateValidity(blockData,P.valid,P.status, ...
     strings(n,1),true(n,1),settings,P.exitflag, ...
-    P.max_constraint_residual,P.max_inequality_violation, ...
+    P.max_constraint_residual,P.max_equality_residual, ...
+    P.max_inequality_violation, ...
     NaN(n,1),NaN(n,1),strings(n,1));
 end
 
