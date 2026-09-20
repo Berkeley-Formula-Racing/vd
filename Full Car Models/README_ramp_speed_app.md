@@ -5,7 +5,7 @@ RampSpeedApp is the schema-v1 MATLAB App Designer front end for lateral and long
 ## Open and initialize
 
 1. Open `RampSpeedApp.prj` from MATLAB.
-2. Use the project startup shortcut `setup_paths` (the project startup file is `setup_paths.m`). It adds the app, `+rampSpeed`, tests, and model folders to the MATLAB path.
+2. Use the project startup shortcut `setup_paths` (the project startup file is `setup_paths.m`). It adds the app, `+rampSpeed`, tests, and model folders to the MATLAB path. Keep the generated `resources/project` sidecar directory with `RampSpeedApp.prj`; MATLAB uses it for the project file inventory, name, startup action, and shortcut.
 3. Open `RampSpeedApp.mlapp` and press Run. The Setup table supplies the available car/case definitions.
 
 Choose the car role deliberately. `lap` is the normal lateral/cornering role; `acceleration` is the longitudinal role. The role is stored with the case and is part of the study provenance.

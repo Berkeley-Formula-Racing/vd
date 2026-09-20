@@ -22,6 +22,7 @@ verifyTrue(testCase,any(endsWith(files,"RampSpeedApp.mlapp")));
 verifyTrue(testCase,any(endsWith(files,"exportStudy.m")));
 verifyTrue(testCase,any(endsWith(files,"releaseManifest.m")));
 verifyTrue(testCase,any(contains(files,"tests")));
+verifyTrue(testCase,any(contains(files,"resources")));
 verifyTrue(testCase,any(endsWith(files,"setup_paths.m")));
 verifyTrue(testCase,isfield(manifest,"requiredModelPaths"));
 verifyTrue(testCase,any(contains(string(manifest.requiredModelPaths), ...
@@ -60,14 +61,15 @@ end
 function testProjectDescriptorUsesContainingFolderRoot(testCase)
 sourceRoot = fileparts(fileparts(mfilename("fullpath")));
 sourceProject = fullfile(sourceRoot,"RampSpeedApp.prj");
+sourceResources = fullfile(sourceRoot,"resources");
 [temporaryRoot,cleanup] = temporaryFolder(); %#ok<ASGLU>
 projectRoot = fullfile(temporaryRoot,"Full Car Models");
 mkdir(projectRoot);
-nativeProject = matlab.project.createProject(projectRoot);
-nativeProject.close;
-clear nativeProject;
 targetProject = fullfile(projectRoot,"RampSpeedApp.prj");
 copyfile(sourceProject,targetProject);
+copyfile(sourceResources,fullfile(projectRoot,"resources"));
+copyfile(fullfile(sourceRoot,"setup_paths.m"),fullfile(projectRoot,"setup_paths.m"));
+copyfile(fullfile(sourceRoot,"sweeps"),fullfile(projectRoot,"sweeps"));
 
 document = xmlread(targetProject);
 rootNodes = document.getElementsByTagName("RootFolder");
@@ -75,14 +77,15 @@ rootText = string(char(rootNodes.item(0).getTextContent()));
 verifyEqual(testCase,rootText,".");
 loadedProject = matlab.project.loadProject(projectRoot);
 cleanupLoaded = onCleanup(@()closeProject(loadedProject)); %#ok<NASGU>
+verifyEqual(testCase,string(loadedProject.Name),"RampSpeedApp");
 verifyEqual(testCase,canonicalPath(loadedProject.RootFolder), ...
+    canonicalPath(projectRoot));
+verifyEqual(testCase,canonicalPath(fullfile(projectRoot,char(rootText))), ...
     canonicalPath(projectRoot));
 closeProject(loadedProject);
 clear loadedProject;
 clear cleanupLoaded;
 pause(0.1);
-verifyEqual(testCase,canonicalPath(fullfile(projectRoot,char(rootText))), ...
-    canonicalPath(projectRoot));
 end
 
 function [folder,cleanup] = temporaryFolder()
