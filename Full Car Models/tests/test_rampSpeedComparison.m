@@ -80,6 +80,28 @@ verifyEqual(testCase,numel(h.lines),1);
 verifyTrue(testCase,all(isgraphics(h.lines)));
 end
 
+function testComparisonPreservesGridAlignedReasonMetadata(testCase)
+baseline = makeComparisonRun("baseline",[5;10;15],[10;20;30], ...
+    [true;false;true],[false;true;false]);
+variant = makeComparisonRun("variant",[5;12.5;15],[12;27;34], ...
+    [true;false;true],[false;true;false]);
+baseline.perSpeed.reason = ["baseline point";"baseline invalid";"baseline end"];
+variant.perSpeed.reason = ["variant point";"variant invalid";"variant end"];
+delta = rampSpeed.buildComparison([baseline variant],"aero_front_load", ...
+    "baseline",struct("comparisonGrid_mps",[5;10;12.5;15]));
+series = delta.series(1);
+verifyTrue(testCase,isfield(series,"reason"));
+verifyTrue(testCase,isfield(series,"variantReason"));
+verifyTrue(testCase,isfield(series,"baselineReason"));
+verifyEqual(testCase,series.baselineReason, ...
+    ["baseline point";"baseline invalid";"";"baseline end"]);
+verifyEqual(testCase,series.variantReason, ...
+    ["variant point";"";"variant invalid";"variant end"]);
+verifyEqual(testCase,series.reason, ...
+    ["baseline point | variant point";"baseline invalid"; ...
+    "variant invalid";"baseline end | variant end"]);
+end
+
 function run = makeComparisonRun(id,speeds,values,valid,truncated)
 speeds = double(speeds(:));
 values = double(values(:));

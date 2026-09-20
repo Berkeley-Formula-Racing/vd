@@ -27,6 +27,7 @@ baseline = series(baselineIndex);
 baselineTruncated = resampleMask(baseline,"truncated",grid);
 baselinePowerLimited = resampleMask(baseline,"power_limited",grid);
 baselineWheelLift = resampleMask(baseline,"wheel_lift",grid);
+baselineReason = resampleReason(baseline,grid);
 for i = 1:numel(series)
     if i == baselineIndex
         continue
@@ -35,6 +36,8 @@ for i = 1:numel(series)
     values = variantValues - baselineValues;
     valid = baselineValid & variantValid & isfinite(values);
     values(~valid) = NaN;
+    variantReason = resampleReason(series(i),grid);
+    reason = combineReasons(baselineReason,variantReason);
     result = comparisonSeriesTemplate();
     result.id = series(i).setupId;
     result.setupId = series(i).setupId;
@@ -47,6 +50,9 @@ for i = 1:numel(series)
     result.valid = valid;
     result.variantValid = variantValid;
     result.baselineValid = baselineValid;
+    result.reason = reason;
+    result.variantReason = variantReason;
+    result.baselineReason = baselineReason;
     result.variantTruncated = resampleMask(series(i),"truncated",grid);
     result.variantPowerLimited = resampleMask(series(i),"power_limited",grid);
     result.variantWheelLift = resampleMask(series(i),"wheel_lift",grid);
@@ -145,6 +151,34 @@ for i = 1:numel(starts)
 end
 end
 
+function reasons = resampleReason(series,grid)
+reasons = strings(size(grid));
+if ~isfield(series,'reason')
+    return
+end
+x = double(series.x(:));
+source = string(series.reason(:));
+n = min(numel(x),numel(source));
+for i = 1:n
+    if isfinite(x(i)) && strlength(source(i)) > 0
+        reasons(grid == x(i)) = source(i);
+    end
+end
+end
+
+function reasons = combineReasons(baselineReason,variantReason)
+reasons = strings(size(baselineReason));
+for i = 1:numel(reasons)
+    if strlength(baselineReason(i)) > 0 && strlength(variantReason(i)) > 0
+        reasons(i) = baselineReason(i) + " | " + variantReason(i);
+    elseif strlength(baselineReason(i)) > 0
+        reasons(i) = baselineReason(i);
+    else
+        reasons(i) = variantReason(i);
+    end
+end
+end
+
 function mask = resampleMask(series,field,grid)
 mask = false(size(grid));
 if ~isfield(series,field)
@@ -200,6 +234,8 @@ result = struct('id',"",'setupId',"",'label',"",'baselineId',"", ...
     'x',zeros(0,1),'values',zeros(0,1),'variantValues',zeros(0,1), ...
     'baselineValues',zeros(0,1),'valid',false(0,1), ...
     'variantValid',false(0,1),'baselineValid',false(0,1), ...
+    'reason',strings(0,1),'variantReason',strings(0,1), ...
+    'baselineReason',strings(0,1), ...
     'truncated',false(0,1),'power_limited',false(0,1), ...
     'wheel_lift',false(0,1), ...
     'baselineTruncated',false(0,1),'variantTruncated',false(0,1), ...
