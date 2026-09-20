@@ -104,3 +104,183 @@ verifyEqual(testCase,string({accelCases.carRole}),["acceleration","acceleration"
 verifyEqual(testCase,[accelCases.carColumn],[2 2]);
 verifyTrue(testCase,all(strlength(string({lapCases.label})) > 0));
 end
+
+function testMalformedInjectedRunIsRetainedAndStudyContinues(testCase)
+fixture = makeRampFixture();
+checkpointPath = fullfile(tempdir,"ramp-study-malformed-run-test.mat");
+if isfile(checkpointPath)
+    delete(checkpointPath);
+end
+cleanup = onCleanup(@()deleteIfPresent(checkpointPath));
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",false,"numWorkers",0, ...
+    "checkpointPath",checkpointPath,"appVersion","test", ...
+    "runCaseFcn",@returnMalformed);
+[study,~] = rampSpeed.runStudy(fixture.cars,fixture.cases,request,struct());
+
+verifyEqual(testCase,study.runs(1).status,"failed");
+verifyEqual(testCase,study.runs(1).runMeta.error.identifier, ...
+    "rampSpeed:invalidRun");
+verifyThat(testCase,study.runs(1).runMeta.error.message, ...
+    matlab.unittest.constraints.ContainsSubstring("scalar run struct"));
+verifyEqual(testCase,study.runs(2).status,"complete");
+verifyTrue(testCase,isfile(checkpointPath));
+
+    function run = returnMalformed(~,caseInfo,~,~)
+        if string(caseInfo.id) == "baseline"
+            run = [];
+        else
+            run = makeFixtureRun(caseInfo);
+        end
+    end
+end
+
+function deleteIfPresent(fileName)
+if isfile(fileName)
+    delete(fileName);
+end
+end
+function testSetupCatalogRejectsDuplicateIds(testCase)
+cars = {struct("name","lap-1");struct("name","lap-2")};
+designTable = table(["duplicate";"duplicate"], ...
+    'VariableNames',{'id'});
+verifyError(testCase,@()rampSpeed.setupCaseCatalog(cars,designTable), ...
+    "rampSpeed:duplicateCaseId");
+end
+
+function testSetupCatalogRejectsVectorDesignRowMismatch(testCase)
+cars = {struct("name","lap-1"),struct("name","accel-1")};
+oneDesignRow = table("one",'VariableNames',{'id'});
+oneSetup = rampSpeed.setupCaseCatalog(cars,oneDesignRow);
+verifyEqual(testCase,numel(oneSetup),1);
+twoDesignRows = table(["one";"two"],'VariableNames',{'id'});
+verifyError(testCase,@()rampSpeed.setupCaseCatalog(cars,twoDesignRows), ...
+    "rampSpeed:carCellDesignMismatch");
+end
+
+function testRunnerRejectsDuplicateCaseIdsBeforeExecution(testCase)
+fixture = makeRampFixture();
+cases = fixture.cases;
+cases(2).id = cases(1).id;
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",false,"numWorkers",0, ...
+    "checkpointPath","","appVersion","test", ...
+    "runCaseFcn",@unexpectedExecution);
+verifyError(testCase,@()rampSpeed.runStudy(fixture.cars,cases,request,struct()), ...
+    "rampSpeed:duplicateCaseId");
+
+    function unexpectedExecution(varargin)
+        error("test:unexpectedExecution","duplicate cases must be rejected first.");
+    end
+end
+
+function testDirectRunCaseProgressCallbackIsAdvisory(testCase)
+[cars,~] = carConfig();
+settings = struct("speeds",5,"nRamp",1,"nBisect",0, ...
+    "mode","coast","verbose",false);
+request = struct("rampType","lateral","settings",settings, ...
+    "progressQueue",@captureQueue);
+callbacks = struct("onProgress",@throwProgress);
+run = rampSpeed.runCase(cars{1,1}, ...
+    struct("id","progress-callback","label","progress-callback", ...
+    "carRole","lap"),request,callbacks);
+verifyTrue(testCase,isstruct(run));
+verifyEqual(testCase,run.caseId,"progress-callback");
+
+    function throwProgress(~)
+        error("test:progressCallback","advisory callback failure");
+    end
+
+    function captureQueue(~)
+    end
+end
+function testParallelWorkerFailureDoesNotRerunActiveCases(testCase)
+fixture = makeRampFixture();
+cases = fixture.cases;
+cases(1).id = "fail";
+cases(1).label = "fail";
+cases(3) = cases(2);
+cases(3).id = "third";
+cases(3).label = "third";
+logPath = string(tempname) + ".log";
+cleanup = onCleanup(@()deleteIfPresent(logPath));
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",true,"numWorkers",2, ...
+    "checkpointPath","","appVersion","test", ...
+    "runCaseFcn",@parallelInjectedWorkerFailure, ...
+    "workerLogPath",logPath);
+[study,~] = rampSpeed.runStudy(fixture.cars,cases,request,struct());
+logLines = splitlines(strtrim(string(fileread(logPath))));
+verifyEqual(testCase,sum(logLines == "fail"),1);
+verifyEqual(testCase,study.runs(1).status,"failed");
+verifyEqual(testCase,study.runs(1).runMeta.error.identifier, ...
+    "test:workerFailure");
+verifyThat(testCase,study.runs(1).runMeta.error.message, ...
+    matlab.unittest.constraints.ContainsSubstring("injected worker failure"));
+verifyTrue(testCase,~isempty(study.runs(1).runMeta.error.stack));
+verifyEqual(testCase,study.runs(2).status,"complete");
+verifyEqual(testCase,study.runs(3).status,"complete");
+verifyGreaterThan(testCase,study.runs(2).runMeta.effectiveWorkers,0);
+end
+
+function run = parallelInjectedWorkerFailure(~,caseInfo,request,~)
+logPath = char(request.workerLogPath);
+fid = fopen(logPath,"a");
+if fid < 0
+    error("test:logOpen","Could not open worker log.");
+end
+fprintf(fid,"%s\n",char(string(caseInfo.id)));
+fclose(fid);
+if string(caseInfo.id) == "fail"
+    error("test:workerFailure","injected worker failure");
+end
+run = rampSpeed.makeRun("lateral","coast",request.settings,caseInfo);
+end
+
+function testParallelUnserializableRequestFallsBackToSerial(testCase)
+fixture = makeRampFixture();
+badQueue = parallel.pool.PollableDataQueue;
+cleanup = onCleanup(@()close(badQueue));
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",true,"numWorkers",2, ...
+    "checkpointPath","","appVersion","test", ...
+    "runCaseFcn",@serializableFallbackRun, ...
+    "progressQueue",badQueue);
+[study,~] = rampSpeed.runStudy(fixture.cars,fixture.cases,request,struct());
+effectiveWorkers = arrayfun(@(run)run.runMeta.effectiveWorkers,study.runs);
+fallbackReasons = arrayfun(@(run)string(run.runMeta.parallelFallbackReason), ...
+    study.runs);
+verifyEqual(testCase,effectiveWorkers,[0;0]);
+verifyTrue(testCase,all(contains(fallbackReasons,"serializable")));
+verifyEqual(testCase,string({study.runs.status}),["complete","complete"]);
+
+end
+
+function run = serializableFallbackRun(~,caseInfo,request,~)
+run = rampSpeed.makeRun("lateral","coast",request.settings,caseInfo);
+end
+
+function testInvalidCanonicalInjectedRunIsRetainedAndStudyContinues(testCase)
+fixture = makeRampFixture();
+checkpointPath = fullfile(tempdir,"ramp-study-invalid-canonical-test.mat");
+cleanup = onCleanup(@()deleteIfPresent(checkpointPath));
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",false,"numWorkers",0, ...
+    "checkpointPath",checkpointPath,"appVersion","test", ...
+    "runCaseFcn",@returnInvalidCanonical);
+[study,~] = rampSpeed.runStudy(fixture.cars,fixture.cases,request,struct());
+verifyEqual(testCase,study.runs(1).status,"failed");
+verifyEqual(testCase,study.runs(1).runMeta.error.identifier, ...
+    "rampSpeed:invalidRun");
+verifyThat(testCase,study.runs(1).runMeta.error.message, ...
+    matlab.unittest.constraints.ContainsSubstring("Invalid canonical run"));
+verifyEqual(testCase,study.runs(2).status,"complete");
+verifyTrue(testCase,isfile(checkpointPath));
+
+    function run = returnInvalidCanonical(~,caseInfo,~,~)
+        run = makeFixtureRun(caseInfo);
+        if string(caseInfo.id) == "baseline"
+            run.perSpeed.injected_bad = false(height(run.perSpeed),1);
+        end
+    end
+end

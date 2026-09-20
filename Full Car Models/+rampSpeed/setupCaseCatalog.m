@@ -20,8 +20,11 @@ role = normalizeRole(carRole);
 
 if ~isempty(designTable)
     nCases = height(designTable);
-    if nCases > size(carCell,1) && ~(isvector(carCell) && ...
-            numel(carCell) >= nCases)
+    if size(carCell,1) == 1 && nCases > 1
+        error("rampSpeed:carCellDesignMismatch", ...
+            "A vector carCell can only describe one design row.");
+    end
+    if nCases > size(carCell,1)
         error("rampSpeed:designRowCount", ...
             "designTable must have one row per available car setup.");
     end
@@ -40,15 +43,21 @@ if nCases == 0
 end
 
 cases = repmat(emptyCase(),nCases,1);
-usedIds = strings(0,1);
+caseIds = strings(nCases,1);
 for i = 1:nCases
     baseId = tableText(designTable,i, ...
         ["id","caseId","case_id","setupId"]);
     if strlength(strtrim(baseId)) == 0
         baseId = "car-" + compose("%03d",i);
     end
-    id = uniqueId(baseId,usedIds);
-    usedIds(end+1,1) = id; %#ok<AGROW>
+    caseIds(i) = strtrim(baseId);
+end
+if numel(unique(caseIds)) ~= nCases
+    error("rampSpeed:duplicateCaseId", ...
+        "designTable contains duplicate case IDs.");
+end
+for i = 1:nCases
+    id = caseIds(i);
 
     label = tableText(designTable,i, ...
         ["label","name","setup","caseLabel","caseName"]);
@@ -143,21 +152,4 @@ value = string(T.Properties.RowNames{index});
 if ~isscalar(value)
     value = "";
 end
-end
-
-function value = uniqueId(base,used)
-value = strtrim(string(base));
-if strlength(value) == 0
-    value = "case";
-end
-if ~any(used == value)
-    return
-end
-suffix = 2;
-candidate = value + "-" + string(suffix);
-while any(used == candidate)
-    suffix = suffix + 1;
-    candidate = value + "-" + string(suffix);
-end
-value = candidate;
 end

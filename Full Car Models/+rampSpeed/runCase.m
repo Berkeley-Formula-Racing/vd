@@ -79,7 +79,11 @@ event = struct( ...
     "totalCases",numericField(request,'totalCases',0), ...
     "message",stringField(rawEvent,'message',""));
 if ~isempty(prior)
-    prior(event);
+    try
+        prior(event);
+    catch
+        % Progress callbacks are advisory and must not abort a case.
+    end
 end
 sendProgress(queue,event);
 end

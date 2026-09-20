@@ -24,9 +24,12 @@ study.runMeta = makeStudyMeta(started,type,request);
 study.runs = initializeRuns(cases,type,request.settings);
 events = repmat(emptyEvent(),0,1);
 totalCases = numel(cases);
+workerCancelFiles = strings(1,totalCases);
 completedCases = 0;
 effectiveWorkers = 0;
 fallbackReason = "";
+activeFutures = [];
+activeIndices = [];
 
 if totalCases == 0
     study.status = "complete";
@@ -51,6 +54,7 @@ if useParallel
     try
         runParallelCases(pool);
     catch ME
+        interruptParallelCases(ME);
         reason = "Parallel execution failed; falling back to serial execution: " + ...
             string(ME.message);
         effectiveWorkers = 0;
@@ -85,6 +89,7 @@ end
 study.runMeta.completed = datetime('now');
 study.runMeta.status = study.status;
 saveCheckpoint();
+cleanupWorkerCancellationFiles();
 
     function runSerialCases(indices)
         indices = double(indices(:)).';
@@ -131,8 +136,12 @@ saveCheckpoint();
         workerRequest = request;
         workerRequest.progressQueue = [];
         workerRequest.totalCases = totalCases;
-        futures = parallel.FevalFuture.empty(0,totalCases);
-        submitted = 0;
+        workerRequest.cancelFile = "";
+        parallelCars = cell(1,totalCases);
+        parallelRequests = cell(1,totalCases);
+        probeCallbacks = struct("onProgress",@noopProgress, ...
+            "isCancelled",@alwaysFalse);
+        prepared = 0;
         for index = 1:totalCases
             if isCancelledRequested()
                 cancelRemainingCases(index:totalCases);
@@ -142,17 +151,37 @@ saveCheckpoint();
                 break
             end
             car = selectCarForCase(cases(index),index);
+            caseRequest = workerRequest;
+            caseRequest.cancelFile = string(tempname) + ".cancel";
+            workerCancelFiles(index) = caseRequest.cancelFile;
+            parallelCars{index} = car;
+            parallelRequests{index} = caseRequest;
+            prepared = index;
+        end
+        if prepared < totalCases
+            return
+        end
+        preflightParallelInputs(activePool,request.runCaseFcn,parallelCars, ...
+            cases,parallelRequests,probeCallbacks,queue);
+        futures = parallel.FevalFuture.empty(0,totalCases);
+        submitted = 0;
+        for index = 1:prepared
             futures(index) = parfeval(activePool,@runCaseWorker,1, ...
-                car,cases(index),workerRequest,queue);
+                parallelCars{index},cases(index), ...
+                parallelRequests{index},queue);
             submitted = index;
+            activeIndices = 1:submitted;
+            activeFutures = futures(1:submitted);
         end
         active = futures(1:submitted);
         activeIndices = 1:submitted;
+        activeFutures = active;
         while ~isempty(active)
             [completedIndex,run] = fetchNext(active);
             index = activeIndices(completedIndex);
             active(completedIndex) = [];
             activeIndices(completedIndex) = [];
+            activeFutures = active;
             study.runs(index) = finalizeRun(run,index,study.runs(index), ...
                 type,request.settings,cases(index),effectiveWorkers, ...
                 fallbackReason,started,request);
@@ -162,7 +191,10 @@ saveCheckpoint();
                 string(study.runs(index).status) + ": " + caseLabel(index)));
             saveCheckpoint();
             if isCancelledRequested()
-                cancel(active);
+                signalWorkerCancellation();
+                cancelCause = MException("rampSpeed:cancelled", ...
+                    "study cancelled");
+                interruptParallelCases(cancelCause);
                 cancelRemainingCases(findPendingCases());
                 study.status = "cancelled";
                 emitEvent(makeEvent("study","",NaN,NaN,completedCases, ...
@@ -170,8 +202,80 @@ saveCheckpoint();
                 return
             end
         end
+        activeFutures = [];
+        activeIndices = [];
     end
 
+    function interruptParallelCases(cause)
+        futures = activeFutures;
+        indices = activeIndices;
+        activeFutures = [];
+        activeIndices = [];
+        if isempty(futures)
+            return
+        end
+        signalWorkerCancellation();
+        settleDeadline = tic;
+        while ~allFuturesSettled(futures) && toc(settleDeadline) < 2
+            pause(0.05);
+        end
+        try
+            cancel(futures);
+        catch
+        end
+        for k = 1:numel(futures)
+            try
+                wait(futures(k));
+            catch
+            end
+        end
+        message = "parallel execution interrupted: " + string(cause.message);
+        for k = 1:numel(indices)
+            index = indices(k);
+            if index < 1 || index > totalCases || ...
+                    ~any(string(study.runs(index).status) == ["pending","running"])
+                continue
+            end
+            workerError = [];
+            state = "";
+            try
+                state = string(futures(k).State);
+                candidate = futures(k).Error;
+                if ~isempty(candidate)
+                    workerError = candidate;
+                end
+            catch
+            end
+            if state == "failed" && ~isCancellationError(cause)
+                if isempty(workerError)
+                    workerError = cause;
+                end
+                run = failureRun(cases(index),workerError,type,request.settings);
+            else
+                run = cancelledRun(cases(index),type,request.settings, ...
+                    message);
+            end
+            study.runs(index) = finalizeRun(run,index,study.runs(index), ...
+                type,request.settings,cases(index),effectiveWorkers, ...
+                fallbackReason,started,request);
+        end
+    end
+    function value = allFuturesSettled(futures)
+        value = true;
+        for futureIndex = 1:numel(futures)
+            try
+                state = string(futures(futureIndex).State);
+            catch
+                value = false;
+                return
+            end
+            if ~any(state == ["finished","failed","cancelled", ...
+                    "unavailable"])
+                value = false;
+                return
+            end
+        end
+    end
     function run = executeOneCase(index)
         caseInfo = cases(index);
         try
@@ -252,8 +356,37 @@ saveCheckpoint();
             numericField(rawEvent,"completedCases",completedCases), ...
             numericField(rawEvent,"totalCases",totalCases), ...
             stringField(rawEvent,"message","")));
+        if isCancelledRequested()
+            signalWorkerCancellation();
+        end
     end
 
+    function cleanupWorkerCancellationFiles()
+        for k = 1:numel(workerCancelFiles)
+            fileName = workerCancelFiles(k);
+            if strlength(fileName) > 0 && isfile(char(fileName))
+                try
+                    delete(char(fileName));
+                catch
+                end
+            end
+        end
+    end
+    function signalWorkerCancellation()
+        for k = 1:numel(workerCancelFiles)
+            fileName = workerCancelFiles(k);
+            if strlength(fileName) == 0
+                continue
+            end
+            try
+                fid = fopen(char(fileName),"w");
+                if fid >= 0
+                    fclose(fid);
+                end
+            catch
+            end
+        end
+    end
     function emitEvent(event)
         event = normalizeEvent(event);
         events(end+1,1) = event;
@@ -353,13 +486,36 @@ saveCheckpoint();
 end
 
 function run = runCaseWorker(car,caseInfo,request,queue)
-callbacks = struct("onProgress",[],"isCancelled",@()false);
+cancelFile = "";
+if isfield(request,'cancelFile') && ~isempty(request.cancelFile)
+    cancelFile = string(request.cancelFile);
+end
+workerCancelled = false;
+callbacks = struct("onProgress",[],"isCancelled",@readWorkerCancellation);
 if ~isempty(queue)
     callbacks.onProgress = @(event)sendProgress(queue, ...
         workerProgressEvent(event,caseInfo,request));
 end
-run = feval(request.runCaseFcn,car,caseInfo,request,callbacks);
+try
+    run = feval(request.runCaseFcn,car,caseInfo,request,callbacks);
+catch ME
+    type = normalizeType(stringField(request,"rampType","lateral"));
+    if isCancellationError(ME)
+        run = cancelledRun(caseInfo,type,request.settings, ...
+            "worker case cancelled: " + string(ME.message));
+    else
+        run = failureRun(caseInfo,ME,type,request.settings);
+    end
 end
+
+    function value = readWorkerCancellation()
+        if ~workerCancelled
+            workerCancelled = strlength(cancelFile) > 0 && isfile(char(cancelFile));
+        end
+        value = workerCancelled;
+    end
+end
+
 
 function event = workerProgressEvent(rawEvent,caseInfo,request)
 event = makeEvent("case",stringField(caseInfo,"id",""), ...
@@ -368,6 +524,63 @@ event = makeEvent("case",stringField(caseInfo,"id",""), ...
     numericField(rawEvent,"completedCases",0), ...
     numericField(request,"totalCases",0), ...
     stringField(rawEvent,"message",""));
+end
+
+function preflightParallelInputs(pool,runCaseFcn,cars,cases,requests,callbacks,queue)
+futures = parallel.FevalFuture.empty(0,numel(cases));
+submitted = 0;
+active = futures;
+try
+    for index = 1:numel(cases)
+        futures(index) = parfeval(pool,@parallelSerializationProbe,1, ...
+            runCaseFcn,cars{index},cases(index),requests{index}, ...
+            callbacks,queue);
+        submitted = index;
+    end
+    active = futures(1:submitted);
+    while ~isempty(active)
+        [completedIndex,~] = fetchNext(active);
+        active(completedIndex) = [];
+    end
+catch ME
+    if submitted > 0
+        active = futures(1:submitted);
+    end
+    cancelAndWait(active);
+    error("rampSpeed:parallelSerialization", ...
+        "Parallel inputs are not serializable; falling back to serial execution: %s", ...
+        string(ME.message));
+end
+end
+
+function cancelAndWait(futures)
+if isempty(futures)
+    return
+end
+try
+    cancel(futures);
+catch
+end
+for k = 1:numel(futures)
+    try
+        wait(futures(k));
+    catch
+    end
+end
+end
+
+function value = parallelSerializationProbe(~,~,~,~,~,queue)
+if isa(queue,'parallel.pool.PollableDataQueue')
+    poll(queue,0);
+end
+value = true;
+end
+
+function noopProgress(~)
+end
+
+function value = alwaysFalse()
+value = false;
 end
 
 function validateInputs(cases,request,callbacks)
@@ -465,12 +678,14 @@ if isempty(cases)
     cases = repmat(emptyCase(),0,1);
     return
 end
+ids = strings(numel(cases),1);
 for i = 1:numel(cases)
     if ~isfield(cases,'id') || strlength(string(cases(i).id)) == 0
         cases(i).id = "car-" + compose("%03d",i);
     else
         cases(i).id = string(cases(i).id);
     end
+    ids(i) = cases(i).id;
     if ~isfield(cases,'label') || strlength(string(cases(i).label)) == 0
         cases(i).label = cases(i).id;
     else
@@ -493,6 +708,10 @@ for i = 1:numel(cases)
     if ~isfield(cases,'carColumn') || isempty(cases(i).carColumn)
         cases(i).carColumn = roleColumn(cases(i).carRole);
     end
+end
+if numel(unique(ids)) ~= numel(ids)
+    error("rampSpeed:duplicateCaseId", ...
+        "cases must have unique IDs before execution.");
 end
 end
 
@@ -569,8 +788,9 @@ end
 function run = finalizeRun(run,index,template,type,settings,caseInfo, ...
         effectiveWorkers,fallbackReason,started,request)
 if ~isstruct(run) || ~isscalar(run)
-    error("rampSpeed:invalidRun", ...
-        "runCaseFcn must return a scalar run struct.");
+    invalidRunError = MException('rampSpeed:invalidRun', ...
+        'runCaseFcn must return a scalar run struct.');
+    run = failureRun(caseInfo,invalidRunError,type,settings);
 end
 if ~hasCanonicalRunFields(run)
     try
@@ -625,6 +845,20 @@ if ~isfield(run.runMeta,'errors') || isempty(run.runMeta.errors)
     run.runMeta.errors = strings(0,1);
 else
     run.runMeta.errors = string(run.runMeta.errors(:));
+end
+validationStudy = rampSpeed.makeStudy(request.appVersion);
+validationStudy.cases = caseInfo;
+validationStudy.runs = run;
+[isValid,issues] = rampSpeed.validateStudy(validationStudy);
+if ~isValid
+    try
+        error("rampSpeed:invalidRun", ...
+            "Invalid canonical run output: %s",strjoin(issues,"; "));
+    catch ME
+        run = failureRun(caseInfo,ME,type,settings);
+    end
+    run = finalizeRun(run,index,template,type,settings,caseInfo, ...
+        effectiveWorkers,fallbackReason,started,request);
 end
 end
 
