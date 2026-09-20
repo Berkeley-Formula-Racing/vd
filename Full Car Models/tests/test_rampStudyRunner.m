@@ -284,3 +284,100 @@ verifyTrue(testCase,isfile(checkpointPath));
         end
     end
 end
+
+function testMissingCanonicalColumnsAreRejectedAndStudyContinues(testCase)
+fixture = makeRampFixture();
+checkpointPath = fullfile(tempdir,"ramp-study-missing-canonical-columns-test.mat");
+cleanup = onCleanup(@()deleteIfPresent(checkpointPath));
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",false,"numWorkers",0, ...
+    "checkpointPath",checkpointPath,"appVersion","test", ...
+    "runCaseFcn",@returnMissingCanonical);
+[study,~] = rampSpeed.runStudy(fixture.cars,fixture.cases,request,struct());
+verifyEqual(testCase,study.runs(1).status,"failed");
+verifyTrue(testCase,isfield(study.runs(1).runMeta,'error'));
+if isfield(study.runs(1).runMeta,'error')
+    verifyEqual(testCase,study.runs(1).runMeta.error.identifier, ...
+        "rampSpeed:invalidRun");
+    verifyThat(testCase,study.runs(1).runMeta.error.message, ...
+        matlab.unittest.constraints.ContainsSubstring("canonical"));
+end
+verifyEqual(testCase,study.runs(2).status,"complete");
+verifyTrue(testCase,isfile(checkpointPath));
+
+    function run = returnMissingCanonical(~,caseInfo,~,~)
+        run = makeFixtureRun(caseInfo);
+        if string(caseInfo.id) == "baseline"
+            run.perSpeed = run.perSpeed(:,"speed_mps");
+            run.points = run.points(:,"speed_mps");
+        end
+    end
+end
+
+function testRunnerSelectsDistinctCarsFromRowVector(testCase)
+cars = {struct("marker","one"),struct("marker","two")};
+cases(1) = struct('id',"one",'label',"one",'source',"test", ...
+    'designRow',1,'sourceIndex',1,'carRole',"lap",'carColumn',1);
+cases(2) = struct('id',"two",'label',"two",'source',"test", ...
+    'designRow',2,'sourceIndex',2,'carRole',"lap",'carColumn',1);
+markers = strings(0,1);
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",false,"numWorkers",0, ...
+    "checkpointPath","","appVersion","test", ...
+    "runCaseFcn",@recordCar);
+[study,~] = rampSpeed.runStudy(cars,cases,request,struct());
+verifyEqual(testCase,markers,["one";"two"]);
+verifyEqual(testCase,string({study.runs.status}),["complete","complete"]);
+
+    function run = recordCar(car,caseInfo,~,~)
+        markers(end+1,1) = string(car.marker);
+        run = makeFixtureRun(caseInfo);
+    end
+end
+
+function testParallelInterruptRetainsFinishedFutureResult(testCase)
+cars = {struct("marker","fast");struct("marker","late")};
+cases(1) = struct('id',"fast",'label',"fast",'source',"test", ...
+    'designRow',1,'sourceIndex',1,'carRole',"lap",'carColumn',1);
+cases(2) = struct('id',"late",'label',"late",'source',"test", ...
+    'designRow',2,'sourceIndex',2,'carRole',"lap",'carColumn',1);
+cancelled = false;
+callbacks = struct("onProgress",@captureProgress,"isCancelled",@isCancelled);
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",true,"numWorkers",2, ...
+    "checkpointPath","","appVersion","test", ...
+    "runCaseFcn",@runInterruptedCase);
+[study,~] = rampSpeed.runStudy(cars,cases,request,callbacks);
+verifyEqual(testCase,study.status,"cancelled");
+verifyEqual(testCase,study.runs(1).status,"complete");
+verifyEqual(testCase,study.runs(2).status,"failed");
+if isfield(study.runs(2).runMeta,'error')
+    verifyEqual(testCase,study.runs(2).runMeta.error.identifier, ...
+        "test:lateFailure");
+end
+
+    function captureProgress(event)
+        if string(event.caseId) == "fast" && ...
+                contains(string(event.message),"complete")
+            cancelled = true;
+        end
+    end
+
+    function value = isCancelled()
+        value = cancelled;
+    end
+
+    function run = runInterruptedCase(~,caseInfo,~,~)
+        if string(caseInfo.id) == "late"
+            pause(1.0);
+            run = makeFixtureRun(caseInfo);
+            run.status = "failed";
+            run.runMeta.status = "failed";
+            run.runMeta.errors = "late future failure";
+            run.runMeta.error = struct("identifier","test:lateFailure", ...
+                "message","late future failure","stack",struct.empty(0,1));
+            return
+        end
+        run = makeFixtureRun(caseInfo);
+    end
+end

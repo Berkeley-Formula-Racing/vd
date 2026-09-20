@@ -101,3 +101,48 @@ fclose(fid);
 run = rampSpeed.makeRun("lateral","coast",struct(),caseInfo);
 run.status = "complete";
 end
+
+function testCallerSuppliedProgressQueueDrivesWorkerCancellation(testCase)
+fixture = makeRampFixture();
+cases = fixture.cases;
+cases(1).id = "first";
+cases(1).label = "first";
+cases(3) = cases(2);
+cases(3).id = "third";
+cases(3).label = "third";
+checkpointPath = fullfile(tempdir,"ramp-study-caller-queue-cancellation-test.mat");
+logPath = string(tempname) + ".log";
+cleanupCheckpoint = onCleanup(@()deleteIfPresent(checkpointPath));
+cleanupLog = onCleanup(@()deleteIfPresent(logPath));
+queue = parallel.pool.DataQueue;
+queueCaseIds = strings(0,1);
+afterEach(queue,@captureCallerQueue);
+cancelled = false;
+callbacks = struct("onProgress",@captureProgress,"isCancelled",@isCancelled);
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",true,"numWorkers",2, ...
+    "checkpointPath",checkpointPath,"appVersion","test", ...
+    "runCaseFcn",@parallelCancellationCase,"workerLogPath",logPath, ...
+    "progressQueue",queue);
+[study,~] = rampSpeed.runStudy(fixture.cars,cases,request,callbacks);
+logLines = splitlines(strtrim(string(fileread(logPath))));
+verifyEqual(testCase,study.status,"cancelled");
+verifyEqual(testCase,study.runs(1).status,"cancelled");
+verifyFalse(testCase,any(logLines == "first:complete"));
+verifyTrue(testCase,any(logLines == "first:cancelled"));
+verifyTrue(testCase,any(queueCaseIds == "first"));
+
+    function captureCallerQueue(event)
+        queueCaseIds(end+1,1) = string(event.caseId);
+    end
+
+    function captureProgress(event)
+        if string(event.caseId) == "first"
+            cancelled = true;
+        end
+    end
+
+    function value = isCancelled()
+        value = cancelled;
+    end
+end

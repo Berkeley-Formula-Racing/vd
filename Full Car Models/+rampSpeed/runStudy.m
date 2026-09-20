@@ -25,11 +25,14 @@ study.runs = initializeRuns(cases,type,request.settings);
 events = repmat(emptyEvent(),0,1);
 totalCases = numel(cases);
 workerCancelFiles = strings(1,totalCases);
+workerCancelMap = containers.Map('KeyType','double','ValueType','char');
 completedCases = 0;
 effectiveWorkers = 0;
 fallbackReason = "";
 activeFutures = [];
 activeIndices = [];
+queueIsRequestQueue = false;
+cleanupGuard = onCleanup(@()cleanupCancellationMarkers(workerCancelMap));
 
 if totalCases == 0
     study.status = "complete";
@@ -129,8 +132,15 @@ cleanupWorkerCancellationFiles();
 
     function runParallelCases(activePool)
         queue = request.progressQueue;
+        queueIsRequestQueue = false;
         if isempty(queue)
             queue = parallel.pool.DataQueue;
+        elseif isa(queue,'parallel.pool.DataQueue')
+            queueIsRequestQueue = true;
+        elseif ~isa(queue,'parallel.pool.PollableDataQueue')
+            queue = parallel.pool.DataQueue;
+        end
+        if isa(queue,'parallel.pool.DataQueue')
             afterEach(queue,@handleQueuedProgress);
         end
         workerRequest = request;
@@ -154,6 +164,7 @@ cleanupWorkerCancellationFiles();
             caseRequest = workerRequest;
             caseRequest.cancelFile = string(tempname) + ".cancel";
             workerCancelFiles(index) = caseRequest.cancelFile;
+            workerCancelMap(index) = char(caseRequest.cancelFile);
             parallelCars{index} = car;
             parallelRequests{index} = caseRequest;
             prepared = index;
@@ -238,6 +249,8 @@ cleanupWorkerCancellationFiles();
             end
             workerError = [];
             state = "";
+            run = [];
+            hasOutput = false;
             try
                 state = string(futures(k).State);
                 candidate = futures(k).Error;
@@ -246,7 +259,18 @@ cleanupWorkerCancellationFiles();
                 end
             catch
             end
-            if state == "failed" && ~isCancellationError(cause)
+            if state == "finished"
+                try
+                    run = fetchOutputs(futures(k));
+                    hasOutput = true;
+                catch ME
+                    state = "failed";
+                    workerError = ME;
+                end
+            end
+            if hasOutput
+                % Preserve the finished worker output exactly once.
+            elseif state == "failed" && ~isCancellationError(cause)
                 if isempty(workerError)
                     workerError = cause;
                 end
@@ -314,6 +338,14 @@ cleanupWorkerCancellationFiles();
                 car = cars{sourceIndex,column};
                 return
             end
+            if nRows == 1 && isvector(cars) && sourceIndex > 1
+                if numel(cars) >= sourceIndex
+                    car = cars{sourceIndex};
+                    return
+                end
+                error("rampSpeed:carCellDesignMismatch", ...
+                    "Row-vector cars do not contain sourceIndex %d.",sourceIndex);
+            end
             if nRows == 1 && nCols >= column
                 car = cars{1,column};
                 return
@@ -355,7 +387,7 @@ cleanupWorkerCancellationFiles();
             numericField(rawEvent,"speed_mps",NaN), ...
             numericField(rawEvent,"completedCases",completedCases), ...
             numericField(rawEvent,"totalCases",totalCases), ...
-            stringField(rawEvent,"message","")));
+            stringField(rawEvent,"message","")),~queueIsRequestQueue);
         if isCancelledRequested()
             signalWorkerCancellation();
         end
@@ -387,7 +419,7 @@ cleanupWorkerCancellationFiles();
             end
         end
     end
-    function emitEvent(event)
+    function emitEvent(event,forwardToRequestQueue)
         event = normalizeEvent(event);
         events(end+1,1) = event;
         if ~isempty(callbacks.onProgress)
@@ -397,7 +429,10 @@ cleanupWorkerCancellationFiles();
                 addStudyWarning("Progress callback failed: " + string(ME.message));
             end
         end
-        if ~isempty(request.progressQueue)
+        if nargin < 2
+            forwardToRequestQueue = true;
+        end
+        if forwardToRequestQueue && ~isempty(request.progressQueue)
             sendProgress(request.progressQueue,event);
         end
     end
@@ -801,6 +836,12 @@ if ~hasCanonicalRunFields(run)
     end
 end
 run = matchRunFields(run,template);
+canonicalIssues = canonicalTableIssues(run,template);
+if ~isempty(canonicalIssues)
+    invalidRunError = MException("rampSpeed:invalidRun", ...
+        "Invalid canonical run output: " + strjoin(canonicalIssues,"; "));
+    run = failureRun(caseInfo,invalidRunError,type,settings);
+end
 run.caseId = string(caseInfo.id);
 run.type = type;
 if type == "longitudinal"
@@ -866,6 +907,36 @@ function tf = hasCanonicalRunFields(run)
 required = ["schemaVersion","caseId","type","mode","settings", ...
     "perSpeed","points","runMeta","status","raw"];
 tf = all(isfield(run,cellstr(required)));
+end
+
+function issues = canonicalTableIssues(run,template)
+issues = strings(4,1);
+issueCount = 0;
+tableNames = {'perSpeed','points'};
+for i = 1:numel(tableNames)
+    fieldName = tableNames{i};
+    if ~isfield(run,fieldName) || ~istable(run.(fieldName))
+        issueCount = issueCount + 1;
+        issues(issueCount,1) = "canonical " + string(fieldName) + ...
+            " table must be a table.";
+        continue
+    end
+    expected = string(template.(fieldName).Properties.VariableNames);
+    actual = string(run.(fieldName).Properties.VariableNames);
+    missing = setdiff(expected,actual,'stable');
+    unexpected = setdiff(actual,expected,'stable');
+    if ~isempty(missing)
+        issueCount = issueCount + 1;
+        issues(issueCount,1) = "canonical " + string(fieldName) + ...
+            " table is missing columns: " + strjoin(missing,", ");
+    end
+    if ~isempty(unexpected)
+        issueCount = issueCount + 1;
+        issues(issueCount,1) = "canonical " + string(fieldName) + ...
+            " table has unexpected columns: " + strjoin(unexpected,", ");
+    end
+end
+issues = issues(1:issueCount);
 end
 
 function run = matchRunFields(run,template)
@@ -1072,4 +1143,21 @@ end
 function value = emptyCase()
 value = struct('id',"",'label',"",'source',"", ...
     'designRow',NaN,'sourceIndex',NaN,'carRole',"auto",'carColumn',0);
+end
+
+function cleanupCancellationMarkers(markerMap)
+if ~isa(markerMap,'containers.Map') || markerMap.Count == 0
+    return
+end
+markerKeys = markerMap.keys;
+for k = 1:numel(markerKeys)
+    fileName = markerMap(markerKeys{k});
+    if isempty(fileName) || ~isfile(fileName)
+        continue
+    end
+    try
+        delete(fileName);
+    catch
+    end
+end
 end
