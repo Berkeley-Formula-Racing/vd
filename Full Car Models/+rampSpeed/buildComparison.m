@@ -15,7 +15,8 @@ end
 
 grid = comparisonGrid(series,baselineIndex,options);
 comparison = struct('metricId',plotData.metricId,'metric',plotData.metric, ...
-    'sourceLevel',plotData.sourceLevel,'baselineId',baselineId, ...
+    'sourceLevel',plotData.sourceLevel,'xLabel',plotData.xLabel, ...
+    'yLabel',plotData.yLabel,'baselineId',baselineId, ...
     'comparisonGrid_mps',grid,'interpolationMethod',"linear", ...
     'interpolationPolicy',"linear within contiguous valid non-truncated intervals", ...
     'variantMinusBaseline',true, ...
@@ -23,6 +24,9 @@ comparison = struct('metricId',plotData.metricId,'metric',plotData.metric, ...
 
 baseline = series(baselineIndex);
 [baselineValues,baselineValid] = interpolateSeries(baseline,grid);
+baselineTruncated = resampleMask(baseline,"truncated",grid);
+baselinePowerLimited = resampleMask(baseline,"power_limited",grid);
+baselineWheelLift = resampleMask(baseline,"wheel_lift",grid);
 for i = 1:numel(series)
     if i == baselineIndex
         continue
@@ -43,9 +47,15 @@ for i = 1:numel(series)
     result.valid = valid;
     result.variantValid = variantValid;
     result.baselineValid = baselineValid;
-    result.truncated = series(i).truncated;
-    result.power_limited = series(i).power_limited;
-    result.wheel_lift = series(i).wheel_lift;
+    result.variantTruncated = resampleMask(series(i),"truncated",grid);
+    result.variantPowerLimited = resampleMask(series(i),"power_limited",grid);
+    result.variantWheelLift = resampleMask(series(i),"wheel_lift",grid);
+    result.baselineTruncated = baselineTruncated;
+    result.baselinePowerLimited = baselinePowerLimited;
+    result.baselineWheelLift = baselineWheelLift;
+    result.truncated = result.baselineTruncated | result.variantTruncated;
+    result.power_limited = result.baselinePowerLimited | result.variantPowerLimited;
+    result.wheel_lift = result.baselineWheelLift | result.variantWheelLift;
     comparison.series(end+1,1) = result;
 end
 end
@@ -135,6 +145,51 @@ for i = 1:numel(starts)
 end
 end
 
+function mask = resampleMask(series,field,grid)
+mask = false(size(grid));
+if ~isfield(series,field)
+    return
+end
+x = double(series.x(:));
+flags = logical(series.(field)(:));
+rowValid = logical(series.valid(:));
+truncated = logical(series.truncated(:));
+n = min([numel(x),numel(flags),numel(rowValid),numel(truncated)]);
+x = x(1:n);
+flags = flags(1:n);
+rowValid = rowValid(1:n);
+truncated = truncated(1:n);
+exact = flags & isfinite(x);
+for i = find(exact).'
+    mask(grid == x(i)) = true;
+end
+good = rowValid & ~truncated & isfinite(x);
+if ~any(good)
+    return
+end
+starts = find(good & [true; ~good(1:end-1)]);
+ends = find(good & [~good(2:end); true]);
+for i = 1:numel(starts)
+    segment = starts(i):ends(i);
+    segmentX = x(segment);
+    segmentFlags = double(flags(segment));
+    [segmentX,order] = sort(segmentX);
+    segmentFlags = segmentFlags(order);
+    [segmentX,uniqueIndex] = unique(segmentX,'stable');
+    segmentFlags = segmentFlags(uniqueIndex);
+    if isscalar(segmentX)
+        query = grid == segmentX;
+        mask(query) = mask(query) | logical(segmentFlags);
+    else
+        query = grid >= segmentX(1) & grid <= segmentX(end);
+        if any(query)
+            interpolated = interp1(segmentX,segmentFlags,grid(query),'linear');
+            mask(query) = mask(query) | interpolated >= 0.5;
+        end
+    end
+end
+end
+
 function x = finiteValues(x)
 x = double(x(:));
 x = x(isfinite(x));
@@ -146,5 +201,8 @@ result = struct('id',"",'setupId',"",'label',"",'baselineId',"", ...
     'baselineValues',zeros(0,1),'valid',false(0,1), ...
     'variantValid',false(0,1),'baselineValid',false(0,1), ...
     'truncated',false(0,1),'power_limited',false(0,1), ...
-    'wheel_lift',false(0,1));
+    'wheel_lift',false(0,1), ...
+    'baselineTruncated',false(0,1),'variantTruncated',false(0,1), ...
+    'baselinePowerLimited',false(0,1),'variantPowerLimited',false(0,1), ...
+    'baselineWheelLift',false(0,1),'variantWheelLift',false(0,1));
 end

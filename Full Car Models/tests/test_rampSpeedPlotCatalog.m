@@ -108,6 +108,48 @@ verifyEqual(testCase,numel(findall(ax,"Type","constantline")),1);
 verifyEqual(testCase,string(ax.YLabel.String),data.yLabel);
 end
 
+function testRenderMetricPreservesMultipleSeriesAndHoldState(testCase)
+runs(1) = makePlotRun("baseline",[5;10],[100;200],[true;true],[false;false]);
+runs(2) = makePlotRun("variant",[5;10],[90;190],[true;true],[false;false]);
+data = rampSpeed.buildPlotData(runs,"aero_front_load");
+fig = figure("Visible","off");
+cleanup = onCleanup(@()close(fig));
+ax = axes(fig);
+hold(ax,"off");
+h = rampSpeed.renderMetric(ax,data,struct("showLegend",false,"showWarnings",false));
+verifyEqual(testCase,numel(h.lines),2);
+verifyTrue(testCase,all(isgraphics(h.lines)));
+verifyFalse(testCase,ishold(ax));
+cla(ax);
+hold(ax,"on");
+hOn = rampSpeed.renderMetric(ax,data,struct("showLegend",false,"showWarnings",false));
+verifyEqual(testCase,numel(hOn.lines),2);
+verifyTrue(testCase,all(isgraphics(hOn.lines)));
+verifyTrue(testCase,ishold(ax));
+end
+
+function testRenderMetricUsesSpeedColoredMarkersForRawGroups(testCase)
+run = makePlotRun("baseline",[5;10],[100;200],[true;true],[false;false]);
+run.points = makePointTable(run.points,4);
+run.points.speed_mps = [5;5;5;5];
+run.points.speed_index = [1;1;2;2];
+run.points.point_index = [1;2;1;2];
+run.points.aLat_mps2 = [1;1.1;2;2.1]*9.80665;
+run.points.valid = true(4,1);
+run.points.status(:) = "complete";
+data = rampSpeed.buildPlotData(run,"raw_aLat");
+fig = figure("Visible","off");
+cleanup = onCleanup(@()close(fig));
+ax = axes(fig);
+h = rampSpeed.renderMetric(ax,data,struct("showLegend",false));
+verifyEqual(testCase,numel(h.lines),2);
+for i = 1:numel(h.lines)
+    verifyNotEqual(testCase,string(h.lines(i).Marker),"none");
+    verifyEqual(testCase,string(h.lines(i).LineStyle),"none");
+end
+verifyTrue(testCase,any(abs(h.lines(1).Color - h.lines(2).Color) > 1e-12));
+end
+
 function run = makePlotRun(id,speeds,frontLoads,valid,truncated)
 speeds = double(speeds(:));
 n = numel(speeds);

@@ -8,6 +8,10 @@ if isempty(ax) || ~isgraphics(ax,'axes')
     error('rampSpeed:invalidAxes','ax must be a valid axes handle.');
 end
 
+wasHeld = ishold(ax);
+hold(ax,'on');
+holdGuard = onCleanup(@()restoreHoldState(ax,wasHeld));
+
 handles = struct('axes',ax,'lines',gobjects(0,1), ...
     'warningMarkers',gobjects(0,1),'zeroLine',[]);
 series = data.series;
@@ -18,12 +22,19 @@ legendLabels = strings(0,1);
 for i = 1:numel(series)
     color = colors(min(i,size(colors,1)),:);
     if isfield(series(i),'groups') && ~isempty(series(i).groups)
+        if isfield(data.metric.seriesStyle,'style') && ...
+                lower(string(data.metric.seriesStyle.style)) == "markers"
+            groupColors = parula(numel(series(i).groups));
+        else
+            groupColors = repmat(color,numel(series(i).groups),1);
+        end
         for j = 1:numel(series(i).groups)
             group = series(i).groups(j);
             if isempty(group.x)
                 continue
             end
-            lineHandle = drawSeries(ax,group.x,group.values,data.metric.seriesStyle,color);
+            lineHandle = drawSeries(ax,group.x,group.values, ...
+                data.metric.seriesStyle,groupColors(j,:));
             handles.lines(end+1,1) = lineHandle;
             if j == 1
                 legendHandles(end+1,1) = lineHandle; %#ok<AGROW>
@@ -80,6 +91,10 @@ if isstruct(style)
         plotStyle = lower(string(style.style));
     end
 end
+if plotStyle == "markers"
+    marker = "o";
+    lineStyle = "none";
+end
 if plotStyle == "stairs"
     lineHandle = stairs(ax,x,y,'Color',color,'LineStyle',lineStyle, ...
         'LineWidth',lineWidth,'Marker',marker,'MarkerSize',markerSize);
@@ -114,6 +129,17 @@ for i = 1:2:numel(masks)
         'LineStyle','none','MarkerSize',7,'LineWidth',1.2, ...
         'HandleVisibility','off');
     markers(end+1,1) = h; %#ok<AGROW>
+end
+end
+
+function restoreHoldState(ax,wasHeld)
+if ~isgraphics(ax,'axes')
+    return
+end
+if wasHeld
+    hold(ax,'on');
+else
+    hold(ax,'off');
 end
 end
 

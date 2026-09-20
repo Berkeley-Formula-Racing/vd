@@ -59,6 +59,27 @@ verifyEqual(testCase,delta.variantMinusBaseline,true);
 verifyEqual(testCase,delta.series(1).baselineId,"baseline");
 end
 
+function testComparisonRendersWithResampledGridFlags(testCase)
+baseline = makeComparisonRun("baseline",[5;10;15],[10;20;30], ...
+    [true;true;true],[false;false;false]);
+variant = makeComparisonRun("variant",[5;12.5;15],[12;27;34], ...
+    [true;true;true],[false;false;false]);
+delta = rampSpeed.buildComparison([baseline variant],"aero_front_load", ...
+    "baseline",struct("comparisonGrid_mps",[5;10;12.5;15]));
+series = delta.series(1);
+verifyEqual(testCase,numel(series.x),4);
+verifySize(testCase,series.valid,[4 1]);
+verifySize(testCase,series.truncated,[4 1]);
+verifySize(testCase,series.power_limited,[4 1]);
+verifySize(testCase,series.wheel_lift,[4 1]);
+fig = figure("Visible","off");
+cleanup = onCleanup(@()close(fig));
+ax = axes(fig);
+h = rampSpeed.renderMetric(ax,delta,struct("showLegend",false));
+verifyEqual(testCase,numel(h.lines),1);
+verifyTrue(testCase,all(isgraphics(h.lines)));
+end
+
 function run = makeComparisonRun(id,speeds,values,valid,truncated)
 speeds = double(speeds(:));
 values = double(values(:));
