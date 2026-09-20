@@ -47,9 +47,95 @@ verifyEqual(testCase,string(app.ProgressTextArea.Value(end)), ...
     "Study complete.");
 end
 
+function testCancelCallbackOwnsCancellationState(testCase)
+ensureRampSpeedAppPath();
+app = RampSpeedApp("Visible","off");
+cleanup = onCleanup(@()deleteIfValid(app));
+
+app.CancelButtonPushed([],[]);
+
+verifyEqual(testCase,string(app.ProgressTextArea.Value(end)), ...
+    "No study is running.");
+end
+
+function testFixtureRunPreservesOverlayLinesAndWarnings(testCase)
+ensureRampSpeedAppPath();
+fixture = makeRampFixture();
+app = RampSpeedApp("Visible","off");
+cleanup = onCleanup(@()deleteIfValid(app));
+
+fakeRunner = @runRenderFixture;
+app.runStudyForTest(fixture.cars,fixture.cases,fakeRunner);
+lines = findall(app.CapabilityAxes,"Type","line");
+markers = string(arrayfun(@(line)line.Marker,lines,"UniformOutput",false));
+
+verifyGreaterThanOrEqual(testCase,numel(lines),2);
+hasGap = any(arrayfun(@(line)any(isnan(double(line.YData))),lines));
+verifyTrue(testCase,hasGap);
+verifyTrue(testCase,any(markers == "o"));
+end
+
+function testBaselineSelectionRendersVariantMinusBaseline(testCase)
+ensureRampSpeedAppPath();
+fixture = makeRampFixture();
+app = RampSpeedApp("Visible","off");
+cleanup = onCleanup(@()deleteIfValid(app));
+
+app.runStudyForTest(fixture.cars,fixture.cases, ...
+    @(car,caseInfo,request,callbacks)makeFixtureRun(caseInfo));
+app.BaselineDropDown.Value = "accel";
+app.BaselineDropDown.ValueChangedFcn(app.BaselineDropDown,[]);
+lines = findall(app.BalanceAxes,"Type","line");
+labels = string(arrayfun(@(line)line.DisplayName,lines, ...
+    "UniformOutput",false));
+
+verifyGreaterThanOrEqual(testCase,numel(lines),1);
+verifyTrue(testCase,any(contains(labels," - accel")));
+verifyThat(testCase,string(app.BalanceAxes.YLabel.String), ...
+    matlab.unittest.constraints.ContainsSubstring("Delta"));
+end
+
+function testUnitSelectionChangesPlotValuesAndLabels(testCase)
+ensureRampSpeedAppPath();
+fixture = makeRampFixture();
+app = RampSpeedApp("Visible","off");
+cleanup = onCleanup(@()deleteIfValid(app));
+
+[study,~] = app.runStudyForTest(fixture.cars,fixture.cases, ...
+    @(car,caseInfo,request,callbacks)makeFixtureRun(caseInfo));
+siLines = findall(app.AeroLoadsAxes,"Type","line");
+siLine = siLines(find(arrayfun(@(line)~isempty(line.YData),siLines),1));
+siValues = double(siLine.YData);
+siLabel = string(app.AeroLoadsAxes.YLabel.String);
+app.UnitDropDown.Value = "imperial";
+app.UnitDropDown.ValueChangedFcn(app.UnitDropDown,[]);
+imperialLines = findall(app.AeroLoadsAxes,"Type","line");
+imperialLine = imperialLines(find(arrayfun(@(line)~isempty(line.YData), ...
+    imperialLines),1));
+imperialValues = double(imperialLine.YData);
+imperialLabel = string(app.AeroLoadsAxes.YLabel.String);
+
+verifyNotEqual(testCase,imperialValues,siValues);
+verifyThat(testCase,imperialLabel, ...
+    matlab.unittest.constraints.ContainsSubstring("lbf"));
+verifyNotEqual(testCase,imperialLabel,siLabel);
+verifyEqual(testCase,study.runs(1).perSpeed.downforce_N,[200;220],"AbsTol",0);
+end
+
+function run = runRenderFixture(~,caseInfo,~,~)
+run = makeFixtureRun(caseInfo);
+if string(caseInfo.id) == "baseline"
+    run.perSpeed.truncated(1) = true;
+    run.perSpeed.valid(2) = false;
+end
+end
 function ensureRampSpeedAppPath()
 root = fileparts(fileparts(mfilename("fullpath")));
 addpath(genpath(root));
+sourceRoot = fullfile(root,".task7");
+if isfolder(sourceRoot)
+    addpath(sourceRoot);
+end
 end
 
 function deleteIfValid(app)

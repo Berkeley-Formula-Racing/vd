@@ -74,6 +74,10 @@ end
 function ensureRampSpeedAppPath()
 root = fileparts(fileparts(mfilename("fullpath")));
 addpath(genpath(root));
+sourceRoot = fullfile(root,".task7");
+if isfolder(sourceRoot)
+    addpath(sourceRoot);
+end
 end
 
 function deleteIfValid(app)
