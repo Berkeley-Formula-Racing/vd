@@ -314,6 +314,34 @@ verifyTrue(testCase,isfile(checkpointPath));
     end
 end
 
+function testCanonicalColumnClassesAreRejectedAndStudyContinues(testCase)
+fixture = makeRampFixture();
+checkpointPath = fullfile(tempdir,"ramp-study-canonical-class-test.mat");
+cleanup = onCleanup(@()deleteIfPresent(checkpointPath));
+request = struct("rampType","lateral","settings",struct(), ...
+    "parallelRequested",false,"numWorkers",0, ...
+    "checkpointPath",checkpointPath,"appVersion","test", ...
+    "runCaseFcn",@returnWrongCanonicalClasses);
+[study,~] = rampSpeed.runStudy(fixture.cars,fixture.cases,request,struct());
+verifyEqual(testCase,study.runs(1).status,"failed");
+verifyTrue(testCase,isfield(study.runs(1).runMeta,'error'));
+if isfield(study.runs(1).runMeta,'error')
+    verifyEqual(testCase,study.runs(1).runMeta.error.identifier, ...
+        "rampSpeed:invalidRun");
+    verifyThat(testCase,study.runs(1).runMeta.error.message, ...
+        matlab.unittest.constraints.ContainsSubstring("valid"));
+end
+verifyEqual(testCase,study.runs(2).status,"complete");
+verifyTrue(testCase,isfile(checkpointPath));
+
+    function run = returnWrongCanonicalClasses(~,caseInfo,~,~)
+        run = makeFixtureRun(caseInfo);
+        if string(caseInfo.id) == "baseline"
+            run.perSpeed.valid = double(run.perSpeed.valid);
+        end
+    end
+end
+
 function testRunnerSelectsDistinctCarsFromRowVector(testCase)
 cars = {struct("marker","one"),struct("marker","two")};
 cases(1) = struct('id',"one",'label',"one",'source',"test", ...

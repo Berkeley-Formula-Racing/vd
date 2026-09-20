@@ -910,9 +910,20 @@ tf = all(isfield(run,cellstr(required)));
 end
 
 function issues = canonicalTableIssues(run,template)
-issues = strings(4,1);
-issueCount = 0;
 tableNames = {'perSpeed','points'};
+capacity = 0;
+for i = 1:numel(tableNames)
+    fieldName = tableNames{i};
+    if ~isfield(run,fieldName) || ~istable(run.(fieldName))
+        capacity = capacity + 1;
+    else
+        expected = string(template.(fieldName).Properties.VariableNames);
+        actual = string(run.(fieldName).Properties.VariableNames);
+        capacity = capacity + numel(expected) + numel(actual) + 1;
+    end
+end
+issues = strings(capacity,1);
+issueCount = 0;
 for i = 1:numel(tableNames)
     fieldName = tableNames{i};
     if ~isfield(run,fieldName) || ~istable(run.(fieldName))
@@ -934,6 +945,18 @@ for i = 1:numel(tableNames)
         issueCount = issueCount + 1;
         issues(issueCount,1) = "canonical " + string(fieldName) + ...
             " table has unexpected columns: " + strjoin(unexpected,", ");
+    end
+    sharedNames = intersect(expected,actual,'stable');
+    for j = 1:numel(sharedNames)
+        columnName = char(sharedNames(j));
+        expectedClass = class(template.(fieldName).(columnName));
+        actualClass = class(run.(fieldName).(columnName));
+        if ~strcmp(expectedClass,actualClass)
+            issueCount = issueCount + 1;
+            issues(issueCount,1) = "canonical " + string(fieldName) + ...
+                "." + string(columnName) + " column must have class " + ...
+                string(expectedClass) + " but has " + string(actualClass) + ".";
+        end
     end
 end
 issues = issues(1:issueCount);
