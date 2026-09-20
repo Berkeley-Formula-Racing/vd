@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MATLABProject xmlns="http://www.mathworks.com/MATLABProjectFile">
+  <RootFolder>Full Car Models</RootFolder>
+  <Application>
+    <Name>RampSpeedApp</Name>
+    <MainFile>RampSpeedApp.mlapp</MainFile>
+    <SchemaVersion>1</SchemaVersion>
+    <AppVersion>1.0.0</AppVersion>
+  </Application>
+  <Files>
+    <File path="RampSpeedApp.mlapp" role="app" />
+    <Folder path="+rampSpeed" role="package" />
+    <Folder path="tests" role="tests" />
+    <Folder path="carComponents" role="required-model" />
+    <Folder path="events" role="required-model" />
+    <Folder path="gg" role="required-model" />
+    <Folder path="CnAy" role="required-model" />
+    <Folder path="sweeps" role="required-model" />
+    <Folder path="utilities" role="required-model" />
+    <Folder path="testing" role="required-model" />
+    <Folder path="Phase Plane" role="required-model" />
+    <Folder path="Suspension Transient Model" role="required-model" />
+    <Folder path="Understeer Gradient" role="required-model" />
+  </Files>
+  <Startup>
+    <File path="setup_paths.m" />
+    <Shortcut name="setup_paths" file="setup_paths.m" />
+  </Startup>
+</MATLABProject>
