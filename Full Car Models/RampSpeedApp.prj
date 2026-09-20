@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <MATLABProject xmlns="http://www.mathworks.com/MATLABProjectFile">
-  <RootFolder>Full Car Models</RootFolder>
+  <RootFolder>.</RootFolder>
   <Application>
     <Name>RampSpeedApp</Name>
     <MainFile>RampSpeedApp.mlapp</MainFile>

@@ -1,6 +1,6 @@
 # Ramp Speed App
 
-RampSpeedApp is the schema-v1 MATLAB App Designer front end for lateral and longitudinal ramp studies. The project root is this `Full Car Models` folder.
+RampSpeedApp is the schema-v1 MATLAB App Designer front end for lateral and longitudinal ramp studies. The project root is this `Full Car Models` folder; `RampSpeedApp.prj` uses `.` to resolve paths relative to its containing folder.
 
 ## Open and initialize
 

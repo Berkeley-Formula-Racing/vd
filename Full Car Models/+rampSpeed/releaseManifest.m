@@ -69,9 +69,13 @@ end
 releaseFiles = ["RampSpeedApp.mlapp";"RampSpeedApp.prj"; ...
     "README_ramp_speed_app.md"];
 for i = 1:numel(releaseFiles)
-    candidate = fullfile(rootDirectory,releaseFiles(i));
+    relative = releaseFiles(i);
+    candidate = fullfile(rootDirectory,relative);
+    requiredPaths(end+1,1) = relative; %#ok<AGROW>
     if isfile(candidate)
-        files(end+1,1) = releaseFiles(i); %#ok<AGROW>
+        files(end+1,1) = relative; %#ok<AGROW>
+    else
+        missingPaths(end+1,1) = relative; %#ok<AGROW>
     end
 end
 files = unique(sort(files));
