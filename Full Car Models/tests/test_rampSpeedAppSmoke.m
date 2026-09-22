@@ -30,6 +30,28 @@ verifyTrue(testCase,all(ismember(["Capability","Balance","Aero & Loads", ...
     "Suspension","Raw Ramp","Inspector/Data"],tabTitles)));
 end
 
+function testRunCallbackUsesFunctionHandleBeforeOutputCount(testCase)
+root = fileparts(fileparts(mfilename("fullpath")));
+archive = fullfile(root,"RampSpeedApp.mlapp");
+temporaryRoot = tempname;
+mkdir(temporaryRoot);
+cleanup = onCleanup(@()rmdir(temporaryRoot,"s")); %#ok<NASGU>
+unzip(archive,temporaryRoot);
+
+documentPath = fullfile(temporaryRoot,"matlab","document.xml");
+verifyTrue(testCase,isfile(documentPath));
+document = fileread(documentPath);
+correctPattern = ['parfeval\s*\(\s*backgroundPool\s*,\s*' ...
+    '@rampSpeed\.runStudy\s*,\s*2\s*,'];
+reversedPattern = ['parfeval\s*\(\s*backgroundPool\s*,\s*2\s*,[\s\S]*?' ...
+    '@rampSpeed\.runStudy'];
+
+verifyNotEmpty(testCase,regexp(document,correctPattern,"once"), ...
+    "The Run callback must pass the function handle before the output count.");
+verifyEmpty(testCase,regexp(document,reversedPattern,"once"), ...
+    "The Run callback still uses the reversed parfeval signature.");
+end
+
 function testFixtureRunUsesInjectedRunnerWithoutSolver(testCase)
 ensureRampSpeedAppPath();
 fixture = makeRampFixture();
