@@ -62,10 +62,11 @@ classdef Tire2
 
             alpha = alpha*0.0174533; %degrees to radians
             F_z = F_z*0.224809; %N to lbf
+            invalidLoad = F_z <= 0;
+            F_z = max(F_z,1e-6);
 
             F_z0 = 200; %nominal load
             p_i0 = 13;  %nominal pressure
-            F_z = abs(F_z);
 
             df_z = (F_z- F_z0)./F_z;
             dp_i = (obj.p_i-p_i0)./obj.p_i;
@@ -173,10 +174,11 @@ classdef Tire2
             F_y = D_y.*sin(C_y.*atan(B_y.*alpha_y-E_y.*(B_y.*alpha_y-atan(B_y.*alpha_y))))+S_vy;
             F_y = transpose(G_ykappa.*F_y+S_vykappa);
 
-            F_y(F_z==0) = 0; %zero load
+            F_y(invalidLoad) = 0; %contact loss / zero load
 
             F_y2 = F_y.*4.44822.*obj.friction_scaling_factor; %lbf to N, scaled
             out = F_y2.*cambermultiplier + cambershiftMod;
+            out(invalidLoad) = 0;
             % A NaN here means the tire model produced garbage and fmincon is
             % about to search on it. This used to disp() three unlabelled
             % lines with no clue which corner or state caused it -- inside a
@@ -196,10 +198,11 @@ classdef Tire2
             gamma = gamma*0.0174533; %degrees to radians
             alpha_f = alpha*0.0174533; %degrees to radians
             F_z = F_z*0.224809; %N to lbf
+            invalidLoad = F_z <= 0;
+            F_z = max(F_z,1e-6);
 
             F_z0 = 200; %nominal load
             p_i0 = 13;  %nominal pressure
-            F_z = abs(F_z);
 
             df_z = (F_z- F_z0)./F_z;
             dp_i = (obj.p_i-p_i0)./obj.p_i;
@@ -276,9 +279,10 @@ classdef Tire2
             %Longitudinal Force
             F_x = transpose((D_x.*sin(C_x.*atan(B_x.*kappa_x-E_x.*(B_x.*kappa_x-atan(B_x.*kappa_x))))+S_vx).*G_xalpha);
 
-            F_x(F_z==0) = 0; %zero load
+            F_x(invalidLoad) = 0; %contact loss / zero load
 
             out = F_x*4.44822*obj.friction_scaling_factor; %lbf to N, scaled
+            out(invalidLoad) = 0;
 
         end
 

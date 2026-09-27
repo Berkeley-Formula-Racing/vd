@@ -1,4 +1,4 @@
-function [carCell,eventParams,designTable,baselineTable] = carConfig(samplingType,numSamples)
+function [carCell,eventParams,designTable,baselineTable] = carConfig(samplingType,numSamples,tireModel,uncertaintyMode)
 % outputs carCell:     one car per grid combination or DOE sample,
 %                      column 1 the lap car, column 2 the accel car
 %        eventParams:  everything the dynamic events need that is NOT a
@@ -14,8 +14,12 @@ function [carCell,eventParams,designTable,baselineTable] = carConfig(samplingTyp
 %
 % Default is the calibrated baseline/full-factorial configuration. For DOE:
 %   [cars,eventParams,X] = carConfig("Explicit",overrideTable);
+%   [cars,eventParams,X] = carConfig("FullFactorial",[],"lc0_nd");
+%   [cars,eventParams,X] = carConfig("FullFactorial",[],"lc0_nd","low");
 if nargin < 1 || isempty(samplingType), samplingType = "FullFactorial"; end
 if nargin < 2, numSamples = []; end
+if nargin < 3 || isempty(tireModel), tireModel = "legacy"; end
+if nargin < 4 || isempty(uncertaintyMode), uncertaintyMode = "nominal"; end
 
 % car parameters (updated 2/4/21)
 carParams = struct();
@@ -78,8 +82,11 @@ carParams.spring_rate_front_lb_in = 300;
 carParams.spring_rate_rear_lb_in  = 250;
 carParams.motion_ratio_front = 0.847;
 carParams.motion_ratio_rear  = 0.984;
-carParams.static_front_ride_height_in = [-0.25 0 0.25];
-carParams.static_rear_ride_height_in  = [-0.25 0 0.25];
+% Keep the default car as one calibrated baseline.  Ride-height variation is
+% generated explicitly by aeroMapStarCases rather than multiplying every
+% ordinary carConfig/DOE call into a 3-by-3 full-factorial grid.
+carParams.static_front_ride_height_in = 0;
+carParams.static_rear_ride_height_in  = 0;
 
 % aero parameters (updated 6/6/22)
 aeroParams = struct();
@@ -135,6 +142,14 @@ tireParams.gamma_f = -1; %linspace(0, -1.5, 8); % camber angle
 tireParams.gamma_r = -1; %linspace(0, -1.5, 8); % camber angle
 
 tireParams.p_i = [12]; % pressure
+% Keep the legacy Pacejka model as the default. The switchable LC0 model
+% uses exact target-size lateral data and the larger same-compound TTC donor
+% for longitudinal/combined-slip shape.
+tireParams.model_type = lower(string(tireModel));
+tireParams.model_uncertainty = lower(string(uncertaintyMode));
+tireParams.model_artifact = fullfile(fileparts(fileparts(mfilename('fullpath'))), ...
+    'Magic Formula','experimental','lc0_nd_tire','results', ...
+    'lc0_nd_pacejka_comparison.mat');
 % these parameters are non-iterable
 load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
 tireParams.Fx_parameters = cell2mat(Xbestcell);

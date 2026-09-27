@@ -811,8 +811,11 @@ classdef Car
                 end
             end
             [res,info] = obj.aeroRideResidual(heights,longVel,T);
-            toleranceIn = 1e-7;
-            maxIterations = 12;
+            % Keep the reported axle height and the mean of the four wheel
+            % heights numerically consistent; downstream diagnostics compare
+            % those two representations at tight tolerances.
+            toleranceIn = 1e-12;
+            maxIterations = 20;
             iterations = 0;
 
             while max(abs(res)) > toleranceIn && iterations < maxIterations
