@@ -22,6 +22,13 @@ if ~isstruct(callbacks) || ~isscalar(callbacks)
     error("rampSpeed:invalidCallbacks", ...
         "callbacks must be a scalar struct.");
 end
+% The canonical task executor owns row identity, cancellation, and failure
+% semantics. The legacy rampSweep adapter remains callable through the point
+% solver, but this public entry point no longer rebuilds rows by speed value.
+run = rampSpeed.runCanonicalLateralRamp(car,settings,caseInfo,callbacks);
+return
+[solverProfile,settings] = rampSpeed.resolveSolverProfileFromSettings(settings);
+car = rampSpeed.applySolverProfileToCar(car,solverProfile);
 
 progressFcn = [];
 cancelFcn = [];
@@ -39,7 +46,11 @@ rawOptions.cancelFcn = cancelFcn;
 started = datetime('now');
 runMeta = struct("source","rampSpeed.runLateralRamp", ...
     "started",started,"completed",datetime.empty, ...
-    "warnings",strings(0,1),"errors",strings(0,1));
+    "warnings",strings(0,1),"errors",strings(0,1), ...
+    "solverProfile",rampSpeed.serializeSolverProfile(solverProfile));
+if solverProfile.approximate
+    runMeta.warnings(end+1,1) = "Approximate aero preview: ride-height aero iteration is disabled.";
+end
 failure = [];
 
 try
@@ -268,8 +279,8 @@ end
 for i = 1:numel(ME.cause)
     cause = ME.cause{i};
     identifier = string(cause.identifier);
-    if startsWith(identifier,"rampSweep:speed:")
-        speedIndex = str2double(extractAfter(identifier,"rampSweep:speed:"));
+    if startsWith(identifier,"rampSweep:speed_")
+        speedIndex = str2double(extractAfter(identifier,"rampSweep:speed_"));
         original = cause;
         if ~isempty(cause.cause)
             original = cause.cause{1};

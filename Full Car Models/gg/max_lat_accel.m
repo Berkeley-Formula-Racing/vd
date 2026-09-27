@@ -1,4 +1,4 @@
-function [x_ss,lat_accel,long_accel,lat_accel_guess] = max_lat_accel(long_vel_guess,car,x0)
+function [x_ss,lat_accel,long_accel,lat_accel_guess] = max_lat_accel(long_vel_guess,car,x0,solverOptions)
 % uses fmincon to maximize lateral acceleration at a fixed longitudinal
 % velocity, with no longitudinal acceleration constraint
 %
@@ -43,6 +43,7 @@ function [x_ss,lat_accel,long_accel,lat_accel_guess] = max_lat_accel(long_vel_gu
 % exactly the wrong answer.
 
 FEAS_TOL = 1e-6;
+if nargin < 4 || isempty(solverOptions), solverOptions = struct(); end
 
 % Starts, tried in order. The analytic one comes from the kinematics rather
 % than from a constant: at the lateral limit a_y = v * yaw_rate, so the yaw
@@ -89,7 +90,7 @@ ub = [steer_angle_bounds(2),throttle_bounds(2),long_vel_bounds(2),lat_vel_bounds
 % The cap is a backstop now rather than the mechanism. With two starts a solve
 % that runs away on one of them is rescued by the other, so this only has to
 % be generous enough not to truncate a solve that is genuinely converging.
-opts = setOptimoptions(5000);
+opts = lateralSolverOptions(solverOptions,5000);
 
 % objective function: longitudinal velocity times yaw rate (v*v/r = v^2/r)
 f = @(P) -P(3)*P(5);
@@ -125,6 +126,30 @@ x_ss = [exitflag long_accel x(3)*x(5) x omega(1:4) engine_rpm current_gear beta.
 %max lat accel in m/s^2
 lat_accel = x(3)*x(5);
 
+end
+
+function opts = lateralSolverOptions(solverOptions,defaultEvaluations)
+maxEvaluations = defaultEvaluations;
+constraintTolerance = 1e-2;
+stepTolerance = 1e-10;
+displayMode = 'off';
+if isstruct(solverOptions) && isscalar(solverOptions)
+    if isfield(solverOptions,'maxFunctionEvaluations')
+        maxEvaluations = solverOptions.maxFunctionEvaluations;
+    end
+    if isfield(solverOptions,'constraintTolerance')
+        constraintTolerance = solverOptions.constraintTolerance;
+    end
+    if isfield(solverOptions,'stepTolerance')
+        stepTolerance = solverOptions.stepTolerance;
+    end
+    if isfield(solverOptions,'display')
+        displayMode = char(solverOptions.display);
+    end
+end
+opts = optimoptions('fmincon','MaxFunctionEvaluations',double(maxEvaluations), ...
+    'ConstraintTolerance',double(constraintTolerance), ...
+    'StepTolerance',double(stepTolerance),'Display',displayMode);
 end
 
 

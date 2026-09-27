@@ -81,6 +81,7 @@ nBisect    = getOr(opts,'nBisect',6);
 verbose    = getOr(opts,'verbose',true);
 progressFcn = getOr(opts,'progressFcn',[]);
 cancelFcn   = getOr(opts,'cancelFcn',[]);
+solverOptions = getOr(opts,'solverOptions',struct());
 
 if ~any(strcmpi(mode,{'balanced','coast'}))
     error('rampSweep:badMode','mode must be ''balanced'' or ''coast''');
@@ -115,7 +116,7 @@ for iv = 1:numel(speeds)
     ayLim = NaN; xLim = [];
     hasLimitError = false;
     try
-        [~,ayLim,~,xLim] = max_lat_accel(v,car);
+        [~,ayLim,~,xLim] = max_lat_accel(v,car,[],solverOptions);
     catch ME
         hasLimitError = true;
         speedErrors(end+1) = makeSpeedError(iv,v,ME); %#ok<AGROW>
@@ -142,6 +143,11 @@ for iv = 1:numel(speeds)
     for k = 1:nRamp
         ay = ayTargets(k);
 
+        if ~isempty(cancelFcn) && cancelFcn()
+            cancelled = true;
+            break
+        end
+
         % Continuation first, then two fallback seeds. Without the retries a
         % merely awkward warm start is indistinguishable from a point the car
         % genuinely cannot reach, and in 'balanced' mode that distinction is
@@ -149,10 +155,14 @@ for iv = 1:numel(speeds)
         seeds = {x0, seedState(v,ay,xLim), [2,0,v,0.05,ay/v,0,0,0,0]};
         got = false;
         for si = 1:numel(seeds)
+            if ~isempty(cancelFcn) && cancelFcn()
+                cancelled = true;
+                break
+            end
             xs = seeds{si};
             xs(3) = v;
             xs(5) = ay/v;         % the yaw rate the constraint will enforce
-            [x,exitflag,ceqMax] = solveRampPoint(car,xs,v,ay,holdSpeed);
+            [x,exitflag,ceqMax] = solveRampPoint(car,xs,v,ay,holdSpeed,solverOptions);
             % Exitflag alone is not enough. fmincon's exitflag 2 means the
             % step got small, which it also does when it is stuck at an
             % INFEASIBLE point -- and that is exactly what happens where a
@@ -162,6 +172,7 @@ for iv = 1:numel(speeds)
                 got = true; break
             end
         end
+        if cancelled, break, end
         if ~got
             misses = misses + 1;
             % three in a row means the ramp is over, not that one point was
@@ -177,6 +188,8 @@ for iv = 1:numel(speeds)
         m.speed_index = iv;
         if isempty(ramp), ramp = m; else, ramp(end+1) = m; end %#ok<AGROW>
     end
+
+    if cancelled, break, end
 
     if isempty(ramp)
         if verbose, fprintf('  v=%5.1f  ramp did not converge anywhere\n',v); end
@@ -202,8 +215,12 @@ for iv = 1:numel(speeds)
             aym = 0.5*(ayOK+ayBad);
             hit = false;
             for xs = {x0, seedState(v,aym,xLim)}
+                if ~isempty(cancelFcn) && cancelFcn()
+                    cancelled = true;
+                    break
+                end
                 z = xs{1}; z(3) = v; z(5) = aym/v;
-                [x,exitflag,ceqMax] = solveRampPoint(car,z,v,aym,holdSpeed);
+                [x,exitflag,ceqMax] = solveRampPoint(car,z,v,aym,holdSpeed,solverOptions);
                 if (exitflag == 1 || exitflag == 2) && ceqMax <= ceqTol
                     hit = true; break
                 end
@@ -216,7 +233,9 @@ for iv = 1:numel(speeds)
             else
                 ayBad = aym;
             end
+            if cancelled, break, end
         end
+        if cancelled, break, end
         if ~isempty(best), ramp(end+1) = best; end %#ok<AGROW>
     end
 
@@ -261,7 +280,7 @@ if isempty(rows)
         'to start.'],numel(speeds));
     failure = MException('rampSweep:noSolution',message);
     for i = 1:numel(speedErrors)
-        wrapper = MException(sprintf('rampSweep:speed:%d', ...
+        wrapper = MException(sprintf('rampSweep:speed_%d', ...
             speedErrors(i).speed_index),char(speedErrors(i).message));
         if ~isempty(speedCauses{i})
             wrapper = addCause(wrapper,speedCauses{i});
@@ -284,7 +303,7 @@ end
 end
 
 %% ------------------------------------------------------------------------
-function [x,exitflag,ceqMax] = solveRampPoint(car,x0,v,ayTarget,holdSpeed)
+function [x,exitflag,ceqMax] = solveRampPoint(car,x0,v,ayTarget,holdSpeed,solverOptions)
 % One steady-state point: the smallest steer angle that produces ayTarget.
 
 % bounds mirror max_lat_accel, except that 'balanced' mode has to be allowed
@@ -309,7 +328,7 @@ Aeq = [0 0 1 0 0 0 0 0 0
        0 0 0 0 0 0 0 1 -1];
 beq = [v 0 0 0];
 
-opts = setOptimoptions(1500);
+opts = lateralOptimoptions(solverOptions,1500);
 f = @(P) P(1);                       % minimum steer -> the stable branch
 nl = @(P) rampConstraint(car,P,ayTarget,holdSpeed);
 
@@ -571,6 +590,32 @@ if ~isstruct(config) || ~isfield(config,staticName) || ~isfield(config,motionNam
     return
 end
 travelIn = (config.(staticName)-rideHeightIn)*config.(motionName);
+end
+
+function opts = lateralOptimoptions(solverOptions,defaultEvaluations)
+if nargin < 2 || isempty(defaultEvaluations), defaultEvaluations = 1500; end
+maxEvaluations = defaultEvaluations;
+constraintTolerance = 1e-2;
+stepTolerance = 1e-10;
+displayMode = 'off';
+if isstruct(solverOptions) && isscalar(solverOptions)
+    if isfield(solverOptions,'maxFunctionEvaluations')
+        maxEvaluations = solverOptions.maxFunctionEvaluations;
+    end
+    if isfield(solverOptions,'constraintTolerance')
+        constraintTolerance = solverOptions.constraintTolerance;
+    end
+    if isfield(solverOptions,'stepTolerance')
+        stepTolerance = solverOptions.stepTolerance;
+    end
+    if isfield(solverOptions,'display')
+        displayMode = char(solverOptions.display);
+    end
+end
+opts = optimoptions('fmincon', ...
+    'MaxFunctionEvaluations',double(maxEvaluations), ...
+    'ConstraintTolerance',double(constraintTolerance), ...
+    'StepTolerance',double(stepTolerance),'Display',displayMode);
 end
 
 function v = getOr(s,f,d)

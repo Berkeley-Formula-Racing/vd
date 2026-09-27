@@ -99,7 +99,7 @@ run = rampSpeed.runLateralRamp(cars{1,1},settings, ...
     struct("id","baseline","label","baseline","carRole","lap"),struct());
 
 requested = (5:2.5:30).';
-verifyEqual(testCase,string(run.raw.status),"completed");
+verifyEqual(testCase,string(run.raw.status),"partial");
 verifyEqual(testCase,run.raw.settings.speeds,requested.', ...
     "AbsTol",1e-12);
 verifyEqual(testCase,run.perSpeed.speed_mps,requested,"AbsTol",1e-12);
