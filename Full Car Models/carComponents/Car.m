@@ -166,7 +166,18 @@ classdef Car
         end
 
         function [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T,Fy, gamma, Fx, ssInfo] = equations(obj,P)
+                Fzvirtual,Fz,alpha,T,Fy, gamma, Fx, ssInfo,rideHeightContext] = ...
+                equations(obj,P,rideHeightContext,evaluationOptions)
+            if nargin < 3
+                rideHeightContext = [];
+            end
+            if nargin < 4 || isempty(evaluationOptions)
+                evaluationOptions = struct();
+            end
+            if ~isstruct(evaluationOptions) || ~isscalar(evaluationOptions)
+                error('Car:invalidEvaluationOptions', ...
+                    'evaluationOptions must be a scalar struct.');
+            end
 
             % inputs: vehicle parameters
             % outputs: vehicle accelerations and other properties
@@ -188,7 +199,24 @@ classdef Car
             omega(3) = (kappa(3)+1)/obj.R*(long_vel+yaw_rate*obj.t_r/2);
             omega(4) = (kappa(4)+1)/obj.R*(long_vel-yaw_rate*obj.t_r/2);
 
-            [engine_rpm,current_gear] = obj.powertrain.engine_rpm(omega(3),omega(4),long_vel);
+            [automaticEngineRpm,automaticGear] = ...
+                obj.powertrain.engine_rpm(omega(3),omega(4),long_vel);
+            current_gear = automaticGear;
+            if isfield(evaluationOptions,'gearOverride') && ...
+                    ~isempty(evaluationOptions.gearOverride)
+                gearOverride = double(evaluationOptions.gearOverride);
+                if ~isscalar(gearOverride) || ~isfinite(gearOverride) || ...
+                        gearOverride ~= fix(gearOverride) || gearOverride < 1 || ...
+                        gearOverride > numel(obj.powertrain.gears)
+                    error('Car:invalidGearOverride', ...
+                        'gearOverride must be an integer gear in the powertrain range.');
+                end
+                current_gear = gearOverride;
+                engine_rpm = (omega(3)+omega(4))/2* ...
+                    obj.powertrain.drivetrain_reduction(current_gear)*30/pi;
+            else
+                engine_rpm = automaticEngineRpm;
+            end
             [T_1,T_2,T_3,T_4] = obj.powertrain.wheel_torques(engine_rpm, omega(3), omega(4), throttle, current_gear, long_vel);
             T = [T_1,T_2,T_3,T_4];
 
@@ -219,7 +247,10 @@ classdef Car
             % only assemble the diagnostics struct when a caller asks for it:
             % this runs inside every fmincon function evaluation
             needRideCamber = obj.hasRideCamber();
-            if nargout >= 16
+            if nargout >= 17
+                [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo,rideHeightContext] = ...
+                    ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180,rideHeightContext);
+            elseif nargout >= 16
                 [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
             elseif needRideCamber
                 [Fz,Fzvirtual,downforce,drag,wheelRideHeights] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
@@ -281,14 +312,20 @@ classdef Car
             wheel_accel(4) = (T(4)-Fx(4)*obj.R);
         end
 
-        function m = metrics(obj,P)
+        function m = metrics(obj,P,evaluationOptions)
             % Full named record of one solved operating point.
             % P is the 9-element state/control vector (same as equations).
             % Returns a scalar struct; struct arrays of these concatenate
             % straight into a table via struct2table.
 
-            [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T,Fy,gamma,Fx,ss] = obj.equations(P);
+            if nargin < 3 || isempty(evaluationOptions)
+                [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
+                     Fzvirtual,Fz,alpha,T,Fy,gamma,Fx,ss] = obj.equations(P);
+            else
+                [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
+                     Fzvirtual,Fz,alpha,T,Fy,gamma,Fx,ss] = ...
+                     obj.equations(P,[],evaluationOptions);
+            end
 
             % --- inputs / state ---
             m.steer_angle = P(1);
@@ -532,24 +569,37 @@ classdef Car
             xdot(14) = ((T(4)-Fx(4)*obj.R)*(obj.Jw+obj.Jm*(Gr/2)^2) - (T(3)-Fx(3)*obj.R)*obj.Jm*(Gr/2)^2)*(1/denom);
         end
 
-        function [Fz_f,Fz_r,aeroInfo] = FzForces(obj,longVel,T)
+        function [Fz_f,Fz_r,aeroInfo,rideHeightContext] = FzForces(obj,longVel,T,rideHeightContext)
+            if nargin < 4, rideHeightContext = []; end
             % Coupled F/R ride-height aero. The static branch intentionally
             % keeps legacy behaviour for saved cars and acceleration aero.
             if obj.hasRideHeightAero()
-                aeroInfo = obj.solveRideHeightAero(longVel,T);
+                if nargout >= 4 || ~isempty(rideHeightContext)
+                    [aeroInfo,rideHeightContext] = ...
+                        obj.solveRideHeightAero(longVel,T,rideHeightContext);
+                else
+                    aeroInfo = obj.solveRideHeightAero(longVel,T);
+                end
             else
                 coeff = obj.aero.coefficients(0,0);
                 aeroInfo = obj.aeroLoadsAtHeights(longVel,T,coeff,NaN,NaN,0,0);
+                rideHeightContext = [];
             end
             Fz_f = aeroInfo.Fz_front_axle;
             Fz_r = aeroInfo.Fz_rear_axle;
         end
 
-        function [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo] = ssForces(obj,longVel,yawRate,T,steer_angle)
+        function [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo,rideHeightContext] = ssForces(obj,longVel,yawRate,T,steer_angle,rideHeightContext)
+            if nargin < 6, rideHeightContext = []; end
             % Fifth output is the numeric corner ride-height vector needed by
             % ride-camber. Sixth exposes diagnostic load-transfer terms.
 
-            [Fz_front,Fz_rear,aeroInfo] = FzForces(obj,longVel,T);
+            if nargout >= 7 || ~isempty(rideHeightContext)
+                [Fz_front,Fz_rear,aeroInfo,rideHeightContext] = ...
+                    FzForces(obj,longVel,T,rideHeightContext);
+            else
+                [Fz_front,Fz_rear,aeroInfo] = FzForces(obj,longVel,T);
+            end
             downforce = aeroInfo.downforce;
             drag = aeroInfo.drag;
 
@@ -642,13 +692,85 @@ classdef Car
             compressionIn = staticHeights-wheelRideHeights(:);
         end
 
-        function info = solveRideHeightAero(obj,longVel,T)
+        function context = newRideHeightAeroContext(obj,initialHeightsIn)
+            if nargin < 2 || isempty(initialHeightsIn)
+                initialHeightsIn = [obj.rideHeightAero.static_front_ride_height_in; ...
+                    obj.rideHeightAero.static_rear_ride_height_in];
+            end
+            if ~isnumeric(initialHeightsIn) || ~isreal(initialHeightsIn) || ...
+                    numel(initialHeightsIn) ~= 2 || ...
+                    any(~isfinite(initialHeightsIn(:)))
+                error('Car:invalidRideHeightAeroInitialGuess', ...
+                    'Initial ride heights must be two finite numeric values in inches.');
+            end
+            context = struct("schemaVersion",1, ...
+                "carSignature",obj.rideHeightAeroContextSignature(), ...
+                "initialHeightsIn",double(initialHeightsIn(:)), ...
+                "longVel_mps",NaN,"wheelTorque_Nm",zeros(1,0), ...
+                "isSeed",true,"usedWarmStart",false, ...
+                "usedColdFallback",false);
+        end
+
+        function signature = rideHeightAeroContextSignature(obj)
+            aeroSignature = struct("class",string(class(obj.aero)), ...
+                "baseCoefficients",[obj.aero.cla,obj.aero.cda, ...
+                    obj.aero.D_f,obj.aero.D_r,obj.aero.cla_p_deg_p, ...
+                    obj.aero.D_p_deg_p,obj.aero.rho], ...
+                "mapClass","","mapSourcePath","", ...
+                "mapCorrections",zeros(1,0));
+            if obj.aero.hasMap()
+                map = obj.aero.map;
+                aeroSignature.mapClass = string(class(map));
+                for name = ["sourcePath","claScale","cdaScale","copOffset"]
+                    if isprop(map,char(name))
+                        value = map.(char(name));
+                        if name == "sourcePath"
+                            aeroSignature.mapSourcePath = string(value);
+                        else
+                            aeroSignature.mapCorrections(end+1) = double(value);
+                        end
+                    end
+                end
+            end
+            signature = struct("vehicleParameters", ...
+                [obj.M,obj.W_b,obj.l_f,obj.l_r,obj.h_g,obj.g], ...
+                "rideHeightAero",obj.rideHeightAero, ...
+                "aero",aeroSignature);
+        end
+
+        function [info,context] = solveRideHeightAero(obj,longVel,T,context)
             % Solve r = height - height(load(height)) = 0 with a damped
             % two-variable Newton method. This avoids the unconverged one-step
             % pitch update the old model used.
+            if nargin < 4, context = []; end
             cfg = obj.rideHeightAero;
             heights = [cfg.static_front_ride_height_in; ...
                        cfg.static_rear_ride_height_in];
+            usedWarmStart = false;
+            if isstruct(context) && isscalar(context) && ...
+                    isfield(context,'carSignature') && ...
+                    isequaln(context.carSignature,obj.rideHeightAeroContextSignature()) && ...
+                    isfield(context,'initialHeightsIn') && ...
+                    numel(context.initialHeightsIn) == 2 && ...
+                    all(isfinite(context.initialHeightsIn(:)))
+                if isfield(context,'isSeed') && context.isSeed
+                    usedWarmStart = true;
+                elseif isfield(context,'longVel_mps') && ...
+                        isfield(context,'wheelTorque_Nm') && ...
+                        isfinite(context.longVel_mps) && ...
+                        abs(double(context.longVel_mps)-longVel) <= ...
+                        1e-9*max(1,abs(longVel)) && ...
+                        isequal(size(context.wheelTorque_Nm),size(T))
+                    torqueScale = max([1,abs(double(T(:).')), ...
+                        abs(double(context.wheelTorque_Nm(:).'))]);
+                    usedWarmStart = max(abs(double(T(:).')- ...
+                        double(context.wheelTorque_Nm(:).'))) <= ...
+                        max(5,0.2*torqueScale);
+                end
+                if usedWarmStart
+                    heights = double(context.initialHeightsIn(:));
+                end
+            end
             [res,info] = obj.aeroRideResidual(heights,longVel,T);
             toleranceIn = 1e-7;
             maxIterations = 12;
@@ -694,13 +816,23 @@ classdef Car
             info.iterations = iterations;
             info.residualIn = max(abs(res));
             info.converged = info.residualIn <= toleranceIn;
+            context = obj.newRideHeightAeroContext(heights);
+            context.longVel_mps = double(longVel);
+            context.wheelTorque_Nm = double(T(:).');
+            context.isSeed = false;
+            context.usedWarmStart = usedWarmStart;
+            context.usedColdFallback = false;
         end
 
         function [res,info] = aeroRideResidual(obj,heights,longVel,T)
             cfg = obj.rideHeightAero;
-            coeff = obj.aero.coefficients( ...
-                heights(1)-cfg.map_reference_front_ride_height_in, ...
-                heights(2)-cfg.map_reference_rear_ride_height_in);
+            frontOffsetIn = heights(1)-cfg.map_reference_front_ride_height_in;
+            rearOffsetIn = heights(2)-cfg.map_reference_rear_ride_height_in;
+            [cla,cda,D_f,D_r,outsideMap] = obj.aero.coefficientsNumeric( ...
+                frontOffsetIn,rearOffsetIn);
+            coeff = struct("cla",cla,"cda",cda,"D_f",D_f,"D_r",D_r, ...
+                "frontOffsetIn",frontOffsetIn,"rearOffsetIn",rearOffsetIn, ...
+                "outsideMap",outsideMap);
             info = obj.aeroLoadsAtHeights(longVel,T,coeff,heights(1),heights(2),0,0);
             targetFront = cfg.static_front_ride_height_in - ...
                 ((info.Fz_front_axle-info.static_front_load_N)/2) / ...
@@ -783,15 +915,30 @@ classdef Car
         % output ceq: constrains certain accelerations to 0 to satisfy
         %   steady-state conditions
 
-        function [c,ceq] = constraint1(obj,P)
+        function [c,ceq,rideHeightContext] = ...
+                constraint1(obj,P,rideHeightContext,evaluationOptions)
+            if nargin < 3, rideHeightContext = []; end
+            if nargin < 4 || isempty(evaluationOptions)
+                evaluationOptions = struct();
+            end
             % no lateral acceleration constraint
             % used for optimizing longitudinal acceleration/braking
             % note: callers that want symmetric rear slip (kappa_4 = kappa_3)
             % must impose it through Aeq, not here -- the objective and the
             % constraints have to evaluate the same state vector
 
-            [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T] = obj.equations(P);
+            if nargin >= 4
+                [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
+                     Fzvirtual,Fz,alpha,T,~,~,~,~,rideHeightContext] = ...
+                    obj.equations(P,rideHeightContext,evaluationOptions);
+            elseif nargin >= 3 || nargout >= 3
+                [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
+                     Fzvirtual,Fz,alpha,T,~,~,~,~,rideHeightContext] = ...
+                    obj.equations(P,rideHeightContext);
+            else
+                [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
+                    Fzvirtual,Fz,alpha,T] = obj.equations(P);
+            end
             c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
             ceq = [lat_accel,yaw_accel,wheel_accel(1:4)];
         end
