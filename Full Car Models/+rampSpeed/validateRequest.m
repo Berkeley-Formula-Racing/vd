@@ -56,12 +56,8 @@ if isfield(rawRequest, 'execution')
     end
 end
 if isfield(rawRequest, 'solverProfile')
-    profile = rawRequest.solverProfile;
-    if ~(ischar(profile) && isrow(profile)) && ...
-            ~(isstring(profile) && isscalar(profile) && ~ismissing(profile))
-        error('rampSpeed:invalidSolverProfile', ...
-            'solverProfile must be a text scalar.');
-    end
+    normalizeText(rawRequest.solverProfile, 'rampSpeed:invalidSolverProfile', ...
+        'solverProfile must be a nonempty text scalar.');
 end
 
 isValid = true;

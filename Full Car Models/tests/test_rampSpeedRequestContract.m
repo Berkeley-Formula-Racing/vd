@@ -59,6 +59,14 @@ verifyError(testCase, @() rampSpeed.normalizeRequest(request), ...
     'rampSpeed:unsupportedAdaptiveMode');
 end
 
+function testRejectsEmptySolverProfileAtValidationBoundary(testCase)
+request = makeRequest("longitudinal", 5);
+request.solverProfile = "   ";
+
+verifyError(testCase, @() rampSpeed.validateRequest(request), ...
+    'rampSpeed:invalidSolverProfile');
+end
+
 function testMakesOneStableTaskForEachRequestedSpeed(testCase)
 request = rampSpeed.normalizeRequest(makeRequest("lateral", [5; 10; 20]));
 plan = rampSpeed.makeSpeedPlan(request);
