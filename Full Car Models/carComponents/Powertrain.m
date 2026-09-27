@@ -64,9 +64,20 @@ classdef Powertrain
             engine_rpm = (omega_3+omega_4)/2*obj.drivetrain_reduction(current_gear)*30/pi; %rpm      
             %engine_rpm = (omega_3+omega_4)/2*obj.final_drive(current_gear)*30/pi; %rpm          
         end            
-        function [T_1,T_2,T_3,T_4] = wheel_torques(obj, engine_rpm, omega_3, omega_4, throttle, current_gear,long_vel)
+        function [T_1,T_2,T_3,T_4] = wheel_torques(obj, engine_rpm, omega_3, omega_4, throttle, current_gear,long_vel,drivetrainReductionOverride)
             % outputs wheel torques
             % driving torque is positive, braking is negative (opposite of SAE convention)
+
+            if nargin < 8 || isempty(drivetrainReductionOverride)
+                drivetrainReduction = obj.drivetrain_reduction(current_gear);
+            else
+                drivetrainReduction = double(drivetrainReductionOverride);
+                if ~isscalar(drivetrainReduction) || ~isfinite(drivetrainReduction) || ...
+                        drivetrainReduction <= 0
+                    error('Powertrain:invalidReductionOverride', ...
+                        'drivetrainReductionOverride must be a finite positive scalar.');
+                end
+            end
             
             if throttle > 0 % accelerating
                 % linear interpolation of torque curve
@@ -77,7 +88,7 @@ classdef Powertrain
                 
                 torque_engine = torque_engine*obj.drivetrain_efficiency; 
                 % differential model
-                torque_drive = torque_engine*obj.drivetrain_reduction(current_gear);
+                torque_drive = torque_engine*drivetrainReduction;
 
                 if torque_drive < 0 % overrun - not used
                     torque_transfer = 0;%-obj.G_d1-obj.G_d2_overrun*torque_drive;
@@ -97,8 +108,8 @@ classdef Powertrain
                 
                 T_1 = 0;
                 T_2 = 0;
-                T_3 = (torque_engine*obj.drivetrain_reduction(current_gear))/2+delta_t;
-                T_4 = (torque_engine*obj.drivetrain_reduction(current_gear))/2-delta_t;      
+                T_3 = (torque_engine*drivetrainReduction)/2+delta_t;
+                T_4 = (torque_engine*drivetrainReduction)/2-delta_t;
                 
                 TBR_print = max(T_3/T_4, T_4/T_3);
                 %TBR_print
@@ -116,9 +127,9 @@ classdef Powertrain
                 T_1 = (torque_braking*obj.brake_distribution)/2;
                 T_2 = (torque_braking*obj.brake_distribution)/2;
                 T_3 = (torque_braking*(1-obj.brake_distribution))/2+...
-                    (torque_engine*obj.drivetrain_reduction(current_gear))/2+delta_t;
+                    (torque_engine*drivetrainReduction)/2+delta_t;
                 T_4 = (torque_braking*(1-obj.brake_distribution))/2+...
-                    (torque_engine*obj.drivetrain_reduction(current_gear))/2-delta_t;
+                    (torque_engine*drivetrainReduction)/2-delta_t;
             end
         end
     end

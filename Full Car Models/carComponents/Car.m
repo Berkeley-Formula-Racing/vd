@@ -147,7 +147,7 @@ classdef Car
             end
         end
 
-        function m = rotatingMass(obj,current_gear)
+        function m = rotatingMass(obj,current_gear,drivetrainReductionOverride)
             % Equivalent translating mass, in kg, of everything that has to be
             % angularly accelerated along with the car.
             %
@@ -161,7 +161,15 @@ classdef Car
             % Only the inertia is added here. The WEIGHT of these parts is
             % already in M, so load transfer and the static axle loads must
             % keep using M on its own.
-            n = obj.powertrain.drivetrain_reduction(current_gear);
+            if nargin < 3 || isempty(drivetrainReductionOverride)
+                n = obj.powertrain.drivetrain_reduction(current_gear);
+            else
+                n = double(drivetrainReductionOverride);
+                if ~isscalar(n) || ~isfinite(n) || n <= 0
+                    error('Car:invalidReductionOverride', ...
+                        'drivetrainReductionOverride must be a finite positive scalar.');
+                end
+            end
             m = (4*obj.I_wheel + obj.I_driveline*n^2)/obj.R^2;
         end
 
@@ -202,8 +210,26 @@ classdef Car
             [automaticEngineRpm,automaticGear] = ...
                 obj.powertrain.engine_rpm(omega(3),omega(4),long_vel);
             current_gear = automaticGear;
-            if isfield(evaluationOptions,'gearOverride') && ...
-                    ~isempty(evaluationOptions.gearOverride)
+            hasGearOverride = isfield(evaluationOptions,'gearOverride') && ...
+                ~isempty(evaluationOptions.gearOverride);
+            hasContinuousRatio = isfield(evaluationOptions,'continuousRatio') && ...
+                ~isempty(evaluationOptions.continuousRatio);
+            if hasGearOverride && hasContinuousRatio
+                error('Car:conflictingPowertrainOverrides', ...
+                    'gearOverride and continuousRatio cannot be used together.');
+            end
+            if hasContinuousRatio
+                continuousRatio = double(evaluationOptions.continuousRatio);
+                if ~isscalar(continuousRatio) || ~isfinite(continuousRatio) || ...
+                        continuousRatio <= 0
+                    error('Car:invalidContinuousRatio', ...
+                        'continuousRatio must be a finite positive scalar.');
+                end
+                drivetrainReduction = continuousRatio;
+                current_gear = NaN;
+                engine_rpm = (omega(3)+omega(4))/2* ...
+                    drivetrainReduction*30/pi;
+            elseif hasGearOverride
                 gearOverride = double(evaluationOptions.gearOverride);
                 if ~isscalar(gearOverride) || ~isfinite(gearOverride) || ...
                         gearOverride ~= fix(gearOverride) || gearOverride < 1 || ...
@@ -212,12 +238,16 @@ classdef Car
                         'gearOverride must be an integer gear in the powertrain range.');
                 end
                 current_gear = gearOverride;
+                drivetrainReduction = obj.powertrain.drivetrain_reduction(current_gear);
                 engine_rpm = (omega(3)+omega(4))/2* ...
-                    obj.powertrain.drivetrain_reduction(current_gear)*30/pi;
+                    drivetrainReduction*30/pi;
             else
+                drivetrainReduction = obj.powertrain.drivetrain_reduction(current_gear);
                 engine_rpm = automaticEngineRpm;
             end
-            [T_1,T_2,T_3,T_4] = obj.powertrain.wheel_torques(engine_rpm, omega(3), omega(4), throttle, current_gear, long_vel);
+            [T_1,T_2,T_3,T_4] = obj.powertrain.wheel_torques( ...
+                engine_rpm, omega(3), omega(4), throttle, current_gear, ...
+                long_vel,drivetrainReduction);
             T = [T_1,T_2,T_3,T_4];
 
 
@@ -301,7 +331,8 @@ classdef Car
             % M + rotatingMass, not M: the tyre force has to accelerate the
             % spinning parts as well as the car. Zero inertias reduce this to
             % the old expression exactly.
-            long_accel = (sum(Fx)-drag-F_rr)*(1/(obj.M+obj.rotatingMass(current_gear)))+yaw_rate*lat_vel;
+            long_accel = (sum(Fx)-drag-F_rr)*(1/(obj.M+ ...
+                obj.rotatingMass(current_gear,drivetrainReduction)))+yaw_rate*lat_vel;
             yaw_accel = ((Fx(1)-Fx(2))*obj.t_f/2+(Fx(3)-Fx(4))*obj.t_r/2+(Fy(1)+Fy(2))*obj.l_f-(Fy(3)+Fy(4))*obj.l_r)*(1/obj.I_zz);
             %yaw_accel = ((Fy(1)+Fy(2))*obj.l_f-(Fy(3)+Fy(4))*obj.l_r)*(1/obj.I_zz);
 
@@ -351,6 +382,14 @@ classdef Car
             % --- powertrain ---
             m.engine_rpm   = engine_rpm;
             m.current_gear = current_gear;
+            if nargin >= 3 && isfield(evaluationOptions,'continuousRatio') && ...
+                    ~isempty(evaluationOptions.continuousRatio)
+                m.powertrain_model = "continuousEnvelope";
+                m.drivetrain_reduction = double(evaluationOptions.continuousRatio);
+            else
+                m.powertrain_model = "explicitGear";
+                m.drivetrain_reduction = obj.powertrain.drivetrain_reduction(current_gear);
+            end
 
             % --- aero ---
             m.downforce = ss.downforce;
