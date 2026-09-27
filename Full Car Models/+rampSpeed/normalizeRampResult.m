@@ -63,6 +63,8 @@ if ~isfield(runMeta,'completed')
 end
 run.runMeta.speedMatchTolerance_mps = tolerance;
 run.runMeta.speedMatchPolicy = "first unused raw row within absolute tolerance";
+run.runMeta.pointGroupingPolicy = ...
+    "explicit speed_index when present; otherwise stable repeated speed values";
 if ~isempty(unusedRawSpeeds)
     run.runMeta.warnings(end+1,1) = "unused raw speed row(s): " + ...
         join(string(unusedRawSpeeds),", ");
@@ -317,7 +319,13 @@ inequalityTolerance = getNumericSetting(settings, ...
     residualTolerance);
 
 hasExit = finite(exitflag);
-exitBad = hasExit & ~(exitflag == 1 | exitflag == 2);
+[rawNear,hasNear] = readField(data,'accepted_near_feasible',n);
+if hasNear
+    acceptedNear = toLogical(rawNear,n);
+else
+    acceptedNear = false(n,1);
+end
+exitBad = hasExit & ~(exitflag == 1 | exitflag == 2) & ~acceptedNear;
 countsKnown = finite(nExitflag1) | finite(nExitflag2);
 countGood = (finite(nExitflag1) & nExitflag1 > 0) | ...
     (finite(nExitflag2) & nExitflag2 > 0);
@@ -329,6 +337,11 @@ inequalityKnown = finite(inequality);
 inequalityBad = inequalityKnown & inequality > inequalityTolerance;
 rawStatusLower = lower(strtrim(rawStatus));
 statusBad = ismember(rawStatusLower,["failed","invalid","cancelled"]);
+canonicalStatus = ismember(rawStatusLower, ...
+    ["planned","running","converged","near_feasible","infeasible", ...
+    "solver_failed","cancelled","complete","completed"]);
+canonicalSuccess = ismember(rawStatusLower, ...
+    ["converged","near_feasible","complete","completed"]);
 explicitBad = hasValid & ~explicitValid;
 
 bad = sourcePresent & (exitBad | countBad | residualBad | ...
@@ -343,6 +356,10 @@ status(good) = "complete";
 status(bad) = "invalid";
 status(unknown) = "unknown";
 status(missing) = "missing";
+status(canonicalStatus & sourcePresent) = rawStatusLower( ...
+    canonicalStatus & sourcePresent);
+valid(canonicalStatus & sourcePresent) = ...
+    canonicalSuccess(canonicalStatus & sourcePresent);
 
 for i = 1:n
     if strlength(strtrim(matchReasons(i))) > 0
@@ -361,6 +378,10 @@ for i = 1:n
         end
     elseif unknown(i) && strlength(strtrim(reason(i))) == 0
         reason(i) = "feasibility evidence unavailable";
+    end
+    if canonicalStatus(i) && strlength(strtrim(reason(i))) == 0 && ...
+            ~canonicalSuccess(i)
+        reason(i) = "source status: " + rawStatusLower(i);
     end
 end
 end
@@ -393,10 +414,16 @@ P.speed_mps = firstNumeric(blockData,n, ...
     {'speed_mps','vCar','speed','long_vel'},1);
 P.speed_index = firstNumeric(blockData,n,{'speed_index','speedIndex'},1);
 missingIndex = ~finite(P.speed_index);
-P.speed_index(missingIndex) = find(missingIndex);
+if any(missingIndex)
+    inferredSpeedIndex = inferStableSpeedIndices(P.speed_mps,settings);
+    P.speed_index(missingIndex) = inferredSpeedIndex(missingIndex);
+end
 P.point_index = firstNumeric(blockData,n,{'point_index','pointIndex'},1);
 missingPoint = ~finite(P.point_index);
-P.point_index(missingPoint) = find(missingPoint);
+if any(missingPoint)
+    inferredPointIndex = inferWithinSpeedPointIndices(P.speed_index);
+    P.point_index(missingPoint) = inferredPointIndex(missingPoint);
+end
 P.valid = firstLogical(blockData,n,{'valid'},true(n,1));
 P.status = firstString(blockData,n,{'status'},strings(n,1));
 missingStatus = strlength(strtrim(P.status)) == 0;
@@ -489,6 +516,40 @@ end
     P.max_constraint_residual,P.max_equality_residual, ...
     P.max_inequality_violation, ...
     NaN(n,1),NaN(n,1),strings(n,1));
+end
+
+function indices = inferStableSpeedIndices(speeds,settings)
+speeds = double(speeds(:));
+indices = NaN(size(speeds));
+tolerance = getNumericSetting(settings, ...
+    {'speedMatchTolerance_mps','speedTolerance_mps'},1e-9);
+if ~isfinite(tolerance) || tolerance < 0
+    tolerance = 1e-9;
+end
+uniqueSpeeds = zeros(0,1);
+for i = 1:numel(speeds)
+    if ~isfinite(speeds(i))
+        continue
+    end
+    match = find(abs(uniqueSpeeds - speeds(i)) <= tolerance,1,"first");
+    if isempty(match)
+        uniqueSpeeds(end+1,1) = speeds(i); %#ok<AGROW>
+        match = numel(uniqueSpeeds);
+    end
+    indices(i) = match;
+end
+end
+
+function indices = inferWithinSpeedPointIndices(speedIndices)
+speedIndices = double(speedIndices(:));
+indices = NaN(size(speedIndices));
+groups = unique(speedIndices(isfinite(speedIndices)),"stable");
+for i = 1:numel(groups)
+    rows = find(speedIndices == groups(i));
+    indices(rows) = (1:numel(rows)).';
+end
+unknownRows = find(~isfinite(indices));
+indices(unknownRows) = (1:numel(unknownRows)).';
 end
 
 function names = pointNames()

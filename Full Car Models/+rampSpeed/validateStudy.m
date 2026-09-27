@@ -16,6 +16,27 @@ end
 if isfield(study,'schemaVersion') && ~isequal(study.schemaVersion,1)
     issues(end+1) = "unsupported study schema version";
 end
+if isfield(study,'setupSpecifications')
+    if ~isstruct(study.setupSpecifications)
+        issues(end+1) = "study.setupSpecifications must be a struct array";
+    elseif ~isempty(study.setupSpecifications)
+        setupIds = strings(numel(study.setupSpecifications),1);
+        for i = 1:numel(study.setupSpecifications)
+            if ~isfield(study.setupSpecifications(i),'id') || ...
+                    strlength(strtrim(string( ...
+                    study.setupSpecifications(i).id))) == 0
+                issues(end+1) = sprintf( ...
+                    'setup specification %d is missing id',i);
+            else
+                setupIds(i) = string(study.setupSpecifications(i).id);
+            end
+        end
+        nonempty = strlength(strtrim(setupIds)) > 0;
+        if any(nonempty) && numel(unique(setupIds(nonempty))) ~= nnz(nonempty)
+            issues(end+1) = "duplicate setup specification IDs";
+        end
+    end
+end
 if isfield(study,'cases')
     if ~isstruct(study.cases)
         issues(end+1) = "study.cases must be a struct array";
@@ -69,9 +90,9 @@ if isfield(run,'type')
 end
 if isfield(run,'status')
     status = lower(string(run.status));
-    allowed = ["pending","running","completed","complete", ...
-        "failed","cancelled","partial","warning","unknown","missing", ...
-        "invalid"];
+    allowed = ["pending","planned","running","converged","near_feasible", ...
+        "completed","complete","failed","solver_failed","infeasible", ...
+        "cancelled","partial","warning","unknown","missing","invalid"];
     if ~isscalar(status) || ~any(status == allowed)
         issues(end+1) = "invalid run status: " + string(run.status);
     end

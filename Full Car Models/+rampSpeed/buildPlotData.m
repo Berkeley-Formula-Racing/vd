@@ -8,7 +8,9 @@ runList = normalizeRuns(runs);
 metric = findMetric(metricId);
 
 data = struct('metricId',metric.id,'metric',metric, ...
-    'sourceLevel',metric.sourceLevel,'xLabel',"speed (m/s)", ...
+    'sourceLevel',metric.sourceLevel,'xSource',metric.xSource, ...
+    'truncationPolicy',metric.truncationPolicy, ...
+    'xLabel',"speed (m/s)", ...
     'yLabel',metric.yLabel,'series',repmat(seriesTemplate(),0,1));
 
 for i = 1:numel(runList)
@@ -99,7 +101,7 @@ if ~isfield(run,'perSpeed') || ~istable(run.perSpeed)
 end
 T = run.perSpeed;
 x = numericColumn(T,"speed_mps",NaN);
-[rawValues,hasValues] = metricValues(T,metric);
+    [rawValues,hasValues] = metricValues(T,metric,run);
 values = scaledValues(rawValues,metric.scale);
 rowValid = logicalColumn(T,"valid",true);
 ruleValid = validityMask(T,metric.validityRule);
@@ -110,6 +112,10 @@ series.x = x;
 series.values = values;
 series.valid = rowValid;
 series.truncated = logicalColumn(T,"truncated",false);
+if isfield(metric,'truncationPolicy') && ...
+        string(metric.truncationPolicy) == "allow"
+    series.truncated(:) = false;
+end
 series.power_limited = logicalColumn(T,"power_limited",false);
 series.wheel_lift = logicalColumn(T,"wheel_lift",false);
 series.aero_outside_map = logicalColumn(T,"aero_outside_map",false);
@@ -128,7 +134,7 @@ if ~isfield(run,'points') || ~istable(run.points)
 end
 T = run.points;
 x = numericColumn(T,"speed_mps",NaN);
-[rawValues,hasValues] = metricValues(T,metric);
+    [rawValues,hasValues] = metricValues(T,metric,run);
 values = scaledValues(rawValues,metric.scale);
 rowValid = logicalColumn(T,"valid",true);
 ruleValid = validityMask(T,metric.validityRule);
@@ -200,10 +206,25 @@ series.status = flatStatus;
 series.groups = groups;
 end
 
-function [values,hasValues] = metricValues(T,metric)
+function [values,hasValues] = metricValues(T,metric,run)
 hasValues = true(height(T),1);
 try
-    if isa(metric.derivation,'function_handle')
+    if string(metric.id) == "drag_deceleration"
+        drag = numericColumn(T,"drag_N",NaN);
+        mass = NaN;
+        if isfield(run,'settings') && isstruct(run.settings)
+            mass = scalarField(run.settings, ...
+                ["mass_kg","mass"],NaN);
+        end
+        if (~isfinite(mass) || mass <= 0) && isfield(run,'runMeta') && ...
+                isstruct(run.runMeta)
+            mass = scalarField(run.runMeta, ...
+                ["mass_kg","mass"],NaN);
+        end
+        values = drag ./ mass;
+        values(~isfinite(values)) = NaN;
+        hasValues = isfinite(values);
+    elseif isa(metric.derivation,'function_handle')
         values = metric.derivation(T);
     elseif strlength(string(metric.field)) > 0 && ...
             ismember(char(metric.field),T.Properties.VariableNames)
@@ -227,6 +248,20 @@ if numel(values) ~= height(T)
     values = resized;
     hasValues(:) = false;
     hasValues(1:n) = true;
+end
+end
+
+function value = scalarField(record,names,default)
+value = default;
+for i = 1:numel(names)
+    name = char(names(i));
+    if isfield(record,name) && ~isempty(record.(name))
+        candidate = double(record.(name));
+        if isscalar(candidate)
+            value = candidate;
+            return
+        end
+    end
 end
 end
 
