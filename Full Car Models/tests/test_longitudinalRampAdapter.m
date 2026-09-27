@@ -17,6 +17,67 @@ verifyFalse(testCase,row.lateral_metrics_applicable);
 verifyTrue(testCase,isnan(run.perSpeed.K_linear_rad_per_mps2(1)));
 end
 
+function testAppResidualToleranceDoesNotRejectLongitudinalRows(testCase)
+[car,~] = carConfigBaseline();
+settings = struct("speeds",[5 10 15 20],"mode","coast", ...
+    "residualTolerance",1e-6,"verbose",false);
+caseInfo = struct("id","baseline","label","baseline", ...
+    "carRole","auto");
+
+run = rampSpeed.runLongitudinalRamp(car,settings,caseInfo,struct());
+
+verifyTrue(testCase,all(run.perSpeed.valid));
+verifyEqual(testCase,run.perSpeed.status, ...
+    repmat("complete",4,1));
+verifyTrue(testCase,all(isfinite(run.perSpeed.aLong_mps2)));
+end
+
+function testDefaultLongitudinalSweepRecoversContinuationFailure(testCase)
+[car,~] = carConfigBaseline();
+settings = struct("speeds",(5:2.5:25).',"mode","coast", ...
+    "nRamp",10,"nBisect",8,"residualTolerance",1e-6, ...
+    "verbose",false);
+caseInfo = struct("id","baseline","label","baseline", ...
+    "carRole","auto");
+
+run = rampSpeed.runLongitudinalRamp(car,settings,caseInfo,struct());
+
+verifyTrue(testCase,all(run.perSpeed.valid), ...
+    "Every default-grid longitudinal point should be recovered.");
+verifyEqual(testCase,run.perSpeed.status, ...
+    repmat("complete",numel(settings.speeds),1));
+verifyTrue(testCase,all(isfinite(run.perSpeed.downforce_N)));
+end
+
+function testBorderlineSpeedUsesExplicitGearSweep(testCase)
+[car,~] = carConfigBaseline();
+settings = struct("speeds",23.75,"solverProfile","accurate", ...
+    "speedGrid",struct("mode","fixed"),"verbose",false);
+run = rampSpeed.runLongitudinalRamp(car,settings, ...
+    struct("id","borderline","label","borderline","carRole","auto"),struct());
+verifyTrue(testCase,run.perSpeed.valid, ...
+    "The borderline speed should be recovered by the tight solver retry.");
+verifyLessThanOrEqual(testCase,run.perSpeed.max_constraint_residual, ...
+    1e-2);
+verifyEmpty(testCase,run.runMeta.retrySpeeds_mps);
+verifyGreaterThanOrEqual(testCase, ...
+    numel(run.raw.diagnostics(1).attempts),1);
+end
+
+
+function testLongitudinalRunnerRecordsSelectedSolverProfile(testCase)
+[car,~] = carConfigBaseline();
+settings = struct("speeds",5,"solverProfile","fastPreview", ...
+    "verbose",false);
+caseInfo = struct("id","baseline","label","baseline","carRole","auto");
+
+run = rampSpeed.runLongitudinalRamp(car,settings,caseInfo,struct());
+
+verifyEqual(testCase,run.runMeta.solverProfile.id,"fastPreview");
+verifyEqual(testCase,run.runMeta.solver.maxFunctionEvaluations,1000);
+verifyEqual(testCase,run.settings.solverProfile,"fastPreview");
+end
+
 function testMaxLongAccelDiagnosticsPreserveLegacyOutputs(testCase)
 [cars,~] = carConfig();
 [legacyTable,legacyAccel,legacyGuess] = max_long_accel(5,cars{1,2});

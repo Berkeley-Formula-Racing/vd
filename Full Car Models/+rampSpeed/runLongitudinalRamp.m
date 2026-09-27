@@ -22,7 +22,17 @@ if ~isstruct(callbacks) || ~isscalar(callbacks)
     error("rampSpeed:invalidCallbacks", ...
         "callbacks must be a scalar struct.");
 end
-
+% The canonical executor owns both fixed and adaptive scheduling. The legacy
+% helpers below remain temporarily available for saved-study compatibility, but
+% no longer recursively call this entry point.
+run = rampSpeed.runCanonicalLongitudinalRamp(car,settings,caseInfo,callbacks);
+return
+[solverProfile,settings] = rampSpeed.resolveSolverProfileFromSettings(settings);
+car = rampSpeed.applySolverProfileToCar(car,solverProfile);
+if adaptiveRequested(settings)
+    run = runAdaptiveLongitudinalRamp(car,settings,caseInfo,callbacks);
+    return
+end
 speeds = requestedSpeeds(settings);
 if isempty(speeds)
     speeds = (5:2.5:30).';
@@ -45,15 +55,30 @@ started = datetime('now');
 runMeta = struct("source","rampSpeed.runLongitudinalRamp", ...
     "started",started,"completed",datetime.empty, ...
     "warnings",strings(0,1),"errors",strings(0,1), ...
+    "retrySpeeds_mps",zeros(0,1), ...
     "solver",solverOptions, ...
+    "solverProfile",rampSpeed.serializeSolverProfile(solverProfile), ...
     "requestedSpeeds_mps",speeds, ...
     "lateralMetricsApplicable",false);
+if solverProfile.approximate
+    runMeta.warnings(end+1,1) = ...
+        "Approximate aero preview: ride-height aero iteration is disabled.";
+end
 
 n = numel(speeds);
 rows = repmat(blankRow(NaN,0,"not solved"),n,1);
 diagnosticRows = repmat(blankDiagnostic(),n,1);
 speedErrors = emptySpeedErrors();
 previousState = [];
+if isfield(settings,"adaptiveInitialState") && ...
+        ~isempty(settings.adaptiveInitialState)
+    candidateState = double(settings.adaptiveInitialState(:).');
+    if numel(candidateState) ~= 9 || any(~isfinite(candidateState))
+        error("rampSpeed:invalidAdaptiveInitialState", ...
+            "adaptiveInitialState must contain nine finite state values.");
+    end
+    previousState = candidateState;
+end
 cancelled = false;
 completedSpeeds = 0;
 
@@ -73,21 +98,78 @@ for i = 1:n
     end
 
     try
-        if isempty(previousState)
+        initialState = previousState;
+        if isempty(initialState)
             [~,longAccel,candidateState,diagnostics] = ...
                 max_long_accel(speed,car,[],solverOptions);
         else
             [~,longAccel,candidateState,diagnostics] = ...
-                max_long_accel(speed,car,previousState,solverOptions);
+                max_long_accel(speed,car,initialState,solverOptions);
         end
         [isFeasible,failureMessage] = solverDiagnosticsFeasible( ...
             diagnostics,solverOptions);
+        retriedFromDefault = false;
+        tightRetry = false;
+        if ~isFeasible && ~isempty(initialState)
+            retryDiagnostics = [];
+            try
+                [~,retryLongAccel,retryState,retryDiagnostics] = ...
+                    max_long_accel(speed,car,[],solverOptions);
+                [retryFeasible,retryMessage] = solverDiagnosticsFeasible( ...
+                    retryDiagnostics,solverOptions);
+            catch retryError
+                retryFeasible = false;
+                retryMessage = "fresh-state retry failed: " + ...
+                    string(retryError.message);
+            end
+            if retryFeasible
+                longAccel = retryLongAccel;
+                candidateState = retryState;
+                diagnostics = retryDiagnostics;
+                isFeasible = true;
+                failureMessage = "";
+                retriedFromDefault = true;
+            elseif ~isempty(retryDiagnostics)
+                diagnostics = retryDiagnostics;
+                failureMessage = retryMessage;
+            end
+        end
+        if ~isFeasible && tightRetryEligible(diagnostics,solverOptions)
+            [tightFeasible,tightLongAccel,tightState,tightDiagnostics, ...
+                tightMessage] = tightConstraintRetry(speed,car,solverOptions);
+            if tightFeasible
+                longAccel = tightLongAccel;
+                candidateState = tightState;
+                diagnostics = tightDiagnostics;
+                isFeasible = true;
+                failureMessage = "";
+                retriedFromDefault = true;
+                tightRetry = true;
+            elseif ~isempty(tightDiagnostics)
+                diagnostics = tightDiagnostics;
+                failureMessage = tightMessage;
+            end
+        end
         if isFeasible
             previousState = candidateState;
             rows(i) = solvedRow(speed,i,longAccel,diagnostics,car, ...
                 stateTolerance);
+            if tightRetry
+                rows(i).accepted_near_feasible = true;
+            end
             diagnosticRows(i) = solvedDiagnostic(speed,i,diagnostics);
             completedSpeeds = completedSpeeds + 1;
+            if retriedFromDefault
+                runMeta.retrySpeeds_mps(end+1,1) = speed;
+                if tightRetry
+                    warning = "speed " + string(speed) + ...
+                        " m/s required a tight-tolerance cold-state solver retry.";
+                else
+                    warning = "speed " + string(speed) + ...
+                        " m/s required a fresh-state solver retry.";
+                end
+                runMeta.warnings(end+1,1) = warning;
+            end
             if ~isempty(progressFcn)
                 progressFcn(struct("phase","speed","speedIndex",i, ...
                     "speed_mps",speed, ...
@@ -155,7 +237,8 @@ raw.status = runStatus;
 raw.diagnostics = diagnosticRows;
 raw.speedErrors = speedErrors;
 
-run = rampSpeed.normalizeRampResult(raw,"longitudinal",settings, ...
+normalizationSettings = longitudinalNormalizationSettings(settings,solverOptions);
+run = rampSpeed.normalizeRampResult(raw,"longitudinal",normalizationSettings, ...
     caseInfo,runMeta);
 run.settings = settings;
 run.settings.speeds = speeds.';
@@ -206,6 +289,17 @@ for i = 1:numel(names)
 end
 end
 
+function normalizationSettings = longitudinalNormalizationSettings(settings,solverOptions)
+% The shared app residualTolerance is for lateral ramp bisection. Pure
+% longitudinal feasibility is gated by the optimizer constraint tolerance.
+normalizationSettings = settings;
+constraintTolerance = numericSetting(solverOptions, ...
+    {"constraintTolerance"},1e-2);
+normalizationSettings.residualTolerance = constraintTolerance;
+normalizationSettings.ceqTol = constraintTolerance;
+normalizationSettings.constraintTolerance = constraintTolerance;
+normalizationSettings.inequalityTolerance = constraintTolerance;
+end
 function value = numericSetting(settings,names,default)
 value = default;
 for i = 1:numel(names)
@@ -241,7 +335,8 @@ for j = startIndex:numel(speeds)
 end
 end
 
-function [tf,message] = solverDiagnosticsFeasible(diagnostics,solverOptions)
+function [tf,message] = solverDiagnosticsFeasible(diagnostics,solverOptions,requireConverged)
+if nargin < 3, requireConverged = true; end
 exitflag = NaN;
 maxInequalityViolation = NaN;
 maxEqualityResidual = NaN;
@@ -271,8 +366,12 @@ if ~isscalar(maxEqualityResidual)
 end
 constraintTolerance = numericSetting(solverOptions, ...
     {"constraintTolerance"},1e-2);
-validExitflag = isnumeric(exitflag) && isfinite(exitflag) && ...
-    any(exitflag == [1 2]);
+if requireConverged
+    validExitflag = isnumeric(exitflag) && isfinite(exitflag) && ...
+        any(exitflag == [1 2]);
+else
+    validExitflag = isnumeric(exitflag) && isfinite(exitflag);
+end
 finiteState = isnumeric(state) && ~isempty(state) && ...
     all(isfinite(state(:)));
 finiteResiduals = isnumeric(maxInequalityViolation) && ...
@@ -295,6 +394,78 @@ else
 end
 end
 
+function tf = tightRetryEligible(diagnostics,solverOptions)
+% Only spend the expensive cold retry on a numerically near-feasible result.
+% A deliberately starved optimizer must remain a failed diagnostic rather
+% than being rescued by a fresh retry budget.
+tf = false;
+if ~isstruct(diagnostics) || ~isscalar(diagnostics)
+    return
+end
+requiredFields = ["exitflag","state", ...
+    "max_equality_residual","max_inequality_violation"];
+if ~all(isfield(diagnostics,requiredFields))
+    return
+end
+constraintTolerance = numericSetting(solverOptions, ...
+    {"constraintTolerance"},1e-2);
+if ~isscalar(constraintTolerance) || ~isfinite(constraintTolerance) || ...
+        constraintTolerance <= 0
+    return
+end
+state = diagnostics.state;
+eqResidual = diagnostics.max_equality_residual;
+ineqViolation = diagnostics.max_inequality_violation;
+tf = isnumeric(state) && ~isempty(state) && all(isfinite(state(:))) && ...
+    isnumeric(diagnostics.exitflag) && isscalar(diagnostics.exitflag) && ...
+    isfinite(diagnostics.exitflag) && isnumeric(eqResidual) && ...
+    isscalar(eqResidual) && isfinite(eqResidual) && ...
+    isnumeric(ineqViolation) && isscalar(ineqViolation) && ...
+    isfinite(ineqViolation) && eqResidual <= 2*constraintTolerance && ...
+    ineqViolation <= 2*constraintTolerance;
+end
+
+function [tf,longAccel,state,diagnostics,message] = ...
+        tightConstraintRetry(speed,car,solverOptions)
+tf = false;
+longAccel = NaN;
+state = [];
+diagnostics = [];
+message = "";
+if ~isscalar(speed) || ~isfinite(speed)
+    message = "tight-state retry skipped for a nonfinite speed.";
+    return
+end
+constraintTolerance = numericSetting(solverOptions, ...
+    {"constraintTolerance"},1e-2);
+if ~isscalar(constraintTolerance) || ~isfinite(constraintTolerance) || ...
+        constraintTolerance <= 0
+    message = "tight-state retry skipped for an invalid constraint tolerance.";
+    return
+end
+options = solverOptions;
+options.constraintTolerance = max(1e-8,min(1e-4, ...
+    0.01*constraintTolerance));
+baseEvaluations = numericSetting(solverOptions, ...
+    {"maxFunctionEvaluations"},2000);
+options.maxFunctionEvaluations = min(4000,max(baseEvaluations, ...
+    2*baseEvaluations));
+options.stepTolerance = min(1e-12,numericSetting( ...
+    solverOptions,{"stepTolerance"},1e-10));
+try
+    [~,longAccel,state,diagnostics] = ...
+        max_long_accel(speed,car,[],options);
+    acceptOptions = solverOptions;
+    acceptOptions.constraintTolerance = 0.5*constraintTolerance;
+    [tf,message] = solverDiagnosticsFeasible(diagnostics, ...
+        acceptOptions,false);
+    if ~tf && isempty(message)
+        message = "tight-state retry did not meet the acceptance tolerance.";
+    end
+catch ME
+    message = "tight-state retry failed: " + string(ME.message);
+end
+end
 function row = blankRow(speed,speedIndex,reason)
 row = struct();
 row.speed_mps = speed;
@@ -302,6 +473,7 @@ row.speed_index = speedIndex;
 row.point_index = 1;
 row.valid = false;
 row.status = "failed";
+row.accepted_near_feasible = false;
 row.reason = string(reason);
 row.exitflag = NaN;
 row.max_constraint_residual = NaN;
@@ -544,4 +716,322 @@ function entry = makeDiagnosticSpeedError(speedIndex,speed,identifier,message)
 entry = struct('speed_index',speedIndex,'speed_mps',speed, ...
     'identifier',string(identifier),'message',string(message), ...
     'stack',[]);
+end
+function tf = adaptiveRequested(settings)
+mode = "fixed";
+if isfield(settings,"speedGrid") && ~isempty(settings.speedGrid)
+    if isstruct(settings.speedGrid) && isfield(settings.speedGrid,"mode")
+        mode = lower(strtrim(string(settings.speedGrid.mode)));
+    elseif isstring(settings.speedGrid) || ischar(settings.speedGrid)
+        mode = lower(strtrim(string(settings.speedGrid)));
+    end
+elseif isfield(settings,"adaptiveSpeedMode") && ~isempty(settings.adaptiveSpeedMode)
+    mode = lower(strtrim(string(settings.adaptiveSpeedMode)));
+end
+tf = isscalar(mode) && ~ismissing(mode) && ...
+    any(mode == ["preview","accurate","highaccuracy"]);
+end
+
+function run = runAdaptiveLongitudinalRamp(car,settings,caseInfo,callbacks)
+% Execute a deterministic seed grid, then refine only where the response
+% changes enough to affect balance or where a solver result needs recovery.
+policy = adaptivePolicyFromSettings(settings);
+requested = requestedSpeeds(settings);
+grid = speedGridSettings(settings);
+if isfield(grid,"range_mps") && ~isempty(grid.range_mps)
+    requested = double(grid.range_mps(:));
+end
+if isempty(requested)
+    requested = (5:2.5:30).';
+end
+plan = rampSpeed.planAdaptiveSpeeds(requested,policy);
+originalGrid = grid;
+fixedSettings = settings;
+fixedSettings.speedGrid = struct("mode","fixed");
+fixedSettings.speeds = plan.seedSpeeds_mps.';
+run = rampSpeed.runLongitudinalRamp(car,fixedSettings,caseInfo,callbacks);
+exactRetrySpeeds = zeros(0,1);
+[run,exactRetrySpeeds] = retryInvalidAdaptiveSpeeds( ...
+    run,car,settings,caseInfo,callbacks,exactRetrySpeeds);
+notifyAdaptiveProgress(callbacks,sprintf( ...
+    'Adaptive seed scan complete: %d speeds.',height(run.perSpeed)));
+if string(run.status) == "cancelled"
+    plan.stopReason = "cancelled";
+    plan.status = "limited";
+else
+while plan.pass < policy.maxPasses
+    [plan,report] = rampSpeed.refineAdaptiveSpeeds(plan,run);
+    if isempty(report.insertedSpeeds_mps)
+        if ~isempty(report.invalidSpeeds_mps)
+            plan.stopReason = "invalid_speeds";
+            plan.status = "limited";
+            if ~isempty(plan.refinementHistory)
+                plan.refinementHistory(end).stopReason = plan.stopReason;
+            end
+        end
+        notifyAdaptiveProgress(callbacks,sprintf( ...
+            'Adaptive refinement stopped after %d speeds (%s).', ...
+            height(run.perSpeed),string(plan.stopReason)));
+        break
+    end
+    notifyAdaptiveProgress(callbacks,sprintf( ...
+        'Adaptive pass %d: adding %d speeds.', ...
+        plan.pass,numel(report.insertedSpeeds_mps)));
+    batchSettings = settings;
+    batchSettings.speedGrid = struct("mode","fixed");
+    batchSettings.speeds = report.insertedSpeeds_mps.';
+    seedState = adaptiveSeedState(run,min(report.insertedSpeeds_mps));
+    if ~isempty(seedState)
+        batchSettings.adaptiveInitialState = seedState;
+    end
+    batch = rampSpeed.runLongitudinalRamp(car,batchSettings,caseInfo,callbacks);
+    run = mergeAdaptiveBatch(run,batch);
+    [run,exactRetrySpeeds] = retryInvalidAdaptiveSpeeds( ...
+        run,car,settings,caseInfo,callbacks,exactRetrySpeeds);
+    notifyAdaptiveProgress(callbacks,sprintf( ...
+        'Adaptive pass %d complete: %d speeds.', ...
+        plan.pass,height(run.perSpeed)));
+    if string(run.status) == "cancelled", break, end
+end
+end
+if plan.pass >= policy.maxPasses && ...
+        any(string(plan.stopReason) == ["", "refine"])
+    plan.stopReason = "max_passes";
+    plan.status = "limited";
+    if ~isempty(plan.refinementHistory)
+        plan.refinementHistory(end).stopReason = plan.stopReason;
+    end
+end
+plan.retrySpeeds_mps = exactRetrySpeeds;
+run.settings = settings;
+run.settings.speeds = plan.speeds_mps.';
+run.settings.speedGrid = originalGrid;
+run.runMeta.requestedSpeeds_mps = plan.requestedSpeeds_mps;
+run.runMeta.speedGrid = struct( ...
+    "policy",plan.policy, ...
+    "requestedSpeeds_mps",plan.requestedSpeeds_mps, ...
+    "seedSpeeds_mps",plan.seedSpeeds_mps, ...
+    "finalSpeeds_mps",plan.speeds_mps, ...
+    "passes",plan.pass, ...
+    "provenance",plan.provenance, ...
+    "refinementHistory",plan.refinementHistory, ...
+    "stopReason",string(plan.stopReason), ...
+    "exactRetrySpeeds_mps",exactRetrySpeeds);
+run.raw.settings = run.settings;
+end
+
+function notifyAdaptiveProgress(callbacks,message)
+if ~isstruct(callbacks) || ~isscalar(callbacks) || ...
+        ~isfield(callbacks,"onProgress") || isempty(callbacks.onProgress)
+    return
+end
+event = struct("phase","adaptive","speedIndex",NaN,"speed_mps",NaN, ...
+    "completedSpeeds",NaN,"requestedSpeeds",NaN,"message",string(message));
+try
+    callbacks.onProgress(event);
+catch
+    % Progress is advisory and must not abort an adaptive solve.
+end
+end
+
+function [run,attempted] = retryInvalidAdaptiveSpeeds( ...
+        run,car,settings,caseInfo,callbacks,attempted)
+if ~isstruct(run) || ~isscalar(run) || ~isfield(run,"perSpeed") || ...
+        ~istable(run.perSpeed) || ~ismember("valid",run.perSpeed.Properties.VariableNames) || ...
+        ~ismember("speed_mps",run.perSpeed.Properties.VariableNames) || ...
+        string(run.status) == "cancelled"
+    return
+end
+invalid = double(run.perSpeed.speed_mps(~logical(run.perSpeed.valid)));
+invalid = sort(invalid(isfinite(invalid)));
+retrySpeeds = zeros(0,1);
+for value = invalid(:).'
+    if ~hasAdaptiveSpeed(attempted,value)
+        retrySpeeds(end+1,1) = value; %#ok<AGROW>
+    end
+end
+if isempty(retrySpeeds)
+    return
+end
+notifyAdaptiveProgress(callbacks,sprintf( ...
+    'Adaptive exact retry: %d invalid speeds.',numel(retrySpeeds)));
+for value = retrySpeeds(:).'
+    retrySettings = settings;
+    retrySettings.speedGrid = struct("mode","fixed");
+    retrySettings.speeds = value;
+    retrySettings.adaptiveInitialState = [];
+    batch = rampSpeed.runLongitudinalRamp(car,retrySettings,caseInfo,callbacks);
+    run = mergeAdaptiveBatch(run,batch);
+    attempted(end+1,1) = value; %#ok<AGROW>
+    if string(run.status) == "cancelled"
+        break
+    end
+end
+notifyAdaptiveProgress(callbacks,sprintf( ...
+    'Adaptive exact retry complete: %d speeds.',numel(retrySpeeds)));
+end
+
+function tf = hasAdaptiveSpeed(values,speed)
+tf = false;
+for value = double(values(:).')
+    if isfinite(value) && isfinite(speed) && ...
+            abs(value-speed) <= 32*eps(max([1,abs(value),abs(speed)]))
+        tf = true;
+        return
+    end
+end
+end
+
+function state = adaptiveSeedState(run,nextSpeed)
+state = [];
+if ~isfield(run,"perSpeed") || ~istable(run.perSpeed) || ...
+        ~ismember("valid",run.perSpeed.Properties.VariableNames) || ...
+        ~ismember("speed_mps",run.perSpeed.Properties.VariableNames)
+    return
+end
+valid = logical(run.perSpeed.valid) & ...
+    double(run.perSpeed.speed_mps) < nextSpeed;
+if ~any(valid) || ~isfield(run,"raw") || ...
+        ~isfield(run.raw,"diagnostics")
+    return
+end
+priorSpeed = max(double(run.perSpeed.speed_mps(valid)));
+diagnostics = run.raw.diagnostics;
+if isempty(diagnostics) || ~isfield(diagnostics,"speed_mps")
+    return
+end
+index = find(abs([diagnostics.speed_mps]-priorSpeed) <= ...
+    32*eps(max(1,abs(priorSpeed))),1);
+if ~isempty(index) && isfield(diagnostics,"state") && ...
+        numel(diagnostics(index).state) == 9 && ...
+        all(isfinite(diagnostics(index).state))
+    state = diagnostics(index).state;
+end
+end
+
+function run = mergeAdaptiveBatch(run,batch)
+run.perSpeed = mergeSpeedTables(run.perSpeed,batch.perSpeed);
+run.points = mergeSpeedTables(run.points,batch.points);
+run.raw.perSpeed = mergeSpeedTables(run.raw.perSpeed,batch.raw.perSpeed);
+run.raw.points = mergeSpeedTables(run.raw.points,batch.raw.points);
+run.raw.diagnostics = mergeDiagnosticRecords( ...
+    run.raw.diagnostics,batch.raw.diagnostics);
+batchSpeeds = double(batch.perSpeed.speed_mps(:));
+run.raw.speedErrors = mergeSpeedErrors(run.raw.speedErrors, ...
+    batch.raw.speedErrors,batchSpeeds);
+run.runMeta.warnings = [string(run.runMeta.warnings(:)); ...
+    string(batch.runMeta.warnings(:))];
+run.runMeta.errors = [string(run.runMeta.errors(:)); ...
+    string(batch.runMeta.errors(:))];
+run.runMeta.retrySpeeds_mps = unique([run.runMeta.retrySpeeds_mps(:); ...
+    batch.runMeta.retrySpeeds_mps(:)]);
+run.runMeta.speedErrors = mergeSpeedErrors(run.runMeta.speedErrors, ...
+    batch.runMeta.speedErrors,batchSpeeds);
+if string(run.status) == "cancelled" || string(batch.status) == "cancelled"
+    run.status = "cancelled";
+elseif ~any(run.perSpeed.valid)
+    run.status = "failed";
+elseif any(~run.perSpeed.valid)
+    run.status = "partial";
+else
+    run.status = "completed";
+end
+run.runMeta.status = run.status;
+run.raw.status = run.status;
+end
+
+function merged = mergeSpeedTables(primary,added)
+if isempty(primary)
+    merged = added;
+    return
+elseif isempty(added)
+    merged = primary;
+end
+merged = sortrows([primary;added],"speed_mps");
+speeds = double(merged.speed_mps(:));
+keep = true(height(merged),1);
+for i = 1:numel(speeds)-1
+    if sameAdaptiveSpeed(speeds(i),speeds(i+1))
+        keep(i) = false;
+    end
+end
+merged = merged(keep,:);
+end
+
+function records = mergeDiagnosticRecords(primary,added)
+records = [primary(:);added(:)];
+if isempty(records)
+    return
+end
+[~,order] = sort([records.speed_mps]);
+records = records(order);
+keep = true(numel(records),1);
+for i = 1:numel(records)-1
+    if sameAdaptiveSpeed(records(i).speed_mps,records(i+1).speed_mps)
+        keep(i) = false;
+    end
+end
+records = records(keep);
+end
+
+function merged = mergeSpeedErrors(primary,added,replacedSpeeds)
+primary = primary(:);
+added = added(:);
+keep = true(numel(primary),1);
+for i = 1:numel(primary)
+    if isfield(primary,"speed_mps")
+        for speed = replacedSpeeds(:).'
+            if sameAdaptiveSpeed(primary(i).speed_mps,speed)
+                keep(i) = false;
+                break
+            end
+        end
+    end
+end
+merged = [primary(keep);added];
+end
+
+function tf = sameAdaptiveSpeed(a,b)
+tf = isfinite(a) && isfinite(b) && ...
+    abs(double(a)-double(b)) <= 32*eps(max([1,abs(double(a)),abs(double(b))]));
+end
+
+function policy = adaptivePolicyFromSettings(settings)
+grid = speedGridSettings(settings);
+mode = "accurate";
+if isfield(grid,"mode") && ~isempty(grid.mode)
+    mode = string(grid.mode);
+end
+overrides = struct();
+if isfield(grid,"policy") && isstruct(grid.policy)
+    overrides = grid.policy;
+end
+allowed = ["baseSpacing_mps","minRefinementSpacing_mps", ...
+    "balanceTolerance_fraction","relativeTolerance", ...
+    "forceAbsoluteTolerance_N","accelerationAbsoluteTolerance_mps2", ...
+    "residualRefinementFraction","maxPasses","maxPoints","stateFields"];
+for name = allowed
+    fieldName = char(name);
+    if isfield(grid,fieldName)
+        overrides.(fieldName) = grid.(fieldName);
+    end
+end
+policy = rampSpeed.adaptiveSpeedPolicy(mode,overrides);
+end
+
+function grid = speedGridSettings(settings)
+grid = struct("mode","fixed");
+if isfield(settings,"speedGrid") && ~isempty(settings.speedGrid)
+    if isstruct(settings.speedGrid)
+        grid = settings.speedGrid;
+    else
+        grid.mode = settings.speedGrid;
+    end
+elseif isfield(settings,"adaptiveSpeedMode") && ~isempty(settings.adaptiveSpeedMode)
+    grid.mode = settings.adaptiveSpeedMode;
+end
+if ~isstruct(grid) || ~isscalar(grid)
+    error("rampSpeed:invalidAdaptivePolicy", ...
+        "settings.speedGrid must be a scalar struct or mode name.");
+end
 end
