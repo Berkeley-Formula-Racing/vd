@@ -36,9 +36,14 @@ classdef RampSpeedSession < handle
                 else
                     options = struct();
                 end
+                setupSpecifications = obj.config.defaultSetup;
+                if isfield(options,"setupSpecifications") && ...
+                        ~isempty(options.setupSpecifications)
+                    setupSpecifications = options.setupSpecifications;
+                end
                 [obj.cars,obj.cases,obj.designTable] = ...
                     rampSpeed.buildSetupCatalog(obj.config, ...
-                    obj.config.defaultSetup);
+                    setupSpecifications);
                 obj.setupSpecifications = reshape([obj.cases.setupSpec],[],1);
             else
                 if nargin < 2

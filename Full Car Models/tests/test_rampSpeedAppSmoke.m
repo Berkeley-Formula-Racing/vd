@@ -30,7 +30,7 @@ verifyTrue(testCase,all(ismember(["Capability","Balance","Aero & Loads", ...
     "Suspension","Raw Ramp","Inspector/Data"],tabTitles)));
 end
 
-function testRunCallbackUsesFunctionHandleBeforeOutputCount(testCase)
+function testRunCallbackUsesSessionExecutor(testCase)
 root = fileparts(fileparts(mfilename("fullpath")));
 archive = fullfile(root,"RampSpeedApp.mlapp");
 temporaryRoot = tempname;
@@ -41,15 +41,19 @@ unzip(archive,temporaryRoot);
 documentPath = fullfile(temporaryRoot,"matlab","document.xml");
 verifyTrue(testCase,isfile(documentPath));
 document = fileread(documentPath);
-correctPattern = ['parfeval\s*\(\s*backgroundPool\s*,\s*' ...
-    '@rampSpeed\.runStudy\s*,\s*2\s*,'];
-reversedPattern = ['parfeval\s*\(\s*backgroundPool\s*,\s*2\s*,[\s\S]*?' ...
-    '@rampSpeed\.runStudy'];
-
-verifyNotEmpty(testCase,regexp(document,correctPattern,"once"), ...
-    "The Run callback must pass the function handle before the output count.");
-verifyEmpty(testCase,regexp(document,reversedPattern,"once"), ...
-    "The Run callback still uses the reversed parfeval signature.");
+runSection = regexp(document, ...
+    'function RunButtonPushed[\s\S]*?function CancelButtonPushed', ...
+    'match','once');
+cancelSection = regexp(document, ...
+    'function CancelButtonPushed[\s\S]*?function LoadButtonPushed', ...
+    'match','once');
+verifyNotEmpty(testCase,runSection);
+verifyNotEmpty(testCase,regexp(runSection,'app\.Session\.start',"once"));
+verifyEmpty(testCase,regexp(runSection, ...
+    'parfeval|parallel\.pool\.DataQueue',"once"));
+verifyNotEmpty(testCase,regexp(cancelSection,'app\.Session\.cancel',"once"));
+verifyEmpty(testCase,regexp(cancelSection, ...
+    'cancel\s*\(\s*app\.Future',"once"));
 end
 
 function testFixtureRunUsesInjectedRunnerWithoutSolver(testCase)
@@ -142,6 +146,43 @@ verifyThat(testCase,imperialLabel, ...
     matlab.unittest.constraints.ContainsSubstring("lbf"));
 verifyNotEqual(testCase,imperialLabel,siLabel);
 verifyEqual(testCase,study.runs(1).perSpeed.downforce_N,[200;220],"AbsTol",0);
+end
+
+function testClearRemovesAllPlotGraphicsIncludingHiddenWarnings(testCase)
+ensureRampSpeedAppPath();
+fixture = makeRampFixture();
+app = RampSpeedApp("Visible","off");
+cleanup = onCleanup(@()deleteIfValid(app)); %#ok<NASGU>
+
+app.runStudyForTest(fixture.cars,fixture.cases,@runRenderFixture);
+verifyNotEmpty(testCase,findall(app.CapabilityAxes,"Type","line"));
+
+app.ClearButtonPushed([],[]);
+
+axesList = [app.CapabilityAxes,app.BalanceAxes,app.AeroLoadsAxes, ...
+    app.SuspensionAxes,app.RawRampAxes];
+for ax = axesList(:).'
+    verifyEmpty(testCase,findall(ax,"Type","line"));
+    verifyEmpty(testCase,findall(ax,"Type","constantline"));
+end
+end
+
+
+function testProgressShowsSpeedContext(testCase)
+ensureRampSpeedAppPath();
+fixture = makeRampFixture();
+app = RampSpeedApp("Visible","off");
+cleanup = onCleanup(@()deleteIfValid(app)); %#ok<NASGU>
+
+app.runStudyForTest(fixture.cars,fixture.cases,@runWithSpeedProgress);
+messages = string(app.ProgressTextArea.Value);
+verifyTrue(testCase,any(contains(messages,"20")));
+
+    function run = runWithSpeedProgress(~,caseInfo,~,callbacks)
+        callbacks.onProgress(struct("phase","speed","speedIndex",2, ...
+            "speed_mps",20,"completedSpeeds",1,"requestedSpeeds",2));
+        run = makeFixtureRun(caseInfo);
+    end
 end
 
 function run = runRenderFixture(~,caseInfo,~,~)
