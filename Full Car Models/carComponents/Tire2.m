@@ -10,24 +10,28 @@ classdef Tire2
         camber4indices
         camber2ratio
         camber4ratio
+        camberInterpolator
 
     end
 
     methods
-        function obj = Tire2(p_i,Fx_parameters,Fy_parameters,friction_scaling_factor)
+        function obj = Tire2(p_i,Fx_parameters,Fy_parameters,friction_scaling_factor,camberData)
             %obj.gamma = gamma;
             obj.p_i = p_i;
             obj.Fx_parameters = Fx_parameters;
             obj.Fy_parameters = Fy_parameters;
             obj.friction_scaling_factor = friction_scaling_factor;
-            % named explicitly: a bare load() drops whatever the file holds
-            % into this scope and would shadow any same-named function
-            c = load("camberratiossmoothed.mat", ...
-                'camber2indices','camber4indices','camber2ratio','camber4ratio');
+            if nargin < 5 || isempty(camberData)
+                componentRoot = fileparts(mfilename('fullpath'));
+                camberData = load(fullfile(componentRoot,'camberratiossmoothed.mat'), ...
+                    'camber2indices','camber4indices','camber2ratio','camber4ratio');
+            end
+            c = camberData;
             obj.camber2indices = c.camber2indices;
             obj.camber4indices = c.camber4indices;
             obj.camber2ratio = c.camber2ratio;
             obj.camber4ratio = c.camber4ratio;
+            obj.camberInterpolator = obj.buildCamberInterp();
         end
 
         function out = F_y(obj,alpha,kappa,F_z,gamma)
@@ -47,12 +51,10 @@ classdef Tire2
             % resampling a piecewise-linear function onto a superset of its
             % own breakpoints is exact.
             %
-            % Held in a persistent, not a property: the tables come from a
-            % fixed file and are the same for every tire, and a new property
-            % would break every Tire2 already saved inside a .mat sweep cache.
-            persistent camberF warnedNaN
-            if isempty(camberF)
+            if isempty(obj.camberInterpolator)
                 camberF = buildCamberInterp(obj);
+            else
+                camberF = obj.camberInterpolator;
             end
             cambermultiplier = camberF(alpha,gamma);
 
@@ -182,14 +184,10 @@ classdef Tire2
             % nothing. Report the inputs, once, under an ID that can be muted
             % with warning('off','Tire2:nanForce').
             if isnan(out)
-                if isempty(warnedNaN)
-                    warnedNaN = true;
-                    warning('Tire2:nanForce', ...
-                        ['F_y returned NaN: alpha=%g deg, kappa=%g, F_z=%g N, ' ...
-                         'gamma=%g deg (pre-camber F_y2=%g). Reported once per ' ...
-                         'session.'], alpha/0.0174533, kappa, F_z/0.224809, ...
-                         cambershiftMod, F_y2);
-                end
+                warning('Tire2:nanForce', ...
+                    ['F_y returned NaN: alpha=%g deg, kappa=%g, F_z=%g N, ' ...
+                     'gamma=%g deg (pre-camber F_y2=%g).'], alpha/0.0174533, ...
+                    kappa, F_z/0.224809, cambershiftMod, F_y2);
             end
         end
 

@@ -13,11 +13,16 @@ function camber = Camber_Evaluation(long_vel, yaw_rate, steer_angle_1, steer_ang
     ay_g    = (long_vel * yaw_rate) / g0;
     rolldeg = ay_g * roll_grad_deg_per_g;
 
-    % --- load compact params once ---
-    persistent betaL betaR
-    if isempty(betaL)
-        S     = load('camber_models_fast.mat','betaL','betaR');
-        betaL = S.betaL;  betaR = S.betaR;
+    % --- use explicit model data for Ramp Speed cars ---
+    if isfield(config,'camberModelData') && isstruct(config.camberModelData) && ...
+            isfield(config.camberModelData,'betaL') && isfield(config.camberModelData,'betaR')
+        betaL = config.camberModelData.betaL;
+        betaR = config.camberModelData.betaR;
+    else
+        componentRoot = fileparts(mfilename('fullpath'));
+        S = load(fullfile(componentRoot,'camber_models_fast.mat'),'betaL','betaR');
+        betaL = S.betaL;
+        betaR = S.betaR;
     end
 
     % --- fast polynomial eval: b0 + b1*r + b2*s + b3*r^2 + b4*s^2 + b5*r*s ---
