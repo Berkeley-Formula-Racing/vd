@@ -509,6 +509,12 @@ cleanupWorkerCancellationFiles();
         if isfield(callbacks,'cancelToken') && ~isempty(callbacks.cancelToken)
             value = value || readCancellation(callbacks.cancelToken);
         end
+        if isfield(request,'cancelFile') && ~isempty(request.cancelFile)
+            cancelFile = string(request.cancelFile);
+            if isscalar(cancelFile) && strlength(strtrim(cancelFile)) > 0
+                value = value || isfile(char(cancelFile));
+            end
+        end
     end
 
     function value = caseId(index)
