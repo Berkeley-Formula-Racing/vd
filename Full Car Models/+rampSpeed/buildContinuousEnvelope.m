@@ -86,6 +86,7 @@ end
 rpmCandidates = [rpmLower; rpmUpper];
 internal = rpm(rpm > rpmLower & rpm < rpmUpper);
 segmentEdges = [rpmLower; internal; rpmUpper];
+rpmCandidates = [rpmCandidates; internal];
 for i = 1:numel(segmentEdges)-1
     a = segmentEdges(i);
     b = segmentEdges(i+1);

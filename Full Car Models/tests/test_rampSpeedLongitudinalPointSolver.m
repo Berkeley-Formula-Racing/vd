@@ -22,17 +22,19 @@ verifyEqual(testCase,result.diagnostics.reducedState, ...
     [result.state(2),result.state(8)],"AbsTol",1e-12);
 end
 
-function testExplicitGearAttemptsCoverTransitionRange(testCase)
+function testContinuousEnvelopeCoversTransitionRange(testCase)
 [car,~] = carConfigBaseline();
 profile = rampSpeed.resolveSolverProfile("fastPreview",struct( ...
     "maxFunctionEvaluations",350));
 speeds = [12.5 15 17.5 20 22.5 25];
 for speed = speeds
     result = rampSpeed.solveLongitudinalPoint(car,speed,[],profile,struct());
-    attempts = result.diagnostics.gearAttempts;
-    verifyFalse(testCase,isempty(attempts),"Every speed must retain gear attempts.");
-    verifyTrue(testCase,any([attempts.gear] == 3), ...
-        "Gear 3 must be explicitly represented at every transition speed.");
+    verifyEqual(testCase,result.diagnostics.powertrainModel,"continuousEnvelope");
+    verifyTrue(testCase,isfield(result.diagnostics,"continuousEnvelope"));
+    verifyEmpty(testCase,result.diagnostics.gearAttempts);
+    verifyEqual(testCase,result.diagnostics.continuousEnvelope.speed_mps,speed, ...
+        "AbsTol",0);
+    verifyTrue(testCase,isfinite(result.diagnostics.continuousEnvelope.drivetrainReduction));
 end
 end
 

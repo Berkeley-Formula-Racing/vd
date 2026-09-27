@@ -18,6 +18,12 @@ if ~isstruct(control) || ~isscalar(control)
 end
 
 profile = rampSpeed.resolveSolverProfile(profile);
+if isfield(profile,'powertrainModel') && ...
+        string(profile.powertrainModel) == "continuousEnvelope"
+    result = rampSpeed.solveContinuousEnvelopePoint(car,speed_mps,seed, ...
+        profile,control);
+    return
+end
 task = struct('speedIndex',1,'speed_mps',double(speed_mps), ...
     'origin',"requested",'passIndex',1);
 emptyMetrics = struct();
