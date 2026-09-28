@@ -48,9 +48,10 @@ coupling = run_lc0_nd_coupling;
 
 The donor source is explicit in `lc0NDConfig`: paired Round 6 LC0 C2000
 runs 46 (free rolling) and 47 (drive/brake/combined), both on a 7-inch rim.
-They provide a normalized longitudinal reference and a donor coupling-shape
-fit only. Their 18x6-10 size and rim mismatch mean their force levels are
-never applied directly to the 16x7.5-10/8-inch target.
+They are the larger same-compound 18x6-10 donor for the 16x7.5-10/8-inch
+target. They provide a normalized longitudinal reference and donor
+coupling-shape fit only. Their force levels are never applied directly to the
+target; the transfer is controlled by explicit `rhoMu` and `rhoStiff` factors.
 
 The coupling artifact and score figure are saved as:
 
@@ -98,6 +99,22 @@ catalog = lc0NDCatalogRuns(round6);
 catalog(catalog.has_combined_coverage,:)
 ```
 
+Plot the saved matched comparison without running any DOE or vehicle
+simulation:
+
+~~~matlab
+cfg = lc0NDConfig();
+plots = lc0NDPlotModelComparisons(fullfile(cfg.outputDirectory, ...
+    'lc0_nd_pacejka_comparison.mat'));
+~~~
+
+lc0NDPlotModelComparisons writes a PNG, FIG, and metrics CSV containing
+pure-slip overlays, the configured p-norm and classical friction-ellipse
+envelopes, low/nominal/high donor-transfer envelopes, combined-slip
+utilization/support diagnostics, and normalized force-error summaries. It
+can also consume the in-memory result returned by
+run_lc0_nd_pacejka_comparison.
+
 ## Next calibration stage
 
 1. Select a TTC donor only after verifying its construction, rim, pressure,
@@ -108,3 +125,24 @@ catalog(catalog.has_combined_coverage,:)
    band, rather than treating an arbitrary donor curve as known LC0 behavior.
 4. Validate against logged acceleration, braking, and combined-corner
    vehicle data before moving any calibrated model into `Tire2`.
+
+## Vehicle integration
+
+The vehicle model keeps the legacy `Tire2` as the default. To select the
+versioned target/donor adapter explicitly:
+
+```matlab
+[cars,eventParams,designTable] = carConfig("FullFactorial",[],"lc0_nd");
+```
+
+The adapter is `NondimensionalTire`. It returns zero force at zero normal
+load, rejects negative load, clamps unsupported slip queries at the vehicle
+boundary, and reports `is_extrapolated`, `clamp_count`, `rho_mu`,
+`rho_stiff`, and `coupling_exponent` from its `evaluate` method. The
+`model_uncertainty` field selects `low`, `nominal`, or `high` donor-transfer
+scenarios; the default vehicle configuration remains `nominal`.
+
+The target lateral fit now also carries measured capacity and small-slip
+stiffness scaling by load, pressure, and camber when the comparison artifact
+is regenerated. Unsupported bins are clamped only in the vehicle adapter and
+remain visible in its diagnostics.

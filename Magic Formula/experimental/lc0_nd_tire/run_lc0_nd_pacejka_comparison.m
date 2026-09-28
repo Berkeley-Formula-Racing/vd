@@ -10,6 +10,11 @@ if nargin < 2 || isempty(legacyEvaluator)
 end
 if nargin < 3 || isempty(makePlots), makePlots = true; end
 if ~isfolder(cfg.outputDirectory), mkdir(cfg.outputDirectory); end
+provenance = [];
+if isfield(cfg,'target') && isfield(cfg,'donor') && ...
+        isfield(cfg.target,'compound_family') && isfield(cfg.donor,'compound_family')
+    provenance = lc0NDValidateDonorChoice(cfg);
+end
 
 [targetData,targetManifest] = lc0NDLoadFreeRolling(cfg);
 targetFit = lc0NDFitLateral(targetData,cfg.targetForceFit);
@@ -17,15 +22,37 @@ donorLong = lc0NDLoadDonor(cfg.donor);
 longFit = lc0NDFitLongitudinal(donorLong,cfg.donorFit);
 donorLat = lc0NDLoadDonor(cfg.donorLateral);
 donorLatFit = lc0NDFitLateral(donorLat,cfg.couplingLateralFit);
-model = lc0NDBuildModel(targetFit,longFit,donorLatFit,cfg.calibration);
+couplingFit = [];
+calibration = cfg.calibration;
+couplingFields = {'couplingLongitudinalFit','couplingLateralFit','couplingFit'};
+if all(isfield(cfg,couplingFields))
+    couplingLongFit = lc0NDFitLongitudinal(donorLong,cfg.couplingLongitudinalFit);
+    couplingFit = lc0NDFitCouplingExponent(donorLong,couplingLongFit,donorLatFit, ...
+        cfg.couplingFit);
+    if couplingFit.is_qualified && isfinite(couplingFit.best_exponent)
+        calibration.couplingExponent = couplingFit.best_exponent;
+    end
+end
+targetScaling = [];
+if isfield(cfg,'targetScaling')
+    targetScaling = lc0NDFitTargetScaling(targetData,cfg.targetScaling,targetFit);
+end
+model = lc0NDBuildModel(targetFit,longFit,donorLatFit,calibration,targetScaling);
+if ~isempty(provenance)
+    model.provenance = provenance;
+end
 cases = comparisonCases(targetFit,longFit,cfg.reference);
 comparison = lc0NDCompareForceModels(model,cases,legacyEvaluator);
 result = struct('config',cfg,'target_manifest',targetManifest, ...
+    'donor_provenance',provenance, ...
     'target_fit',targetFit,'donor_longitudinal_fit',longFit, ...
-    'donor_lateral_fit',donorLatFit,'model',model, ...
+    'donor_lateral_fit',donorLatFit,'coupling_fit',couplingFit, ...
+    'calibration',calibration,'target_scaling',targetScaling, ...
+    'model',model, ...
     'comparison',comparison);
 save(fullfile(cfg.outputDirectory,'lc0_nd_pacejka_comparison.mat'), ...
-    'cfg','targetManifest','targetFit','longFit','donorLatFit','model', ...
+    'cfg','targetManifest','provenance','targetFit','longFit','donorLatFit', ...
+    'couplingFit','calibration','targetScaling','model', ...
     'comparison','-v7.3');
 if makePlots, savePlots(comparison,cfg.outputDirectory); end
 end

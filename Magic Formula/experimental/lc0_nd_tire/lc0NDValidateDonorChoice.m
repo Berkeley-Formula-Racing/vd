@@ -1,0 +1,46 @@
+function provenance = lc0NDValidateDonorChoice(cfg)
+%LC0NDVALIDATEDONORCHOICE Enforce the configured same-compound donor rule.
+
+required = {'target','donor'};
+if ~isstruct(cfg) || ~isscalar(cfg) || ~all(isfield(cfg,required))
+    error('lc0NDValidateDonorChoice:badConfig', ...
+        'CFG must contain target and donor structs.');
+end
+targetFields = {'compound_family','size_in'};
+donorFields = {'compound_family','size_in','file','is_larger_same_compound'};
+if ~all(isfield(cfg.target,targetFields)) || ~all(isfield(cfg.donor,donorFields))
+    error('lc0NDValidateDonorChoice:badConfig', ...
+        'Target and donor identity metadata is incomplete.');
+end
+if ~strcmpi(string(cfg.target.compound_family),string(cfg.donor.compound_family))
+    error('lc0NDValidateDonorChoice:compoundMismatch', ...
+        'Target and donor compound families must match.');
+end
+if numel(cfg.target.size_in) < 1 || numel(cfg.donor.size_in) < 1 || ...
+        cfg.donor.size_in(1) <= cfg.target.size_in(1)
+    error('lc0NDValidateDonorChoice:notLarger', ...
+        'The configured donor must have a larger tire diameter than the target.');
+end
+if ~cfg.donor.is_larger_same_compound || ~isfile(cfg.donor.file)
+    error('lc0NDValidateDonorChoice:unqualifiedDonor', ...
+        'The donor must be explicitly marked larger/same-compound and exist.');
+end
+provenance = struct( ...
+    'target_compound_family',string(cfg.target.compound_family), ...
+    'donor_compound_family',string(cfg.donor.compound_family), ...
+    'target_size_in',cfg.target.size_in, ...
+    'donor_size_in',cfg.donor.size_in, ...
+    'same_compound',true,'donor_is_larger',true, ...
+    'donor_file',string(cfg.donor.file), ...
+    'relationship',string(getField(cfg.donor,'relationship', ...
+        'larger same-compound donor')));
+end
+
+function value = getField(s,name,defaultValue)
+if isfield(s,name) && ~isempty(s.(name))
+    value = s.(name);
+else
+    value = defaultValue;
+end
+end
+

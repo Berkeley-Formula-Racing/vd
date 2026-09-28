@@ -10,8 +10,12 @@ if ~isa(legacyEvaluator,'function_handle')
     error('lc0NDCompareForceModels:badLegacyEvaluator', ...
         'legacyEvaluator must be a function handle returning [Fx,Fy].');
 end
+options = struct('outOfRange',"nan",'camberDeg',cases.camber_deg);
+if ismember('pressure_psi',cases.Properties.VariableNames)
+    options.pressurePsi = cases.pressure_psi;
+end
 [experimentalFx,experimentalFy,info] = lc0NDEvaluate(model,cases.alpha_deg, ...
-    cases.slip_ratio,cases.Fz_N);
+    cases.slip_ratio,cases.Fz_N,options);
 n = height(cases);
 legacyFx = nan(n,1); legacyFy = nan(n,1);
 for i = 1:n
@@ -25,4 +29,8 @@ comparison.legacy_Fx_N = legacyFx;
 comparison.legacy_Fy_N = legacyFy;
 comparison.experimental_supported = info.is_supported;
 comparison.experimental_utilization = info.utilization;
+comparison.experimental_extrapolated = info.is_extrapolated;
+% The evaluator's clamp_count is a batch total. Store a row-wise indicator
+% in the comparison table so every artifact column has one value per case.
+comparison.experimental_clamp_count = double(info.is_extrapolated);
 end

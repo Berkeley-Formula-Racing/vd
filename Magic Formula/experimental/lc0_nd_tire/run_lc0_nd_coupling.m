@@ -12,16 +12,21 @@ if ~all(isfield(cfg,required))
         'CFG requires donor, donorLateral, coupling fit options, and outputDirectory.');
 end
 if ~isfolder(cfg.outputDirectory), mkdir(cfg.outputDirectory); end
+provenance = [];
+if isfield(cfg,'target') && isfield(cfg,'donor') && ...
+        isfield(cfg.target,'compound_family') && isfield(cfg.donor,'compound_family')
+    provenance = lc0NDValidateDonorChoice(cfg);
+end
 
 combinedDonor = lc0NDLoadDonor(cfg.donor);
 lateralDonor = lc0NDLoadDonor(cfg.donorLateral);
 longFit = lc0NDFitLongitudinal(combinedDonor,cfg.couplingLongitudinalFit);
 latFit = lc0NDFitLateral(lateralDonor,cfg.couplingLateralFit);
 coupling = lc0NDFitCouplingExponent(combinedDonor,longFit,latFit,cfg.couplingFit);
-result = struct('config',cfg,'longitudinal',longFit,'lateral',latFit, ...
-    'coupling',coupling);
+result = struct('config',cfg,'provenance',provenance, ...
+    'longitudinal',longFit,'lateral',latFit,'coupling',coupling);
 save(fullfile(cfg.outputDirectory,'lc0_nd_donor_coupling.mat'), ...
-    'cfg','longFit','latFit','coupling','-v7.3');
+    'cfg','provenance','longFit','latFit','coupling','-v7.3');
 if makePlots
     f = figure('Name','Provisional LC0 donor coupling fit','Color','w');
     plot(coupling.score.exponent,coupling.score.rmse_mu,'o-','LineWidth',1.2);

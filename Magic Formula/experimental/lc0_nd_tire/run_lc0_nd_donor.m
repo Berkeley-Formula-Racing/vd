@@ -13,12 +13,17 @@ end
 if ~isfolder(cfg.outputDirectory)
     mkdir(cfg.outputDirectory);
 end
+provenance = [];
+if isfield(cfg,'target') && isfield(cfg,'donor') && ...
+        isfield(cfg.target,'compound_family') && isfield(cfg.donor,'compound_family')
+    provenance = lc0NDValidateDonorChoice(cfg);
+end
 
 donor = lc0NDLoadDonor(cfg.donor);
 fit = lc0NDFitLongitudinal(donor,cfg.donorFit);
-result = struct('config',cfg,'donor',donor,'fit',fit);
+result = struct('config',cfg,'provenance',provenance,'donor',donor,'fit',fit);
 save(fullfile(cfg.outputDirectory,'lc0_nd_donor_longitudinal.mat'), ...
-    'cfg','donor','fit','-v7.3');
+    'cfg','provenance','donor','fit','-v7.3');
 if makePlots
     plotDonorLongitudinal(fit,cfg.outputDirectory);
 end

@@ -1,4 +1,4 @@
-function model = lc0NDBuildModel(targetLateral,donorLongitudinal,donorLateral,calibration)
+function model = lc0NDBuildModel(targetLateral,donorLongitudinal,donorLateral,calibration,targetScaling)
 %LC0NDBUILDMODEL Assemble an explicit target/donor nondimensional model.
 %   Target lateral force is retained from measured 16-inch LC0 data. The
 %   provisional donor supplies only longitudinal shape and coupling context.
@@ -24,10 +24,18 @@ if ~isfield(donorLongitudinal,'curve') || ...
         'DONORLONGITUDINAL must contain a qualified mu_x curve.');
 end
 
-targetPeak = max(abs(targetLateral.curve.mu_y(targetLateral.curve.is_qualified)));
-donorLateralPeak = max(abs(donorLateral.curve.mu_y(donorLateral.curve.is_qualified)));
+targetValues = targetLateral.curve.mu_y(targetLateral.curve.is_qualified);
+donorValues = donorLateral.curve.mu_y(donorLateral.curve.is_qualified);
+targetValues = targetValues(isfinite(targetValues));
+donorValues = donorValues(isfinite(donorValues));
+if isempty(targetValues), targetPeak = NaN; else, targetPeak = max(abs(targetValues)); end
+if isempty(donorValues), donorLateralPeak = NaN; else, donorLateralPeak = max(abs(donorValues)); end
 if ~isfinite(targetPeak) || ~isfinite(donorLateralPeak) || donorLateralPeak <= 0
     error('lc0NDBuildModel:badCapacity','Qualified lateral curves require nonzero peaks.');
+end
+bounds = [];
+if isfield(calibration,'uncertainty_bounds')
+    bounds = calibration.uncertainty_bounds;
 end
 model = struct('target_lateral',targetLateral, ...
     'donor_longitudinal',donorLongitudinal, ...
@@ -35,8 +43,14 @@ model = struct('target_lateral',targetLateral, ...
     'rho_mu',calibration.rhoMu, ...
     'rho_stiff',calibration.rhoStiff, ...
     'coupling_exponent',calibration.couplingExponent, ...
+    'base_calibration',calibration, ...
+    'uncertainty_scenarios',lc0NDUncertaintyScenarios(calibration,bounds), ...
+    'active_scenario',"nominal", ...
     'longitudinal_mu_scale',calibration.rhoMu*targetPeak/donorLateralPeak, ...
     'target_lateral_capacity',targetPeak);
+if nargin >= 5 && ~isempty(targetScaling)
+    model.target_scaling = targetScaling;
+end
 end
 
 function checkLateral(fit,name)

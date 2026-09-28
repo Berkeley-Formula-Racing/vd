@@ -11,4 +11,6 @@ verifyTrue(testCase,isfield(cfg,'donor'));
 verifyTrue(testCase,isfile(cfg.donor.file));
 verifyTrue(testCase,contains(lower(cfg.donor.description),'lc0'));
 verifyTrue(testCase,contains(lower(cfg.donor.description),'provisional'));
+verifyTrue(testCase,cfg.donor.is_larger_same_compound);
+verifyEqual(testCase,cfg.donor.compound_family,cfg.target.compound_family);
 end

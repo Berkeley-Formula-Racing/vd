@@ -22,6 +22,27 @@ verifyEqual(testCase,fy,200/sqrt(2),'AbsTol',1e-12);
 verifyEqual(testCase,info.longitudinal_mu_scale,2,'AbsTol',1e-12);
 end
 
+function testAppliesMeasuredTargetLoadScaling(testCase)
+addpath(fileparts(fileparts(mfilename('fullpath'))));
+target = lateralFit([-2;0;2],[0.5;0;0.5]);
+donorLat = lateralFit([-1;1],[-1;1]);
+donorLong = longFit([-1;1],[-1;1]);
+cal = struct('rhoMu',1,'rhoStiff',1,'couplingExponent',1.3);
+model = lc0NDBuildModel(target,donorLong,donorLat,cal);
+model.target_scaling = struct( ...
+    'reference',struct('pressure_psi',12,'camber_deg',0), ...
+    'table',table([100;200],[12;12],[0;0],[1;0.8],[1;0.8], ...
+        true(2,1),'VariableNames',{'load_center_N', ...
+        'pressure_center_psi','camber_center_deg','mu_scale', ...
+        'stiffness_scale','is_qualified'}));
+
+[~,fy,info] = lc0NDEvaluate(model,2,0,200, ...
+    struct('outOfRange',"clamp",'pressurePsi',12,'camberDeg',0));
+verifyEqual(testCase,fy,64,'AbsTol',1e-12);
+verifyEqual(testCase,info.lateral_mu_scale,0.8,'AbsTol',1e-12);
+verifyEqual(testCase,info.lateral_stiffness_scale,0.8,'AbsTol',1e-12);
+end
+
 function fit = lateralFit(alpha,mu)
 fit = struct('curve',table(alpha,mu,true(numel(alpha),1), ...
     'VariableNames',{'slip_angle_deg','mu_y','is_qualified'}), ...
