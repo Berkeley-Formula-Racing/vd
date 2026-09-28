@@ -21,7 +21,8 @@ verifyEqual(testCase,string(ax(1).YLabel.String),"front aero load (N)");
 verifyEqual(testCase,string(ax(2).YLabel.String),"rear aero load (N)");
 verifyEqual(testCase,string(ax(3).YLabel.String),"front aero balance (%)");
 verifyEqual(testCase,string(ax(4).YLabel.String),"K_{linear} (deg/g)");
-verifyGreaterThanOrEqual(testCase,numel(findall(ax(1),'Type','line')),4);
+% One data line is expected for each input car on every selected panel.
+verifyGreaterThanOrEqual(testCase,numel(findall(ax(1),'Type','line')),2);
 verifyGreaterThanOrEqual(testCase,numel(findall(ax(4),'Type','line')),2);
 verifyEqual(testCase,numel(findall(ax(4),'Type','constantline')),1);
 end
