@@ -152,13 +152,13 @@ status, output paths, and elapsed time.
 
 ## Analyze without rerunning simulations
 
-Open and run `DOE_Fitting.m`. It automatically selects the configured DOE
+Open and run `Full Car Models/entrypoints/DOE_Fitting.m`. It automatically selects the configured DOE
 output, or the newest `DOE_output*` result folder when the configured one
 does not exist. It does not launch new event simulations when
 `runRampMetrics` is false.
 
 ```matlab
-DOE_Fitting
+run('Full Car Models/entrypoints/DOE_Fitting.m')
 ```
 
 One press of MATLAB's **Run** button generates and saves the configured
@@ -166,7 +166,8 @@ static plots plus one tiled, rotatable interaction figure. Each 3-D tile
 uses a fitted response and its two largest total-order Sobol inputs. It also
 opens one interactive DOE sensitivity viewer: select the output, x input,
 and y input from dropdowns to see the Sobol ranking, main effect, and
-interaction surface. Set `resultSource` near the top of `DOE_Fitting.m` to a
+interaction surface. Set `resultSource` near the top of
+`Full Car Models/entrypoints/DOE_Fitting.m` to a
 specific output folder or MAT-file when several studies are present.
 
 Useful default responses include dynamic points, Autocross/Accel/Skidpad
