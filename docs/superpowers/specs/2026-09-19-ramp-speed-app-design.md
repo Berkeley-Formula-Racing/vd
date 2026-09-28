@@ -1,7 +1,7 @@
 # Visual Ramp-Speed Analysis App Design
 
 **Date:** 2026-09-19  
-**Status:** Approved conversational design; written specification pending user review
+**Status:** Implemented v1 design; canonical execution path and setup model documented below
 
 ## Goal
 
@@ -199,6 +199,23 @@ The v1 app is acceptable when a MATLAB user can:
 6. Save the study, close/reopen the app, reload it, and reproduce the same plots.
 7. Export a normalized table and figure without losing validity flags or units.
 8. Identify solver failures, truncated ramps, power limitation, aero-map extrapolation, and wheel lift without reading the MATLAB command window.
+
+## As-built canonical implementation
+
+The implementation uses carConfigBaseline.m as the independent source of truth for Ramp Speed construction. A setup specification is serializable and contains the discrete suspension choices, numeric ride heights, driver weight, rear weight distribution, aero-map ID, and baseline/configuration version. rampSpeed.buildSetupCatalog builds exactly one solver-ready Car per setup and returns an N-by-1 catalog shared by lateral and pure-longitudinal studies.
+
+rampSpeed.RampSpeedSession owns setup selection, duplication/editing, deletion, save/load, cancellation, and result acceptance. rampSpeed.StudyExecutor owns one study job and progress lifecycle, while rampSpeed.runStudy and rampSpeed.runCase own the numerical execution. The App Designer file is a view/controller shell over that session; it does not create solver futures or call solver internals from callbacks.
+
+The supported function entry point is:
+
+```matlab
+[study,runs,figures,events] = runRampSpeedStudy( ...
+    struct('rampType','longitudinal','speeds',[5 10 15 17.5 20 22.5 25]));
+```
+
+The compatibility wrapper delegates to the same baseline/session-independent executor path and no longer calls the legacy carConfig/rampSweep study script. Legacy study files without setup specifications remain loadable as read-only result data. The study status model preserves invalid gaps and uses explicit planned, running, converged, near_feasible, infeasible, solver_failed, and cancelled states; unavailable continuous values are stored as NaN.
+
+The v1 metric catalog includes pure longitudinal capability and drag deceleration, lateral capability, mechanical/aero/yaw balance, lift and drag, ride height, front/rear and four-corner camber, and four-corner slip angles. The stored unit contract remains SI; app display conversion is presentation-only.
 
 ## Implementation sequencing
 

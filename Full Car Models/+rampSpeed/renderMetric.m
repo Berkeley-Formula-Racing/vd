@@ -8,6 +8,10 @@ if isempty(ax) || ~isgraphics(ax,'axes')
     error('rampSpeed:invalidAxes','ax must be a valid axes handle.');
 end
 
+% Each redraw owns the complete metric series. Reset automatic limits here so
+% a prior zoom/manual limit cannot hide a second setup or clip its overlay.
+ax.XLimMode = "auto";
+ax.YLimMode = "auto";
 wasHeld = ishold(ax);
 hold(ax,'on');
 holdGuard = onCleanup(@()restoreHoldState(ax,wasHeld));
@@ -108,29 +112,27 @@ function markers = warningMarkers(ax,series)
 markers = gobjects(0,1);
 x = double(series.x(:));
 y = double(series.values(:));
-markerY = y;
-markerY(~isfinite(markerY)) = 0;
+valid = logical(series.valid(:));
 masks = {logical(series.truncated(:)),logical(series.power_limited(:)), ...
-    logical(series.wheel_lift(:)),~logical(series.valid(:))};
+    logical(series.wheel_lift(:)),~valid};
 styles = {'o',[0.90 0.45 0.05],'^',[0.85 0.65 0.05], ...
     's',[0.75 0.10 0.10],'x',[0.35 0.35 0.35]};
-for i = 1:2:numel(masks)
-    mask = masks{i} & isfinite(x);
+for i = 1:numel(masks)
+    % Invalid rows are gaps, not zero-valued measurements. Only render a
+    % warning marker when the metric itself has a finite plotted value.
+    mask = masks{i} & valid & isfinite(x) & isfinite(y);
     if ~any(mask)
         continue
     end
-    marker = styles{i};
-    color = styles{i+1};
-    if i == 7
-        marker = 'x';
-        color = styles{8};
-    end
-    h = plot(ax,x(mask),markerY(mask),marker,'Color',color, ...
+    marker = styles{2*i-1};
+    color = styles{2*i};
+    h = plot(ax,x(mask),y(mask),marker,'Color',color, ...
         'LineStyle','none','MarkerSize',7,'LineWidth',1.2, ...
         'HandleVisibility','off');
     markers(end+1,1) = h; %#ok<AGROW>
 end
 end
+
 
 function restoreHoldState(ax,wasHeld)
 if ~isgraphics(ax,'axes')

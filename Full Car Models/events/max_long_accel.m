@@ -54,11 +54,19 @@ lb = [steer_angle_bounds(1),throttle_bounds(1),long_vel_bounds(1),lat_vel_bounds
 ub = [steer_angle_bounds(2),throttle_bounds(2),long_vel_bounds(2),lat_vel_bounds(2),...
     yaw_rate_bounds(2),kappa_1_bounds(2),kappa_2_bounds(2),kappa_3_bounds(2),kappa_4_bounds(2)];
 
-% objective function: longitudinal acceleration (forwards)
-f = @(P) -car.long_accel(P);
-
-% no lateral acceleration constraint
-constraint = @(P) car.constraint1(P);
+% Reuse the converged ride-height solution across nearby fmincon evaluations.
+% The context only supplies an initial guess; every evaluation still solves
+% the coupled aero residual to the original tolerance.
+rideHeightContext = [];
+if car.hasRideHeightAero()
+    f = @objectiveWithContext;
+    constraint = @constraintWithContext;
+else
+    % Keep the legacy lightweight callback path when there is no coupled
+    % ride-height state to reuse.
+    f = @(P) -car.long_accel(P);
+    constraint = @(P) car.constraint1(P);
+end
 
 % default algorithm is interior-point
 maxFunctionEvaluations = getSolverOption(solverOptions, ...
@@ -67,10 +75,15 @@ constraintTolerance = getSolverOption(solverOptions, ...
     'constraintTolerance',1e-2);
 stepTolerance = getSolverOption(solverOptions,'stepTolerance',1e-10);
 display = getSolverOption(solverOptions,'display','off');
+algorithm = getSolverOption(solverOptions,'algorithm','interior-point');
 if isstring(display)
     display = char(display);
 end
+if isstring(algorithm)
+    algorithm = char(algorithm);
+end
 options = optimoptions('fmincon', ...
+    'Algorithm',algorithm, ...
     'MaxFunctionEvaluations',maxFunctionEvaluations, ...
     'ConstraintTolerance',constraintTolerance, ...
     'StepTolerance',stepTolerance,'Display',display);
@@ -105,6 +118,17 @@ if nargout >= 4
     diagnostics.metrics = car.metrics(x);
     diagnostics.pure_ay0 = abs(diagnostics.metrics.gLat) <= 1e-12;
 end
+
+    function value = objectiveWithContext(P)
+        [~,~,~,longAccel,~,~,~,~,~,~,~,~,~,~,~,rideHeightContext] = ...
+            car.equations(P,rideHeightContext);
+        value = -longAccel;
+    end
+
+    function [c,ceq] = constraintWithContext(P)
+        [c,ceq,rideHeightContext] = ...
+            car.constraint1(P,rideHeightContext);
+    end
 end
 
 function value = getSolverOption(solverOptions,name,default)

@@ -84,9 +84,11 @@ if ~isempty(prior)
     catch
         % Progress callbacks are advisory and must not abort a case.
     end
+    return
 end
 sendProgress(queue,event);
 end
+
 
 function sendProgress(queue,event)
 try

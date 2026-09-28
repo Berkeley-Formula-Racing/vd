@@ -16,7 +16,7 @@ verifyEqual(testCase,height(run.perSpeed),3);
 verifyTrue(testCase,run.perSpeed.valid(1));
 verifyFalse(testCase,run.perSpeed.valid(2));
 verifyTrue(testCase,run.perSpeed.valid(3));
-verifyEqual(testCase,run.perSpeed.status(2),"failed");
+verifyEqual(testCase,run.perSpeed.status(2),"solver_failed");
 verifyThat(testCase,run.perSpeed.reason(2), ...
     matlab.unittest.constraints.ContainsSubstring("speed"));
 verifyTrue(testCase,isnan(run.perSpeed.aLat_free_mps2(2)));

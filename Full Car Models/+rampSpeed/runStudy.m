@@ -18,6 +18,10 @@ type = normalizeType(request.rampType);
 
 study = rampSpeed.makeStudy(request.appVersion);
 study.cases = cases;
+study.setupSpecifications = setupSpecifications(cases);
+if ~isempty(study.setupSpecifications) && isfield(study.setupSpecifications,'baselineVersion')
+    study.baselineVersion = string(study.setupSpecifications(1).baselineVersion);
+end
 study.status = "running";
 started = datetime('now');
 study.runMeta = makeStudyMeta(started,type,request);
@@ -83,7 +87,13 @@ if study.status == "running"
         study.status = "cancelled";
     elseif all(statusValues == "complete")
         study.status = "complete";
-    elseif any(statusValues == "complete")
+    elseif all(ismember(statusValues,["complete","partial","warning","completed"]))
+        if any(ismember(statusValues,["partial","warning"]))
+            study.status = "partial";
+        else
+            study.status = "complete";
+        end
+    elseif any(ismember(statusValues,["complete","partial","warning","completed"]))
         study.status = "partial";
     else
         study.status = "failed";
@@ -371,23 +381,24 @@ cleanupWorkerCancellationFiles();
     end
 
     function handleCaseProgress(rawEvent,index)
+        speed = numericField(rawEvent,"speed_mps",NaN);
+        message = speedProgressMessage(rawEvent,"running " + caseLabel(index));
         emitEvent(makeEvent("case",caseId(index), ...
-            numericField(rawEvent,"speedIndex",NaN), ...
-            numericField(rawEvent,"speed_mps",NaN),completedCases, ...
-            totalCases,stringField(rawEvent,"message", ...
-            "running " + caseLabel(index))));
+            numericField(rawEvent,"speedIndex",NaN),speed,completedCases, ...
+            totalCases,message));
     end
 
     function handleQueuedProgress(rawEvent)
         if ~isstruct(rawEvent) || ~isscalar(rawEvent)
             return
         end
+        speed = numericField(rawEvent,"speed_mps",NaN);
+        message = speedProgressMessage(rawEvent,"");
         emitEvent(makeEvent("case",stringField(rawEvent,"caseId",""), ...
-            numericField(rawEvent,"speedIndex",NaN), ...
-            numericField(rawEvent,"speed_mps",NaN), ...
+            numericField(rawEvent,"speedIndex",NaN),speed, ...
             numericField(rawEvent,"completedCases",completedCases), ...
-            numericField(rawEvent,"totalCases",totalCases), ...
-            stringField(rawEvent,"message","")),~queueIsRequestQueue);
+            numericField(rawEvent,"totalCases",totalCases),message), ...
+            ~queueIsRequestQueue);
         if isCancelledRequested()
             signalWorkerCancellation();
         end
@@ -526,6 +537,28 @@ cleanupWorkerCancellationFiles();
     end
 end
 
+function message = speedProgressMessage(rawEvent,fallback)
+fallback = string(fallback);
+message = stringField(rawEvent,"message","");
+needsContext = strlength(strtrim(message)) == 0 || ...
+    lower(strtrim(message)) == "study running...";
+if needsContext
+    speed = numericField(rawEvent,"speed_mps",NaN);
+    if isscalar(speed) && isfinite(speed)
+        if strlength(strtrim(fallback)) > 0
+            message = sprintf("%s: vCar %.2f m/s",fallback,speed);
+        else
+            message = sprintf("Solving vCar %.2f m/s",speed);
+        end
+    elseif strlength(strtrim(fallback)) > 0
+        message = fallback;
+    else
+        message = "Study running...";
+    end
+end
+end
+
+
 function run = runCaseWorker(car,caseInfo,request,queue)
 cancelFile = "";
 if isfield(request,'cancelFile') && ~isempty(request.cancelFile)
@@ -654,6 +687,8 @@ if request.rampType == "lateral" && ...
         strlength(string(request.settings.mode)) == 0)
     request.settings.mode = "coast";
 end
+[resolvedProfile,request.settings] = rampSpeed.resolveSolverProfileFromSettings(request.settings);
+request.solverProfile = rampSpeed.serializeSolverProfile(resolvedProfile);
 if ~isfield(request,'parallelRequested') || isempty(request.parallelRequested)
     request.parallelRequested = false;
 end
@@ -823,7 +858,7 @@ meta = struct('source',"rampSpeed.runStudy",'rampType',type, ...
     'started',started,'completed',datetime.empty,'status',"running", ...
     'effectiveWorkers',0,'parallelFallbackReason',"", ...
     'warnings',strings(0,1),'errors',strings(0,1), ...
-    'checkpointPath',request.checkpointPath);
+    'checkpointPath',request.checkpointPath,'solverProfile',request.solverProfile);
 end
 
 function run = finalizeRun(run,index,template,type,settings,caseInfo, ...
@@ -866,6 +901,12 @@ if ~isfield(run,'runMeta') || ~isstruct(run.runMeta) || ...
     run.runMeta = struct();
 end
 run.runMeta.caseInfo = caseInfo;
+if isfield(caseInfo,'setupSpec')
+    run.runMeta.setupSpec = caseInfo.setupSpec;
+end
+if isfield(caseInfo,'derived')
+    run.runMeta.setupDerived = caseInfo.derived;
+end
 run.runMeta.executionOrder = index;
 run.runMeta.effectiveWorkers = effectiveWorkers;
 run.runMeta.parallelFallbackReason = string(fallbackReason);
@@ -942,6 +983,9 @@ for i = 1:numel(tableNames)
     actual = string(run.(fieldName).Properties.VariableNames);
     missing = setdiff(expected,actual,'stable');
     unexpected = setdiff(actual,expected,'stable');
+    if strcmp(fieldName,'perSpeed')
+        unexpected = setdiff(unexpected,stablePerSpeedColumns(),'stable');
+    end
     if ~isempty(missing)
         issueCount = issueCount + 1;
         issues(issueCount,1) = "canonical " + string(fieldName) + ...
@@ -966,6 +1010,11 @@ for i = 1:numel(tableNames)
     end
 end
 issues = issues(1:issueCount);
+end
+
+function names = stablePerSpeedColumns()
+names = ["speedIndex","origin","passIndex","refinementReason", ...
+    "solver_status","solver_reason"];
 end
 
 function run = matchRunFields(run,template)
@@ -1189,4 +1238,13 @@ for k = 1:numel(markerKeys)
     catch
     end
 end
+end
+
+
+function specs = setupSpecifications(cases)
+if isempty(cases) || ~isfield(cases,'setupSpec')
+    specs = struct.empty(0,1);
+    return
+end
+specs = [cases.setupSpec];
 end

@@ -33,7 +33,7 @@ end
 
 function testNormalizesTextFieldsAndRequestVectors(testCase)
 request = makeRequest(' LONGITUDINAL ', [5 10 20]);
-request.settings.speedPolicy = ' ADAPTIVE ';
+request.settings.speedPolicy = ' FIXED ';
 request.execution = ' SERIAL ';
 request.caseIds = ["case-B", "case-A"];
 request.solverProfile = ' Fast ';
@@ -43,20 +43,20 @@ normalized = rampSpeed.normalizeRequest(request);
 verifyEqual(testCase, normalized.rampType, "longitudinal");
 verifyEqual(testCase, normalized.settings.speeds_mps, [5; 10; 20]);
 verifyClass(testCase, normalized.settings.speeds_mps, 'double');
-verifyEqual(testCase, normalized.settings.speedPolicy, "adaptive");
+verifyEqual(testCase, normalized.settings.speedPolicy, "fixed");
 verifyEqual(testCase, normalized.execution.mode, "serial");
 verifyEqual(testCase, normalized.caseIds, ["case-B"; "case-A"]);
 verifyEqual(testCase, normalized.solverProfile, "fast");
 end
 
-function testRejectsAdaptiveSpeedPolicyForLateralRamp(testCase)
+function testRejectsNonfixedSpeedPolicy(testCase)
 request = makeRequest("lateral", [5; 10; 20]);
 request.settings.speedPolicy = "adaptive";
 
 verifyError(testCase, @() rampSpeed.validateRequest(request), ...
-    'rampSpeed:unsupportedAdaptiveMode');
+    'rampSpeed:invalidSpeedPolicy');
 verifyError(testCase, @() rampSpeed.normalizeRequest(request), ...
-    'rampSpeed:unsupportedAdaptiveMode');
+    'rampSpeed:invalidSpeedPolicy');
 end
 
 function testRejectsEmptySolverProfileAtValidationBoundary(testCase)
@@ -79,15 +79,6 @@ verifyEqual(testCase, plan.tasks.speed_mps, [5; 10; 20]);
 verifyEqual(testCase, plan.tasks.origin, repmat("requested", 3, 1));
 verifyEqual(testCase, plan.tasks.passIndex, ones(3, 1));
 verifyEqual(testCase, plan.tasks.status, repmat("planned", 3, 1));
-end
-
-function testAdaptivePlanMarksInitialSpeedsAsSeeds(testCase)
-request = makeRequest("longitudinal", [5; 10; 20]);
-request.settings.speedPolicy = "adaptive";
-plan = rampSpeed.makeSpeedPlan(rampSpeed.normalizeRequest(request));
-
-verifyEqual(testCase, plan.tasks.origin, repmat("seed", 3, 1));
-verifyEqual(testCase, plan.tasks.speedIndex, [1; 2; 3]);
 end
 
 function testMakesOneSpeedResultAndUsesNaNForEmptyMetrics(testCase)

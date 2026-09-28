@@ -11,7 +11,7 @@ request = app.buildRequestForTest();
 
 verifyEqual(testCase,string(request.rampType),"lateral");
 verifyEqual(testCase,string(request.settings.mode),"coast");
-verifyEqual(testCase,string(request.carRole),"lap");
+verifyEqual(testCase,string(request.carRole),"auto");
 verifyEqual(testCase,string(request.displayUnits.speed),"m/s");
 verifyGreaterThan(testCase,min(request.settings.speeds),0);
 verifyGreaterThanOrEqual(testCase,request.settings.nRamp,2);
@@ -34,7 +34,7 @@ app.ResidualToleranceEditField.Value = 1e-7;
 request = app.buildRequestForTest();
 
 verifyEqual(testCase,string(request.rampType),"longitudinal");
-verifyEqual(testCase,string(request.carRole),"acceleration");
+verifyEqual(testCase,string(request.carRole),"auto");
 verifyEqual(testCase,request.settings.speeds,[5 7.5 10],"AbsTol",0);
 verifyEqual(testCase,request.settings.nRamp,4);
 verifyEqual(testCase,request.settings.nBisect,3);

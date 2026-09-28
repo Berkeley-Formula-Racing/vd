@@ -37,15 +37,11 @@ speedPolicy = "fixed";
 if isfield(rawRequest.settings, 'speedPolicy')
     speedPolicy = normalizeText(rawRequest.settings.speedPolicy, ...
         'rampSpeed:invalidSpeedPolicy', ...
-        'settings.speedPolicy must be fixed or adaptive.');
+        'settings.speedPolicy must be fixed.');
 end
-if ~any(speedPolicy == ["fixed", "adaptive"])
+if speedPolicy ~= "fixed"
     error('rampSpeed:invalidSpeedPolicy', ...
-        'settings.speedPolicy must be fixed or adaptive.');
-end
-if rampType == "lateral" && speedPolicy == "adaptive"
-    error('rampSpeed:unsupportedAdaptiveMode', ...
-        'Adaptive speed sampling is not supported for lateral ramps.');
+        'settings.speedPolicy must be fixed.');
 end
 
 if isfield(rawRequest, 'execution')

@@ -17,6 +17,21 @@ verifyEqual(testCase,study.runs(1).status,"complete");
 verifyGreaterThanOrEqual(testCase,numel(events),2);
 end
 
+function testStudyRecordsResolvedSolverProfile(testCase)
+fixture = makeRampFixture();
+request = struct("rampType","longitudinal", ...
+    "settings",struct("solverProfile","fastPreview"), ...
+    "parallelRequested",false,"numWorkers",0, ...
+    "checkpointPath","","appVersion","test", ...
+    "runCaseFcn",@(car,caseInfo,request,callbacks) ...
+        makeFixtureRun(caseInfo));
+
+[study,~] = rampSpeed.runStudy(fixture.cars,fixture.cases,request,struct());
+
+verifyEqual(testCase,study.runMeta.solverProfile.id,"fastPreview");
+verifyEqual(testCase,study.runMeta.solverProfile.solverOptions.maxFunctionEvaluations,1000);
+end
+
 function testRunnerExecutesInOrderAndRetainsCaseFailure(testCase)
 fixture = makeRampFixture();
 callOrder = strings(0,1);

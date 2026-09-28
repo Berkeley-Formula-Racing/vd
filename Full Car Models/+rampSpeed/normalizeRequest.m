@@ -9,7 +9,7 @@ request.settings.speeds_mps = double(rawRequest.settings.speeds_mps(:));
 
 if isfield(rawRequest.settings, 'speedPolicy')
     request.settings.speedPolicy = normalizeText(rawRequest.settings.speedPolicy, ...
-        'rampSpeed:invalidSpeedPolicy', 'settings.speedPolicy must be fixed or adaptive.');
+        'rampSpeed:invalidSpeedPolicy', 'settings.speedPolicy must be fixed.');
 else
     request.settings.speedPolicy = "fixed";
 end

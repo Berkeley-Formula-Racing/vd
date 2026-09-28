@@ -28,7 +28,7 @@ run = rampSpeed.runLongitudinalRamp(car,settings,caseInfo,struct());
 
 verifyTrue(testCase,all(run.perSpeed.valid));
 verifyEqual(testCase,run.perSpeed.status, ...
-    repmat("complete",4,1));
+    repmat("converged",4,1));
 verifyTrue(testCase,all(isfinite(run.perSpeed.aLong_mps2)));
 end
 
@@ -45,7 +45,7 @@ run = rampSpeed.runLongitudinalRamp(car,settings,caseInfo,struct());
 verifyTrue(testCase,all(run.perSpeed.valid), ...
     "Every default-grid longitudinal point should be recovered.");
 verifyEqual(testCase,run.perSpeed.status, ...
-    repmat("complete",numel(settings.speeds),1));
+    repmat("converged",numel(settings.speeds),1));
 verifyTrue(testCase,all(isfinite(run.perSpeed.downforce_N)));
 end
 
@@ -118,7 +118,7 @@ verifyEqual(testCase,run.perSpeed.speed_mps,settings.speeds(:), ...
     "AbsTol",1e-12);
 verifyTrue(testCase,run.perSpeed.valid(1));
 verifyFalse(testCase,any(run.perSpeed.valid(2:end)));
-verifyEqual(testCase,run.perSpeed.status(2),"invalid");
+verifyEqual(testCase,run.perSpeed.status(2),"cancelled");
 verifyThat(testCase,run.perSpeed.reason(2), ...
     matlab.unittest.constraints.ContainsSubstring("cancel"));
 

@@ -56,7 +56,28 @@ classdef Aero
                     'outsideMap',false);
             end
         end
+
+        function [cla,cda,D_f,D_r,outsideMap] = coefficientsNumeric(obj,frontOffsetIn,rearOffsetIn)
+            %COEFFICIENTSNUMERIC Numeric hot-path equivalent of coefficients().
+            if obj.hasMap()
+                [cla,cda,D_f,D_r,outsideMap] = obj.map.evaluateNumeric( ...
+                    frontOffsetIn,rearOffsetIn);
+            else
+                if isscalar(frontOffsetIn) && ~isscalar(rearOffsetIn)
+                    frontOffsetIn = repmat(frontOffsetIn,size(rearOffsetIn));
+                elseif isscalar(rearOffsetIn) && ~isscalar(frontOffsetIn)
+                    rearOffsetIn = repmat(rearOffsetIn,size(frontOffsetIn));
+                elseif ~isequal(size(frontOffsetIn),size(rearOffsetIn))
+                    error('Aero:querySizeMismatch', ...
+                        'Front and rear offsets must have equal sizes or be scalar.');
+                end
+                cla = repmat(obj.cla,size(frontOffsetIn));
+                cda = repmat(obj.cda,size(frontOffsetIn));
+                D_f = repmat(obj.D_f,size(frontOffsetIn));
+                D_r = repmat(obj.D_r,size(frontOffsetIn));
+                outsideMap = false(size(frontOffsetIn));
+            end
+        end
     end
     
 end
-

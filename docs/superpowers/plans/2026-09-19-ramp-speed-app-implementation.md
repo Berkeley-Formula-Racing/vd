@@ -701,6 +701,20 @@ git -c safe.directory='C:/VD' -C 'C:\VD' commit -m "docs: package ramp speed app
 
 ---
 
+## As-built integration addendum (2026-09-27)
+
+The original task breakdown above describes the historical implementation sequence. The current canonical path is now integrated as follows:
+
+- carConfigBaseline.m is the frozen Ramp Speed source of truth and does not call carConfig.m.
+- rampSpeed.buildSetupCatalog builds one Car per serializable setup specification. The same N-by-1 catalog is used for lateral and pure-longitudinal modes.
+- rampSpeed.RampSpeedSession and rampSpeed.StudyExecutor own the lifecycle used by RampSpeedApp.mlapp; App callbacks no longer own solver futures, data queues, or numerical execution.
+- rampSpeed.runStudy is the canonical runner. Serial execution is the deterministic baseline and optional parallel execution is coordinated as one study job.
+- runRampSpeedStudy is a function-form compatibility entry point that builds the protected baseline catalog and delegates to the canonical runner. It returns normalized study runs, optional figures, and progress events.
+- Setup persistence stores setup specifications, map IDs, driver settings, and baseline/configuration version. Legacy result-only studies remain read-only.
+- Invalid per-speed rows retain their status/reason and plot as gaps; unavailable continuous metrics are NaN rather than zero. The focused real-car acceptance regression is tests/test_rampSpeedEndToEndRealCar.m.
+
+The historical agent assignment is retained as an audit trail. New maintenance should follow the ownership boundaries above and should not reintroduce a second App-owned execution path.
+
 ## Parallel execution assignment
 
 Use fresh Luna Max agents only after the user selects execution mode and after the worktree/branch decision is confirmed.

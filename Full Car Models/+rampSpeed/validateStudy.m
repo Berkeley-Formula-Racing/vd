@@ -126,10 +126,16 @@ end
 function issues = validateColumns(names,catalog,index,issues)
 names = string(names);
 unknown = setdiff(names,string(catalog),'stable');
+unknown = setdiff(unknown,stablePerSpeedColumns(),'stable');
 for i = 1:numel(unknown)
     issues(end+1) = sprintf('non-SI canonical column: %s (run %d)', ...
         unknown(i),index);
 end
+end
+
+function names = stablePerSpeedColumns()
+names = ["speedIndex","origin","passIndex","refinementReason", ...
+    "solver_status","solver_reason"];
 end
 
 function catalog = schemaCatalog()

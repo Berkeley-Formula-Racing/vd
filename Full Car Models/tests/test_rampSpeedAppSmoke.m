@@ -14,9 +14,14 @@ required = ["SetupTable","CarRoleDropDown","RampTypeDropDown", ...
     "ExecutionModeDropDown","WorkersEditField","UnitDropDown", ...
     "BaselineDropDown","RunButton","CancelButton","LoadButton", ...
     "SaveButton","ExportButton","ClearButton","ProgressTextArea", ...
-    "MainTabGroup","CapabilityTab","BalanceTab","AeroLoadsTab", ...
+    "MainTabGroup","BalanceTab","AeroLoadsTab", ...
     "SuspensionTab","RawRampTab","InspectorDataTab"];
 verifyTrue(testCase,all(arrayfun(@(name)isprop(app,name),required)));
+verifyFalse(testCase,isprop(app,"CapabilityTab"));
+verifyEqual(testCase,numel(app.BalanceAxes),4);
+verifyEqual(testCase,numel(app.SuspensionAxes),4);
+verifyEqual(testCase,string(app.SpeedGridModeDropDown.Items), ...
+    ["Preview","Accurate","High accuracy"]);
 
 verifyEqual(testCase,string(app.RampTypeDropDown.Value),"lateral");
 verifyEqual(testCase,string(app.LateralModeDropDown.Value),"coast");
@@ -26,7 +31,8 @@ verifyGreaterThan(testCase,height(app.SetupTable.Data),0);
 
 tabTitles = string(arrayfun(@(child)child.Title, ...
     app.MainTabGroup.Children,"UniformOutput",false));
-verifyTrue(testCase,all(ismember(["Capability","Balance","Aero & Loads", ...
+verifyFalse(testCase,any(tabTitles == "Capability"));
+verifyTrue(testCase,all(ismember(["Balance","Aero & Loads", ...
     "Suspension","Raw Ramp","Inspector/Data"],tabTitles)));
 end
 
@@ -92,7 +98,7 @@ cleanup = onCleanup(@()deleteIfValid(app));
 
 fakeRunner = @runRenderFixture;
 app.runStudyForTest(fixture.cars,fixture.cases,fakeRunner);
-lines = findall(app.CapabilityAxes,"Type","line");
+lines = findall(app.BalanceAxes(1),"Type","line");
 markers = string(arrayfun(@(line)line.Marker,lines,"UniformOutput",false));
 
 verifyGreaterThanOrEqual(testCase,numel(lines),2);
@@ -101,7 +107,7 @@ verifyTrue(testCase,hasGap);
 verifyTrue(testCase,any(markers == "o"));
 end
 
-function testBaselineSelectionRendersVariantMinusBaseline(testCase)
+function testAllSelectedSetupsOverlayOnBalanceAndSuspensionTabs(testCase)
 ensureRampSpeedAppPath();
 fixture = makeRampFixture();
 app = RampSpeedApp("Visible","off");
@@ -109,16 +115,31 @@ cleanup = onCleanup(@()deleteIfValid(app));
 
 app.runStudyForTest(fixture.cars,fixture.cases, ...
     @(car,caseInfo,request,callbacks)makeFixtureRun(caseInfo));
-app.BaselineDropDown.Value = "accel";
-app.BaselineDropDown.ValueChangedFcn(app.BaselineDropDown,[]);
-lines = findall(app.BalanceAxes,"Type","line");
-labels = string(arrayfun(@(line)line.DisplayName,lines, ...
+balanceLines = gobjects(0,1);
+for ax = app.BalanceAxes(:).'
+    balanceLines = [balanceLines; findall(ax,"Type","line")]; %#ok<AGROW>
+end
+suspensionLines = gobjects(0,1);
+for ax = app.SuspensionAxes(:).'
+    suspensionLines = [suspensionLines; findall(ax,"Type","line")]; %#ok<AGROW>
+end
+balanceLabels = string(arrayfun(@(line)line.DisplayName,balanceLines, ...
+    "UniformOutput",false));
+suspensionLabels = string(arrayfun(@(line)line.DisplayName,suspensionLines, ...
     "UniformOutput",false));
 
-verifyGreaterThanOrEqual(testCase,numel(lines),1);
-verifyTrue(testCase,any(contains(labels," - accel")));
-verifyThat(testCase,string(app.BalanceAxes.YLabel.String), ...
-    matlab.unittest.constraints.ContainsSubstring("Delta"));
+verifyGreaterThanOrEqual(testCase,numel(balanceLines),2);
+verifyGreaterThanOrEqual(testCase,numel(suspensionLines),2);
+verifyTrue(testCase,any(contains(balanceLabels,"baseline")));
+verifyTrue(testCase,any(contains(balanceLabels,"acceleration")));
+verifyTrue(testCase,any(contains(suspensionLabels,"baseline")));
+verifyTrue(testCase,any(contains(suspensionLabels,"acceleration")));
+verifyEqual(testCase,string(app.BalanceAxes(1).Title.String), ...
+    "Total balance");
+verifyEqual(testCase,string(app.BalanceAxes(4).Title.String), ...
+    "Steer angle");
+verifyEqual(testCase,string(app.SuspensionAxes(3).Title.String), ...
+    "Pitch angle");
 end
 
 function testUnitSelectionChangesPlotValuesAndLabels(testCase)
@@ -155,12 +176,12 @@ app = RampSpeedApp("Visible","off");
 cleanup = onCleanup(@()deleteIfValid(app)); %#ok<NASGU>
 
 app.runStudyForTest(fixture.cars,fixture.cases,@runRenderFixture);
-verifyNotEmpty(testCase,findall(app.CapabilityAxes,"Type","line"));
+verifyNotEmpty(testCase,findall(app.AeroLoadsAxes,"Type","line"));
 
 app.ClearButtonPushed([],[]);
 
-axesList = [app.CapabilityAxes,app.BalanceAxes,app.AeroLoadsAxes, ...
-    app.SuspensionAxes,app.RawRampAxes];
+axesList = [app.BalanceAxes(:);app.AeroLoadsAxes(:); ...
+    app.SuspensionAxes(:);app.RawRampAxes(:)];
 for ax = axesList(:).'
     verifyEmpty(testCase,findall(ax,"Type","line"));
     verifyEmpty(testCase,findall(ax,"Type","constantline"));

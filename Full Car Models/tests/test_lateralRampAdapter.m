@@ -38,9 +38,9 @@ verifyEqual(testCase,run.status,"cancelled");
 verifyEqual(testCase,run.perSpeed.speed_mps,settings.speeds(:), ...
     "AbsTol",1e-12);
 verifyTrue(testCase,run.perSpeed.valid(1));
-verifyEqual(testCase,run.perSpeed.status(1),"complete");
+verifyEqual(testCase,run.perSpeed.status(1),"converged");
 verifyFalse(testCase,any(run.perSpeed.valid(2:end)));
-verifyTrue(testCase,all(run.perSpeed.status(2:end) == "failed"));
+verifyTrue(testCase,all(run.perSpeed.status(2:end) == "cancelled"));
 verifyThat(testCase,run.perSpeed.reason(2), ...
     matlab.unittest.constraints.ContainsSubstring("cancel"));
 
@@ -76,7 +76,7 @@ run = rampSpeed.runLateralRamp(cars{1,1},settings, ...
     struct("id","baseline","label","baseline","carRole","lap"),struct());
 
 verifyFalse(testCase,run.perSpeed.valid(1));
-verifyEqual(testCase,run.perSpeed.status(1),"failed");
+verifyEqual(testCase,run.perSpeed.status(1),"solver_failed");
 verifyTrue(testCase,isfield(run.raw,"speedErrors"));
 errors = run.raw.speedErrors;
 verifyGreaterThanOrEqual(testCase,numel(errors),1);
@@ -113,7 +113,7 @@ verifyNotEmpty(testCase,errorIndex);
 speedError = errors(errorIndex);
 target = speedError.speed_index;
 verifyFalse(testCase,run.perSpeed.valid(target));
-verifyEqual(testCase,run.perSpeed.status(target),"failed");
+verifyEqual(testCase,run.perSpeed.status(target),"infeasible");
 verifyTrue(testCase,isfield(speedError,"stack"));
 verifyThat(testCase,run.perSpeed.reason(target), ...
     matlab.unittest.constraints.ContainsSubstring(string(speedError.identifier)));

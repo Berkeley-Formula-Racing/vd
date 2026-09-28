@@ -29,6 +29,11 @@ if isfield(candidate,"schemaVersion")
             error("rampSpeed:invalidStudy", ...
                 "Invalid ramp-speed study: %s",joinIssues(issues));
         end
+        if ~isfield(candidate,'setupSpecifications') || isempty(candidate.setupSpecifications)
+            candidate.readOnly = true;
+        elseif ~isfield(candidate,'readOnly')
+            candidate.readOnly = false;
+        end
         study = candidate;
         return
     end
@@ -36,6 +41,7 @@ end
 
 if isfield(candidate,"results")
     study = rampSpeed.migrateLegacyStudy(fileName,appVersion);
+    study.readOnly = true;
 else
     error("rampSpeed:invalidStudy", ...
         "The cache is neither a schema-v1 study nor a legacy study.");

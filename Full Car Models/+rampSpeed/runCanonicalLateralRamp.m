@@ -19,9 +19,9 @@ car = rampSpeed.applySolverProfileToCar(car,profile);
 if ~isfield(settings,"mode") || isempty(settings.mode)
     settings.mode = "balanced";
 end
+grid = speedGrid(settings);
 requested = requestedSpeeds(settings);
-if isempty(requested), requested = (5:2.5:30).'; end
-requested = unique(double(requested(:)),"stable");
+[requested,speedGridMeta] = rampSpeed.resolveFixedSpeedGrid(requested,grid);
 
 request = struct("rampType","lateral","settings",settings, ...
     "solverProfile",profile.id,"setupKey",caseKey(caseInfo), ...
@@ -52,7 +52,7 @@ runMeta = struct("source","rampSpeed.runLateralRamp", ...
     "solverProfile",rampSpeed.serializeSolverProfile(profile), ...
     "requestedSpeeds_mps",requested,"lateralMetricsApplicable",true, ...
     "speedErrors",raw.raw.speedErrors,"warnings",strings(0,1), ...
-    "errors",strings(0,1),"speedGrid",fixedGrid(requested));
+    "errors",strings(0,1),"speedGrid",speedGridMeta);
 if profile.approximate
     runMeta.warnings(end+1,1) = ...
         "Approximate aero preview: ride-height aero iteration is disabled.";
@@ -115,14 +115,19 @@ end
     end
 end
 
-function grid = fixedGrid(requested)
-grid = struct("mode","fixed","requestedSpeeds_mps",requested, ...
-    "seedSpeeds_mps",requested,"finalSpeeds_mps",requested,"passes",0, ...
-    "provenance",table(requested,repmat("requested",numel(requested),1), ...
-    zeros(numel(requested),1),repmat("user_requested",numel(requested),1), ...
-    'VariableNames',{'speed_mps','source','pass','reason'}), ...
-    "refinementHistory",struct([]),"stopReason","", ...
-    "exactRetrySpeeds_mps",zeros(0,1));
+function grid = speedGrid(settings)
+grid = struct("mode","fixed");
+if isfield(settings,"speedGrid") && ~isempty(settings.speedGrid)
+    if isstruct(settings.speedGrid)
+        grid = settings.speedGrid;
+    else
+        grid.mode = settings.speedGrid;
+    end
+end
+if ~isstruct(grid) || ~isscalar(grid)
+    error("rampSpeed:invalidFixedSpeedGrid", ...
+        "speedGrid must be a scalar struct or mode.");
+end
 end
 
 function speeds = requestedSpeeds(settings)

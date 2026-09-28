@@ -9,6 +9,9 @@ study.schemaVersion = 1;
 study.created = datetime('now');
 study.appVersion = string(appVersion);
 study.cases = emptyCases();
+study.setupSpecifications = struct.empty(0,1);
+study.baselineVersion = "";
+study.readOnly = false;
 study.runs = emptyRuns();
 study.displayUnits = struct( ...
     'speed', "m/s", ...

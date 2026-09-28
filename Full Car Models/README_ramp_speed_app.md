@@ -6,17 +6,21 @@ RampSpeedApp is the schema-v1 MATLAB App Designer front end for lateral and long
 
 1. Open `RampSpeedApp.prj` from MATLAB.
 2. Use the project startup shortcut `setup_paths` (the project startup file is `setup_paths.m`). It adds the app, `+rampSpeed`, tests, and model folders to the MATLAB path. Keep the generated `resources/project` sidecar directory with `RampSpeedApp.prj`; MATLAB uses it for the project file inventory, name, startup action, and shortcut.
-3. Open `RampSpeedApp.mlapp` and press Run. The Setup table supplies the available car/case definitions.
+3. Open `RampSpeedApp.mlapp` and press Run. The app opens on the analysis view with a `Setups / Run` sidebar. Use its checkboxes to choose the setups shown in the plots; the shared run configuration, units, Run/Cancel/Clear, save/load/export, and progress controls are in the same sidebar. The `Hide sidebar` button collapses the sidebar when more plot width is useful.
 
-Choose the car role deliberately. `lap` is the normal lateral/cornering role; `acceleration` is the longitudinal role. The role is stored with the case and is part of the study provenance.
+Ramp Speed uses one protected, solver-ready baseline setup for both ramp types. The baseline is built by carConfigBaseline.m, not by the frequently changing carConfig.m. Its physical datum is 4.0 in front and 5.7 in rear, and the selected b26 aero map is referenced at those same heights, so the baseline has zero ride-height map offset. Open the `Setup` tab to duplicate the baseline or another setup, then edit rear ARB stiffness, front/rear spring selections, front/rear ride height (always entered in inches), driver weight, rear weight distribution, and aero-map ID. The ramp type selects only the solver; it does not select a second car. Each setup is represented by one Car in the N-by-1 setup catalog. The `Setup` tab is intentionally setup-only; run configuration is shared and remains in the sidebar, while the compact overlay legend provides selection control during analysis. The plot axes reset to automatic limits on each redraw.
 
 ## Study setup and interpretation
 
+- The speed-grid selector has three deterministic fixed presets: Preview (5 points), Accurate (11 points), and High accuracy (21 points). The start/stop range supplies the endpoints for the selected preset; an explicit speed vector remains available for custom fixed studies.
+
 - Lateral runs support `coast` and `balanced` modes. Coast holds the coast-style longitudinal condition; balanced applies the requested balance condition while the ramp is solved.
 - Longitudinal runs use the pure-`Ay=0` convention. The exported `pure_ay0`, `steer_zero`, `lat_velocity_zero`, and `yaw_rate_zero` fields make those constraints explicit instead of treating unavailable lateral metrics as zero.
+- Longitudinal powertrain evaluation uses the continuous-envelope model. Each setup builds one serializable `rampSpeedLite` snapshot and caches the bounded ratio envelope for the fixed speed plan; the existing full `Car` equations remain the tire/aero force boundary while the lightweight model is expanded.
 - The default display is SI. A unit selection may change plot labels and displayed values, but the study and exports remain canonical SI: speed in `m/s`, acceleration in `m/s^2`, force in `N`, length in `m`, angle in `rad`, and angular rate in `rad/s`.
 - Understeer is signed. A positive `K_linear_rad_per_mps2` means steering demand grows with lateral acceleration (understeer); a negative value is oversteer. Preserve the sign when comparing cases or exporting deltas.
 - `downforce_N` and `drag_N` are separate aerodynamic quantities. Downforce increases normal load; drag is the longitudinal resistance. Use `ClA_m2`, `CdA_m2`, `LoD`, axle loads, and aero-balance fields together when checking an aero result.
+- Corner tire outputs are split into front-left/front-right camber and rear-left/rear-right camber plots. The same four-corner convention is used for tire slip angles, so a left/right balance change is not hidden by axle averaging.
 
 Every per-speed row and detailed point carries `valid` and `status`; per-speed rows also carry `reason`. Do not replace invalid rows with interpolated values. Review the warning/status fields before comparing curves, especially:
 
@@ -27,9 +31,25 @@ Every per-speed row and detailed point carries `valid` and `status`; per-speed r
 
 The Raw Ramp and Inspector/Data tabs retain the detailed solver rows. Balance and Aero & Loads plots should be read with validity gaps and warning markers intact.
 
+The canonical programmatic entry point is the function form of runRampSpeedStudy; the App uses the same session/executor lifecycle:
+
+```matlab
+opts = struct('rampType','longitudinal', ...
+    'speeds',[5 10 15 17.5 20 22.5 25], ...
+    'makeFigures',true);
+[study,runs,figures,events] = runRampSpeedStudy(opts);
+```
+
+For application integrations, use rampSpeed.RampSpeedSession and rampSpeed.StudyExecutor. rampSpeed.runStudy is the canonical numerical runner. Serial execution is deterministic and supported everywhere; parallel execution is optional and is one study job over the selected setup catalog. Per-speed statuses use planned, running, converged, near_feasible, infeasible, solver_failed, or cancelled; invalid continuous metrics are NaN, never numeric zero.
+
 ## Save, cache, and export
 
-Use the app Save/Load controls for schema-v1 `.mat` studies. A runner checkpoint is written only when the request supplies a checkpoint path; it is not a hidden repository cache. Keep temporary checkpoints in a disposable working folder and retain released studies in a named results folder.
+Use the app Save/Load controls for schema-v1 `.mat` studies. Saved setup specifications include the setup fields, aero-map ID, driver weight/distribution, and baseline/configuration version; raw Car objects are rebuilt rather than used as the editable source of truth. Existing studies without setup specifications remain loadable as read-only result data. A runner checkpoint is written only when the request supplies a checkpoint path; it is not a hidden repository cache. Keep temporary checkpoints in a disposable working folder and retain released studies in a named results folder.
+
+Longitudinal run metadata includes the data-only ramp model, its solver-profile
+version, setup identity, aero-map provenance, and cached envelope records. A
+speed with no feasible continuous ratio remains an explicit infeasible or
+solver-failed row with a reason; it is never converted to a plotted zero.
 
 `rampSpeed.exportStudy(study,outputDirectory,options)` validates the current schema and writes absolute-path results:
 
@@ -80,3 +100,12 @@ allResults = runtests(fullfile(root,'tests'));
 ```
 
 The full folder includes legacy model/plot tests in addition to the app contract tests. Class-shadowing warnings from duplicate historical model folders and any pre-existing legacy plot baseline failures should be recorded with the test result rather than “fixed” by changing this app package.
+
+The focused Ramp Speed acceptance check also exercises one real baseline setup through both ramp types at representative speeds:
+
+```matlab
+root = pwd;
+addpath(genpath(root));
+realCarResults = runtests(fullfile(root,'tests','test_rampSpeedEndToEndRealCar.m'));
+assert(all([realCarResults.Passed]));
+```

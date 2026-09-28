@@ -108,6 +108,33 @@ verifyEqual(testCase,numel(findall(ax,"Type","constantline")),1);
 verifyEqual(testCase,string(ax.YLabel.String),data.yLabel);
 end
 
+
+function testRenderMetricDoesNotPlotInvalidRowsAtZero(testCase)
+run = makePlotRun("baseline",[5;10;15],[100;200;300], ...
+    [true;false;true],[false;false;false]);
+data = rampSpeed.buildPlotData(run,"aero_front_load");
+fig = figure("Visible","off");
+cleanup = onCleanup(@()close(fig)); %#ok<NASGU>
+ax = axes(fig);
+h = rampSpeed.renderMetric(ax,data,struct("showLegend",false));
+
+verifyEmpty(testCase,h.warningMarkers);
+verifyTrue(testCase,all(isfinite(h.lines(1).YData([1 3]))));
+verifyTrue(testCase,isnan(h.lines(1).YData(2)));
+end
+
+function testRenderMetricDoesNotMarkInvalidRowsAtZero(testCase)
+run = makePlotRun("baseline",[5;10;15],[100;200;300], ...
+    [true;false;true],[false;true;false]);
+data = rampSpeed.buildPlotData(run,"aero_front_load");
+fig = figure("Visible","off");
+cleanup = onCleanup(@()close(fig)); %#ok<NASGU>
+ax = axes(fig);
+h = rampSpeed.renderMetric(ax,data,struct("showLegend",false));
+verifyEmpty(testCase,h.warningMarkers);
+end
+
+
 function testRenderMetricPreservesMultipleSeriesAndHoldState(testCase)
 runs(1) = makePlotRun("baseline",[5;10],[100;200],[true;true],[false;false]);
 runs(2) = makePlotRun("variant",[5;10],[90;190],[true;true],[false;false]);
@@ -126,6 +153,22 @@ hOn = rampSpeed.renderMetric(ax,data,struct("showLegend",false,"showWarnings",fa
 verifyEqual(testCase,numel(hOn.lines),2);
 verifyTrue(testCase,all(isgraphics(hOn.lines)));
 verifyTrue(testCase,ishold(ax));
+end
+
+function testRenderMetricAutoScalesOverlayYAxis(testCase)
+runs(1) = makePlotRun("baseline",[5;10],[0;100],[true;true],[false;false]);
+runs(2) = makePlotRun("variant",[5;10],[10;120],[true;true],[false;false]);
+data = rampSpeed.buildPlotData(runs,"aero_front_load");
+fig = figure("Visible","off");
+cleanup = onCleanup(@()close(fig));
+ax = axes(fig);
+ax.YLim = [-1 1];
+ax.YLimMode = "manual";
+rampSpeed.renderMetric(ax,data,struct("showLegend",false,"showWarnings",false));
+drawnow;
+verifyEqual(testCase,string(ax.YLimMode),"auto");
+verifyGreaterThanOrEqual(testCase,ax.YLim(2),120);
+verifyLessThanOrEqual(testCase,ax.YLim(1),0);
 end
 
 function testRenderMetricUsesSpeedColoredMarkersForRawGroups(testCase)
