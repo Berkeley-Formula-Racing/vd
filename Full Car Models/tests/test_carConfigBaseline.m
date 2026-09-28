@@ -1,0 +1,54 @@
+function tests = test_carConfigBaseline
+tests = functiontests(localfunctions);
+end
+
+function testReturnsOneAccelerationOrientedCar(testCase)
+[car,~] = carConfigBaseline();
+
+verifyTrue(testCase,isscalar(car));
+verifyClass(testCase,car,'Car');
+verifyEqual(testCase,car.g,9.81,'AbsTol',1e-12);
+verifyEqual(testCase,car.M,221,'AbsTol',1e-12);
+verifyEqual(testCase,car.aero.cda,0.855,'AbsTol',1e-12);
+verifyEqual(testCase,car.aero.cla,2.37,'AbsTol',1e-12);
+verifyEqual(testCase,car.aero.D_f,0.418,'AbsTol',1e-12);
+verifyClass(testCase,car.powertrain,'Powertrain');
+verifyClass(testCase,car.tire,'Tire2');
+verifyTrue(testCase,car.rideHeightAero.enabled);
+verifyEqual(testCase,car.rideHeightAero.static_front_ride_height_in,4, ...
+    'AbsTol',1e-12);
+verifyEqual(testCase,car.rideHeightAero.static_rear_ride_height_in,5.7, ...
+    'AbsTol',1e-12);
+verifyEqual(testCase,car.rideHeightAero.map_reference_front_ride_height_in,4, ...
+    'AbsTol',1e-12);
+verifyEqual(testCase,car.rideHeightAero.map_reference_rear_ride_height_in,5.7, ...
+    'AbsTol',1e-12);
+end
+
+function testReturnsSerializableBaselineSetupConfig(testCase)
+[~,config] = carConfigBaseline();
+
+verifyTrue(testCase,isstruct(config) && isscalar(config));
+requiredFields = {'schemaVersion','baselineVersion','id','label','source', ...
+    'options','defaults','fixedParameters'};
+verifyTrue(testCase,all(isfield(config,requiredFields)));
+verifyTrue(testCase,all(isfield(config.options,{ ...
+    'rearArbStiffness_NmPerRad','frontSpringRate_lb_in', ...
+    'rearSpringRate_lb_in'})));
+verifyTrue(testCase,all(isfield(config.defaults,{ ...
+    'rearArbStiffness_NmPerRad','frontSpringRate_lb_in', ...
+    'rearSpringRate_lb_in','frontRideHeight_in','rearRideHeight_in', ...
+    'aeroMapId','driverWeight_kg','rearWeightDistribution_percent'})));
+verifyGreaterThan(testCase,numel(config.options.rearArbStiffness_NmPerRad),1);
+verifyGreaterThan(testCase,numel(config.options.frontSpringRate_lb_in),1);
+verifyGreaterThan(testCase,numel(config.options.rearSpringRate_lb_in),1);
+verifyEqual(testCase,config.defaults.frontSpringRate_lb_in,300);
+verifyEqual(testCase,config.defaults.rearSpringRate_lb_in,250);
+verifyEqual(testCase,config.defaults.frontRideHeight_in,4);
+verifyEqual(testCase,config.defaults.rearRideHeight_in,5.7);
+verifyEqual(testCase,config.fixedParameters.vehicle.map_reference_front_ride_height_in,4);
+verifyEqual(testCase,config.fixedParameters.vehicle.map_reference_rear_ride_height_in,5.7);
+verifyEqual(testCase,config.defaults.driverWeight_kg,59);
+verifyEqual(testCase,config.defaults.rearWeightDistribution_percent,51.2);
+verifyNotEmpty(testCase,jsonencode(config));
+end
