@@ -31,7 +31,6 @@ switch modelType
             'Unsupported tire model type %s.',modelType);
 end
 end
-
 function value = getField(s,name,defaultValue)
 if isfield(s,name) && ~isempty(s.(name))
     value = s.(name);
@@ -39,4 +38,3 @@ else
     value = defaultValue;
 end
 end
-

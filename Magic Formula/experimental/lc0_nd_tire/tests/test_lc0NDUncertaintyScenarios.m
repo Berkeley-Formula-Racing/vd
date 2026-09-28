@@ -1,7 +1,6 @@
 function tests = test_lc0NDUncertaintyScenarios
 tests = functiontests(localfunctions);
 end
-
 function testBuildsNamedLowNominalHighDonorTransferCases(testCase)
 % Break caught: unsupported donor force levels are presented as one exact
 % target-tire prediction instead of an explicit uncertainty envelope.
@@ -17,4 +16,3 @@ verifyLessThan(testCase,scenarios(1).rhoStiff,scenarios(2).rhoStiff);
 verifyLessThan(testCase,scenarios(2).rhoStiff,scenarios(3).rhoStiff);
 verifyGreaterThanOrEqual(testCase,[scenarios.couplingExponent],1);
 end
-

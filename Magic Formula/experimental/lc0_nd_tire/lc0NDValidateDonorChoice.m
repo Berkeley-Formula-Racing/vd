@@ -35,7 +35,6 @@ provenance = struct( ...
     'relationship',string(getField(cfg.donor,'relationship', ...
         'larger same-compound donor')));
 end
-
 function value = getField(s,name,defaultValue)
 if isfield(s,name) && ~isempty(s.(name))
     value = s.(name);
@@ -43,4 +42,3 @@ else
     value = defaultValue;
 end
 end
-

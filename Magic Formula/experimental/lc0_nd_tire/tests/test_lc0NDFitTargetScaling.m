@@ -1,7 +1,6 @@
 function tests = test_lc0NDFitTargetScaling
 tests = functiontests(localfunctions);
 end
-
 function testBuildsLoadNormalizedCapacityAndStiffnessScales(testCase)
 % Break caught: the exact-size lateral data is reduced to one reference
 % point, so load dependence is lost in the vehicle model.
@@ -27,4 +26,3 @@ verifyEqual(testCase,row.mu_scale,0.9,'AbsTol',1e-12);
 verifyEqual(testCase,fit.reference.mu_scale,1,'AbsTol',1e-12);
 verifyEqual(testCase,row.stiffness_scale,0.9,'AbsTol',1e-12);
 end
-
