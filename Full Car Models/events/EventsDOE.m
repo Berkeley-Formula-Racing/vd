@@ -97,7 +97,8 @@ classdef EventsDOE < handle
             
             [apex_velocity] = apex_velocities(obj.interp_info.radius_vector,obj.interp_info.max_vel_corner_vector,extrema);
             
-            [F_accel,F_braking] = create_scattered_interpolants2(obj.car.longAccelLookup, obj.car.longDecelLookup);
+            [F_accel,F_braking] = create_scattered_interpolants2( ...
+                obj.car.longAccelLookup,obj.car.longDecelLookup,obj.car.ggMask);
             
             long_vel = 0;
             if rollout

@@ -1,4 +1,5 @@
-function [x_braking,long_decel,braking_decel_guess] = max_braking_decel_cornering(long_vel_guess,lat_accel_value,car,x0)
+function [x_braking,long_decel,braking_decel_guess,diagnostics] = ...
+        max_braking_decel_cornering(long_vel_guess,lat_accel_value,car,x0)
 % uses fmincon to maximize braking deceleration at a fixed longitudinal
 % velocity and a fixed lateral acceleration
 %
@@ -64,6 +65,7 @@ yaw_rate = lat_accel_value/long_vel_guess;
 seeds = {};
 if nargin >= 4 && ~isempty(x0)
     x0(3) = long_vel_guess;
+    x0(5) = yaw_rate;
     seeds{end+1} = x0;
 else
     seeds{end+1} = [0.01,-0.1,long_vel_guess,-0.1,0.01,-0.01,-0.01,-0.01,-0.01];
@@ -81,7 +83,8 @@ end
 % suggests, is WORSE across the 38 grip and aero sweep cars -- 94 failures of
 % 1872 against 73, and half as many improved points.
 alpha_seed   = -min(0.35*lat_accel_value, 8)*pi/180;
-steer_seed   = min(max(rad2deg(car.W_b*yaw_rate/long_vel_guess),0),22);
+steer_seed   = min(max(rad2deg(car.W_b*yaw_rate/long_vel_guess),0), ...
+    car.qssSteeringLimitDeg);
 lat_vel_seed = min(max(long_vel_guess*alpha_seed + car.l_r*yaw_rate,-3),3);
 % brakes off: satisfies the four wheel torque balances exactly at kappa = 0,
 % and is the only one of the two that finds the steered braking branch
@@ -94,14 +97,7 @@ seeds{end+1} = [steer_seed, -0.05, long_vel_guess, lat_vel_seed, min(yaw_rate,2)
 
 % bounds
 %
-% NOTE the steering limit is 22 here and 25 in max_lat_accel and
-% max_long_accel_cornering. gg2 sizes its lateral grid from max_lat_accel, so
-% at low speed it asks this solver for lateral accelerations it cannot reach:
-% capped at 22 deg the car makes 6.66 m/s^2 at 5 m/s and 9.51 at 6, against
-% the 7.59 and 10.65 gg2 asks for. Those cells are infeasible, not unsolved,
-% and they are 5 of the 9 failures. Raising this to 25 or lowering gg2's
-% request is a separate decision from the starts.
-steer_angle_bounds = [0,22];
+steer_angle_bounds = [0,car.qssSteeringLimitDeg];
 throttle_bounds = [-1,0];
 long_vel_bounds = [long_vel_guess-0.1,long_vel_guess+0.1];
 lat_vel_bounds = [-3,3];
@@ -130,14 +126,18 @@ constraint = @(P) steadyStateConstraint4(evaluator.evaluate(P),P,lat_accel_value
 opts = setOptimoptions(1000);
 
 x = []; exitflag = 0; bestVal = -inf; bestRes = inf;
+functionEvaluations = 0;
 for k = 1:numel(seeds)
-    [xk,~,flagk] = fmincon(f,min(max(seeds{k},lb),ub),A,b,Aeq,beq,lb,ub,constraint,opts);
+    [xk,~,flagk,outputk] = fmincon(f,min(max(seeds{k},lb),ub),A,b,Aeq,beq,lb,ub,constraint,opts);
+    if isstruct(outputk) && isfield(outputk,'funcCount')
+        functionEvaluations = functionEvaluations + outputk.funcCount;
+    end
 
     % one extra constraint evaluation per candidate, against a hundred or more
     % inside the solve -- the residual is what the selection turns on and
     % fmincon does not hand it back
     [ck,ceqk] = constraint(xk);
-    resk = max([max(abs(ceqk)), max(ck), 0]);
+    resk = qssConstraintResidual(ck,ceqk);
     valk = -evaluator.evaluate(xk).longAccel;    % more braking is a bigger number
 
     if isempty(x) || preferNew(flagk,resk,valk,exitflag,bestRes,bestVal,FEAS_TOL)
@@ -145,8 +145,21 @@ for k = 1:numel(seeds)
     end
 end
 
-[engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-Fzvirtual,Fz,alpha,T] = car.equations(x);
+fullState = evaluator.evaluateFull(x);
+engine_rpm = fullState.engineRpm;
+beta = fullState.beta;
+long_accel = fullState.longAccel;
+omega = fullState.omega;
+current_gear = fullState.currentGear;
+Fzvirtual = fullState.Fzvirtual;
+Fz = fullState.Fz;
+alpha = fullState.alpha;
+T = fullState.T;
+
+diagnostics = struct('exitflag',exitflag,'residual',bestRes, ...
+    'valid',qssCandidateValidity(exitflag,bestRes,FEAS_TOL), ...
+    'functionEvaluations',functionEvaluations, ...
+    'equationCalls',evaluator.equationCalls());
 
 braking_decel_guess = x;
 
@@ -167,18 +180,9 @@ function take = preferNew(flag,res,val,bFlag,bRes,bVal,tol)
 % constraint boundary win, since those report MORE braking, not less; ranking
 % on residual alone would accept a trivially feasible but badly suboptimal
 % point. Same rule as max_lat_accel.
-okNew = (flag == 1) || (flag == 2);
-okOld = (bFlag == 1) || (bFlag == 2);
-if okNew ~= okOld, take = okNew; return, end     % a converged solve always wins
-if ~okNew,         take = res < bRes; return, end % neither: less infeasible
-
-goodNew = res <= tol;
-goodOld = bRes <= tol;
-if goodNew && goodOld
-    take = val > bVal;                            % both legal -> more braking wins
-elseif goodNew ~= goodOld
-    take = goodNew;                               % only one is legal
-else
-    take = res < bRes;                            % neither legal -> less illegal
-end
+okNew = qssCandidateValidity(flag,res,tol);
+okOld = qssCandidateValidity(bFlag,bRes,tol);
+if okNew ~= okOld, take = okNew; return, end
+if okNew, take = val > bVal; return, end
+take = res < bRes;
 end

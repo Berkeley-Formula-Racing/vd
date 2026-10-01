@@ -54,7 +54,7 @@ nRestart = 0; nSwapped = 0;
 
 for i = 1:n
     [xA,vA,gA,cA] = max_vel_cornering(radius(i),car.max_vel,car,guess);
-    okA = (xA(1) == 1 || xA(1) == 2);
+    okA = ~isempty(xA) && qssCandidateValidity(xA(1),cA,FEAS_TOL);
 
     % try a fresh solve when the chain is due a check, has broken physics, or
     % has produced something that is not properly feasible
@@ -63,15 +63,20 @@ for i = 1:n
     if ~isempty(guess) && (dueRestart || brokeMono || ~okA || cA > FEAS_TOL)
         nRestart = nRestart + 1;
         [xB,vB,gB,cB] = max_vel_cornering(radius(i),car.max_vel,car);
-        okB = (xB(1) == 1 || xB(1) == 2);
+        okB = ~isempty(xB) && qssCandidateValidity(xB(1),cB,FEAS_TOL);
         if pick(okA,cA,vA,okB,cB,vB,FEAS_TOL)
             xA = xB; vA = vB; gA = gB; cA = cB; %#ok<NASGU>
             nSwapped = nSwapped + 1;
         end
     end
 
-    max_vel_corner_vector(i) = vA;
-    x_matrix = [x_matrix; xA]; %#ok<AGROW>
+    if okA
+        max_vel_corner_vector(i) = vA;
+        x_matrix = [x_matrix; xA]; %#ok<AGROW>
+    else
+        max_vel_corner_vector(i) = NaN;
+        x_matrix = [x_matrix; nan(1,31)]; %#ok<AGROW>
+    end
     guess = gA;
 end
 

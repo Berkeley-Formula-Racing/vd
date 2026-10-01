@@ -33,6 +33,14 @@ classdef Car
         tire
         ackermann
         g = 9.81;
+        % Shared front-wheel steering bound used by all QSS/g-g branches.
+        % Keep the established 25 degree limit unless a setup explicitly
+        % supplies a measured physical steering stop.
+        qssSteeringLimitDeg = 25;
+        % Fixed-point residual acceptance in inches.  The solver and QSS
+        % validity gate share this value so a diagnostic cannot claim a state
+        % is valid after the solver's own tolerance has been exceeded.
+        qssAeroResidualToleranceIn = 1e-9;
 
         % Per-axle grip scaling, applied to the tire forces in tireForce.
         % The model carries ONE Tire2 for all four corners, so this is how
@@ -102,6 +110,7 @@ classdef Car
         decel_info % information (x vector including normal loads, etc) when decelerating
         longAccelLookup %maxLongAccel = f(latAccel,velocity)
         longDecelLookup %maxLongDecel = f(latAccel,velocity)
+        ggMask = struct()
         comp
     end
 
@@ -186,6 +195,8 @@ classdef Car
                 error('Car:invalidEvaluationOptions', ...
                     'evaluationOptions must be a scalar struct.');
             end
+            validityOnlyDiagnostics = isfield(evaluationOptions, ...
+                'qssValidityOnly') && logical(evaluationOptions.qssValidityOnly);
 
             % inputs: vehicle parameters
             % outputs: vehicle accelerations and other properties
@@ -277,15 +288,30 @@ classdef Car
             % only assemble the diagnostics struct when a caller asks for it:
             % this runs inside every fmincon function evaluation
             needRideCamber = obj.hasRideCamber();
+            ssValidityOnly = validityOnlyDiagnostics && ~needRideCamber;
+            hasRideHeightContext = ~isempty(rideHeightContext);
             if nargout >= 17
                 [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo,rideHeightContext] = ...
-                    ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180,rideHeightContext);
+                    ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180, ...
+                    rideHeightContext,ssValidityOnly);
             elseif nargout >= 16
-                [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
+                if hasRideHeightContext
+                    [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo] = ...
+                        ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180, ...
+                        rideHeightContext,ssValidityOnly);
+                else
+                    [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo] = ...
+                        ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180,[], ...
+                        ssValidityOnly);
+                end
             elseif needRideCamber
-                [Fz,Fzvirtual,downforce,drag,wheelRideHeights] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
+                [Fz,Fzvirtual,downforce,drag,wheelRideHeights] = ...
+                    ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180, ...
+                    rideHeightContext,ssValidityOnly);
             else
-                [Fz,Fzvirtual,downforce,drag] = ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180);
+                [Fz,Fzvirtual,downforce,drag] = ...
+                    ssForces(obj,long_vel,yaw_rate,T,(1/2)*(steer_angle_1+steer_angle_2)*pi/180, ...
+                    rideHeightContext,ssValidityOnly);
                 wheelRideHeights = [];
             end
 
@@ -316,6 +342,8 @@ classdef Car
             %steer_angle = steer_angle_1*pi/180;
             %disp(gamma);
             [Fx,Fy,Fxw] = obj.tireForce(steer_angle_1,steer_angle_2,alpha,kappa,Fz, gamma);
+            % Rolling resistance is also part of the body-force pitch balance.
+            F_rr = obj.Crr * (obj.M*obj.g + downforce);
 
             % Equations of Motion
             lat_accel = sum(Fy)*(1/obj.M)-yaw_rate*long_vel;
@@ -326,8 +354,6 @@ classdef Car
             % correct. This is the single place longitudinal force is summed,
             % so putting it here reaches the g-g solvers, the accel-event
             % lookup and the lap solver alike. Zero Crr is a no-op.
-            F_rr = obj.Crr * (obj.M*obj.g + downforce);
-
             % M + rotatingMass, not M: the tyre force has to accelerate the
             % spinning parts as well as the car. Zero inertias reduce this to
             % the old expression exactly.
@@ -457,26 +483,21 @@ classdef Car
             sF = obj.gripScaleF; if isempty(sF), sF = 1; end
             sR = obj.gripScaleR; if isempty(sR), sR = 1; end
 
-            % forces in tire frame of reference
-            F_xw1 = sF*obj.tire.F_x(alpha(1),kappa(1),Fz(1),gamma(1));
-            F_yw1 = sF*obj.tire.F_y(alpha(1),kappa(1),Fz(1),gamma(1));
-            F_xw2 = sF*obj.tire.F_x(alpha(2),kappa(2),Fz(2),gamma(2));
-            F_yw2 = sF*obj.tire.F_y(alpha(2),kappa(2),Fz(2),gamma(2));
-            F_xw = [F_xw1; F_xw2];
+            % Evaluate all corners in two vectorized Tire2 calls.  Tire2's
+            % numeric kernels are elementwise; batching avoids eight method
+            % dispatches and eight camber-interpolant calls per QSS equation.
+            alpha = alpha(:); kappa = kappa(:); Fz = Fz(:); gamma = gamma(:);
+            F_xw_all = obj.tire.F_x(alpha,kappa,Fz,gamma);
+            F_yw_all = obj.tire.F_y(alpha,kappa,Fz,gamma);
+            F_xw_all = F_xw_all(:).*[sF;sF;sR;sR];
+            F_yw_all = F_yw_all(:).*[sF;sF;sR;sR];
 
-            % forces in vehicle frame of reference
-            F_x1 = F_xw1*cosd(steer_angle_1)-F_yw1*sind(steer_angle_1);
-            F_y1 = F_xw1*sind(steer_angle_1)+F_yw1*cosd(steer_angle_1);
-            F_x2 = F_xw2*cosd(steer_angle_2)-F_yw2*sind(steer_angle_2);
-            F_y2 = F_xw2*sind(steer_angle_2)+F_yw2*cosd(steer_angle_2);
-
-            F_x3 = sR*obj.tire.F_x(alpha(3),kappa(3),Fz(3),gamma(3));
-            F_y3 = sR*obj.tire.F_y(alpha(3),kappa(3),Fz(3),gamma(3));
-            F_x4 = sR*obj.tire.F_x(alpha(4),kappa(4),Fz(4),gamma(4));
-            F_y4 = sR*obj.tire.F_y(alpha(4),kappa(4),Fz(4),gamma(4));
-
-            Fx = [F_x1; F_x2; F_x3; F_x4];
-            Fy = [F_y1; F_y2; F_y3; F_y4];
+            steer = [steer_angle_1;steer_angle_2;0;0];
+            Fx = F_xw_all.*cosd(steer)-F_yw_all.*sind(steer);
+            Fy = F_xw_all.*sind(steer)+F_yw_all.*cosd(steer);
+            % The first two wheel residuals are in the tire frame.  Rear
+            % torque balances use the body-frame rear forces as before.
+            F_xw = F_xw_all(1:2);
         end
 
         function [forces, Gr] = calcForces(obj,x,u,forces)
@@ -608,36 +629,44 @@ classdef Car
             xdot(14) = ((T(4)-Fx(4)*obj.R)*(obj.Jw+obj.Jm*(Gr/2)^2) - (T(3)-Fx(3)*obj.R)*obj.Jm*(Gr/2)^2)*(1/denom);
         end
 
-        function [Fz_f,Fz_r,aeroInfo,rideHeightContext] = FzForces(obj,longVel,T,rideHeightContext)
+        function [Fz_f,Fz_r,aeroInfo,rideHeightContext] = ...
+                FzForces(obj,longVel,T,rideHeightContext,steerAngle)
             if nargin < 4, rideHeightContext = []; end
+            if nargin < 5 || isempty(steerAngle), steerAngle = 0; end
             % Coupled F/R ride-height aero. The static branch intentionally
             % keeps legacy behaviour for saved cars and acceleration aero.
             if obj.hasRideHeightAero()
                 if nargout >= 4 || ~isempty(rideHeightContext)
-                    [aeroInfo,rideHeightContext] = ...
-                        obj.solveRideHeightAero(longVel,T,rideHeightContext);
+                [aeroInfo,rideHeightContext] = ...
+                        obj.solveRideHeightAero(longVel,T,rideHeightContext,steerAngle);
                 else
-                    aeroInfo = obj.solveRideHeightAero(longVel,T);
+                    aeroInfo = obj.solveRideHeightAero(longVel,T,[],steerAngle);
                 end
             else
                 coeff = obj.aero.coefficients(0,0);
-                aeroInfo = obj.aeroLoadsAtHeights(longVel,T,coeff,NaN,NaN,0,0);
+                aeroInfo = obj.aeroLoadsAtHeights(longVel,T,coeff,NaN,NaN,0,0,steerAngle);
                 rideHeightContext = [];
             end
             Fz_f = aeroInfo.Fz_front_axle;
             Fz_r = aeroInfo.Fz_rear_axle;
         end
 
-        function [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo,rideHeightContext] = ssForces(obj,longVel,yawRate,T,steer_angle,rideHeightContext)
+        function [Fz,Fzvirtual,downforce,drag,wheelRideHeights,ssInfo,rideHeightContext] = ...
+                ssForces(obj,longVel,yawRate,T,steer_angle,rideHeightContext,validityOnlyDiagnostics)
             if nargin < 6, rideHeightContext = []; end
+            if nargin < 7 || isempty(validityOnlyDiagnostics)
+                validityOnlyDiagnostics = false;
+            end
+            validityOnlyDiagnostics = logical(validityOnlyDiagnostics);
             % Fifth output is the numeric corner ride-height vector needed by
             % ride-camber. Sixth exposes diagnostic load-transfer terms.
 
             if nargout >= 7 || ~isempty(rideHeightContext)
                 [Fz_front,Fz_rear,aeroInfo,rideHeightContext] = ...
-                    FzForces(obj,longVel,T,rideHeightContext);
+                    FzForces(obj,longVel,T,rideHeightContext,steer_angle);
             else
-                [Fz_front,Fz_rear,aeroInfo] = FzForces(obj,longVel,T);
+                [Fz_front,Fz_rear,aeroInfo] = ...
+                    FzForces(obj,longVel,T,[],steer_angle);
             end
             downforce = aeroInfo.downforce;
             drag = aeroInfo.drag;
@@ -666,39 +695,51 @@ classdef Car
             Fz = (Fzvirtual + sqrt(Fzvirtual.^2 + epsilon))./2;
 
             wheelRideHeights = [];
-            if nargout > 4
+            if nargout > 4 && ~validityOnlyDiagnostics
                 wheelRideHeights = obj.wheelRideHeights(Fzvirtual,aeroInfo);
             end
-            % Keep struct construction out of the fmincon hot path, which
-            % requests only Fz/Fzvirtual/downforce/drag unless ride camber is on.
+            % Keep full diagnostic struct construction out of the fmincon hot
+            % path. QSS constraints request only the four validity fields;
+            % evaluator/metrics callers retain the full record.
             if nargout > 5
-                ssInfo.Fz_front_axle = Fz_front;
-                ssInfo.Fz_rear_axle = Fz_rear;
-                ssInfo.lat_load_transfer_front = lat_load_transfer_front;
-                ssInfo.lat_load_transfer_rear = lat_load_transfer_rear;
-                % LLTD: front share of total lateral load transfer
-                totalLLT = lat_load_transfer_front + lat_load_transfer_rear;
-                if abs(totalLLT) < eps
-                    ssInfo.LLTD = NaN;
+                if validityOnlyDiagnostics
+                    ssInfo.aero_residual_in = aeroInfo.residualIn;
+                    ssInfo.aero_outside_map = aeroInfo.outsideMap;
+                    ssInfo.aero_coverage_valid = aeroInfo.coverageValid;
+                    ssInfo.aero_converged = aeroInfo.converged;
                 else
-                    ssInfo.LLTD = lat_load_transfer_front/totalLLT;
+                    ssInfo.Fz_front_axle = Fz_front;
+                    ssInfo.Fz_rear_axle = Fz_rear;
+                    ssInfo.lat_load_transfer_front = lat_load_transfer_front;
+                    ssInfo.lat_load_transfer_rear = lat_load_transfer_rear;
+                    % LLTD: front share of total lateral load transfer
+                    totalLLT = lat_load_transfer_front + lat_load_transfer_rear;
+                    if abs(totalLLT) < eps
+                        ssInfo.LLTD = NaN;
+                    else
+                        ssInfo.LLTD = lat_load_transfer_front/totalLLT;
+                    end
+                    ssInfo.downforce = downforce;
+                    ssInfo.drag = drag;
+                    ssInfo.long_load_transfer = aeroInfo.long_load_transfer;
+                    ssInfo.longitudinal_force_for_load_transfer = ...
+                        aeroInfo.longitudinal_force_for_load_transfer;
+                    ssInfo.ClA = aeroInfo.cla;
+                    ssInfo.CdA = aeroInfo.cda;
+                    ssInfo.CoP = aeroInfo.D_f;
+                    ssInfo.aero_downforce_front_N = aeroInfo.downforce_front;
+                    ssInfo.aero_downforce_rear_N = aeroInfo.downforce_rear;
+                    ssInfo.front_ride_height_in = aeroInfo.frontRideHeightIn;
+                    ssInfo.rear_ride_height_in = aeroInfo.rearRideHeightIn;
+                    ssInfo.front_ride_height_offset_in = aeroInfo.frontOffsetIn;
+                    ssInfo.rear_ride_height_offset_in = aeroInfo.rearOffsetIn;
+                    ssInfo.wheel_ride_height_in = wheelRideHeights;
+                    ssInfo.aero_iterations = aeroInfo.iterations;
+                    ssInfo.aero_residual_in = aeroInfo.residualIn;
+                    ssInfo.aero_outside_map = aeroInfo.outsideMap;
+                    ssInfo.aero_coverage_valid = aeroInfo.coverageValid;
+                    ssInfo.aero_converged = aeroInfo.converged;
                 end
-                ssInfo.downforce = downforce;
-                ssInfo.drag = drag;
-                ssInfo.long_load_transfer = aeroInfo.long_load_transfer;
-                ssInfo.ClA = aeroInfo.cla;
-                ssInfo.CdA = aeroInfo.cda;
-                ssInfo.CoP = aeroInfo.D_f;
-                ssInfo.aero_downforce_front_N = aeroInfo.downforce_front;
-                ssInfo.aero_downforce_rear_N = aeroInfo.downforce_rear;
-                ssInfo.front_ride_height_in = aeroInfo.frontRideHeightIn;
-                ssInfo.rear_ride_height_in = aeroInfo.rearRideHeightIn;
-                ssInfo.front_ride_height_offset_in = aeroInfo.frontOffsetIn;
-                ssInfo.rear_ride_height_offset_in = aeroInfo.rearOffsetIn;
-                ssInfo.wheel_ride_height_in = wheelRideHeights;
-                ssInfo.aero_iterations = aeroInfo.iterations;
-                ssInfo.aero_residual_in = aeroInfo.residualIn;
-                ssInfo.aero_outside_map = aeroInfo.outsideMap;
             end
         end
 
@@ -746,6 +787,7 @@ classdef Car
                 "carSignature",obj.rideHeightAeroContextSignature(), ...
                 "initialHeightsIn",double(initialHeightsIn(:)), ...
                 "longVel_mps",NaN,"wheelTorque_Nm",zeros(1,0), ...
+                "steerAngle_rad",NaN, ...
                 "isSeed",true,"usedWarmStart",false, ...
                 "usedColdFallback",false);
         end
@@ -777,11 +819,12 @@ classdef Car
                 "aero",aeroSignature);
         end
 
-        function [info,context] = solveRideHeightAero(obj,longVel,T,context)
+        function [info,context] = solveRideHeightAero(obj,longVel,T,context,steerAngle)
             % Solve r = height - height(load(height)) = 0 with a damped
             % two-variable Newton method. This avoids the unconverged one-step
             % pitch update the old model used.
             if nargin < 4, context = []; end
+            if nargin < 5 || isempty(steerAngle), steerAngle = 0; end
             cfg = obj.rideHeightAero;
             heights = [cfg.static_front_ride_height_in; ...
                        cfg.static_rear_ride_height_in];
@@ -796,7 +839,11 @@ classdef Car
                     usedWarmStart = true;
                 elseif isfield(context,'longVel_mps') && ...
                         isfield(context,'wheelTorque_Nm') && ...
+                        isfield(context,'steerAngle_rad') && ...
                         isfinite(context.longVel_mps) && ...
+                        isfinite(context.steerAngle_rad) && ...
+                        abs(double(context.steerAngle_rad)-double(steerAngle)) <= ...
+                        1e-9*max(1,abs(double(steerAngle))) && ...
                         abs(double(context.longVel_mps)-longVel) <= ...
                         1e-9*max(1,abs(longVel)) && ...
                         isequal(size(context.wheelTorque_Nm),size(T))
@@ -810,11 +857,17 @@ classdef Car
                     heights = double(context.initialHeightsIn(:));
                 end
             end
-            [res,info] = obj.aeroRideResidual(heights,longVel,T);
+            % Intermediate residual evaluations only need the numeric residual;
+            % the full aero diagnostic record is rebuilt once at the end.
+            res = obj.aeroRideResidual(heights,longVel,T,steerAngle,false);
             % Keep the reported axle height and the mean of the four wheel
             % heights numerically consistent; downstream diagnostics compare
             % those two representations at tight tolerances.
-            toleranceIn = 1e-12;
+            % The previous 1e-12 inch target drove several extra finite
+            % difference/Jacobian iterations without changing tire loads at
+            % QSS precision.  Keep the fixed-point semantics while stopping
+            % at a tolerance safely below the force-model sensitivity.
+            toleranceIn = obj.qssAeroResidualToleranceIn;
             maxIterations = 20;
             iterations = 0;
 
@@ -822,13 +875,12 @@ classdef Car
                 iterations = iterations + 1;
                 h = 1e-4;
                 J = zeros(2,2);
-                for j = 1:2
-                    plus = heights;  plus(j) = plus(j) + h;
-                    minus = heights; minus(j) = minus(j) - h;
-                    rPlus = obj.aeroRideResidual(plus,longVel,T);
-                    rMinus = obj.aeroRideResidual(minus,longVel,T);
-                    J(:,j) = (rPlus-rMinus)/(2*h);
-                end
+                probeHeights = [heights + [h;0], heights - [h;0], ...
+                    heights + [0;h], heights - [0;h]];
+                probeResidual = obj.aeroRideResidualBatch(probeHeights, ...
+                    longVel,T,steerAngle);
+                J(:,1) = (probeResidual(:,1)-probeResidual(:,2))/(2*h);
+                J(:,2) = (probeResidual(:,3)-probeResidual(:,4))/(2*h);
                 if all(isfinite(J),'all') && rcond(J) > 1e-10
                     step = -J\res;
                 else
@@ -840,11 +892,11 @@ classdef Car
                 accepted = false;
                 for lineSearch = 1:6
                     candidate = heights + step;
-                    [candidateRes,candidateInfo] = obj.aeroRideResidual(candidate,longVel,T);
+                    candidateRes = obj.aeroRideResidual(candidate, ...
+                        longVel,T,steerAngle,false);
                     if norm(candidateRes,inf) < oldNorm
                         heights = candidate;
                         res = candidateRes;
-                        info = candidateInfo;
                         accepted = true;
                         break
                     end
@@ -852,30 +904,51 @@ classdef Car
                 end
                 if ~accepted
                     heights = heights - 0.5*res;
-                    [res,info] = obj.aeroRideResidual(heights,longVel,T);
+                    res = obj.aeroRideResidual(heights,longVel,T,steerAngle,false);
                 end
             end
+            % Coverage is evaluated once for the final fixed-point state, not
+            % for every finite-difference residual probe.
+            [res,info] = obj.aeroRideResidual(heights,longVel,T,steerAngle,true);
             info.iterations = iterations;
             info.residualIn = max(abs(res));
             info.converged = info.residualIn <= toleranceIn;
-            context = obj.newRideHeightAeroContext(heights);
-            context.longVel_mps = double(longVel);
-            context.wheelTorque_Nm = double(T(:).');
-            context.isSeed = false;
-            context.usedWarmStart = usedWarmStart;
-            context.usedColdFallback = false;
+            if nargout >= 2
+                context = obj.newRideHeightAeroContext(heights);
+                context.longVel_mps = double(longVel);
+                context.wheelTorque_Nm = double(T(:).');
+                context.steerAngle_rad = double(steerAngle);
+                context.isSeed = false;
+                context.usedWarmStart = usedWarmStart;
+                context.usedColdFallback = false;
+            else
+                context = [];
+            end
         end
 
-        function [res,info] = aeroRideResidual(obj,heights,longVel,T)
+        function [res,info] = aeroRideResidual(obj,heights,longVel,T,steerAngle,needCoverage)
+            if nargin < 5 || isempty(steerAngle), steerAngle = 0; end
+            if nargin < 6 || isempty(needCoverage), needCoverage = false; end
+            if nargout < 2 && ~needCoverage
+                res = obj.aeroRideResidualValue(heights,longVel,T,steerAngle);
+                return
+            end
             cfg = obj.rideHeightAero;
             frontOffsetIn = heights(1)-cfg.map_reference_front_ride_height_in;
             rearOffsetIn = heights(2)-cfg.map_reference_rear_ride_height_in;
-            [cla,cda,D_f,D_r,outsideMap] = obj.aero.coefficientsNumeric( ...
-                frontOffsetIn,rearOffsetIn);
+            if needCoverage
+                [cla,cda,D_f,D_r,outsideMap,coverageValid] = ...
+                    obj.aero.coefficientsNumeric(frontOffsetIn,rearOffsetIn);
+            else
+                [cla,cda,D_f,D_r,outsideMap] = ...
+                    obj.aero.coefficientsNumeric(frontOffsetIn,rearOffsetIn);
+                coverageValid = true;
+            end
             coeff = struct("cla",cla,"cda",cda,"D_f",D_f,"D_r",D_r, ...
                 "frontOffsetIn",frontOffsetIn,"rearOffsetIn",rearOffsetIn, ...
-                "outsideMap",outsideMap);
-            info = obj.aeroLoadsAtHeights(longVel,T,coeff,heights(1),heights(2),0,0);
+                "outsideMap",outsideMap,"coverageValid",coverageValid);
+            info = obj.aeroLoadsAtHeights(longVel,T,coeff,heights(1), ...
+                heights(2),0,0,steerAngle);
             targetFront = cfg.static_front_ride_height_in - ...
                 ((info.Fz_front_axle-info.static_front_load_N)/2) / ...
                 cfg.wheel_rate_front_Npm / 0.0254;
@@ -885,13 +958,78 @@ classdef Car
             res = heights - [targetFront;targetRear];
         end
 
-        function info = aeroLoadsAtHeights(obj,longVel,T,coeff,frontHeightIn,rearHeightIn,iterations,residualIn)
+        function residual = aeroRideResidualValue(obj,heights,longVel,T,steerAngle)
+            % Numeric-only fixed-point residual for intermediate scalar probes.
+            % The diagnostic struct is intentionally reserved for the final
+            % converged state, where callers actually consume it.
+            cfg = obj.rideHeightAero;
+            frontOffsetIn = heights(1)-cfg.map_reference_front_ride_height_in;
+            rearOffsetIn = heights(2)-cfg.map_reference_rear_ride_height_in;
+            [cla,cda,D_f,D_r] = obj.aero.coefficientsNumeric( ...
+                frontOffsetIn,rearOffsetIn);
+            dynamicPressure = obj.aero.rho/2*longVel^2;
+            downforce = dynamicPressure*cla;
+            drag = dynamicPressure*cda;
+            bodyLongForce = sum(T)/obj.R*cos(steerAngle);
+            rollingResistance = obj.Crr*(obj.M*obj.g + downforce);
+            longLoadTransfer = (bodyLongForce-drag-rollingResistance)* ...
+                (obj.h_g/obj.W_b);
+            staticFront = obj.M*obj.g*obj.l_r/obj.W_b;
+            staticRear = obj.M*obj.g*obj.l_f/obj.W_b;
+            FzFront = staticFront + downforce*D_f - longLoadTransfer;
+            FzRear = staticRear + downforce*D_r + longLoadTransfer;
+            targetFront = cfg.static_front_ride_height_in - ...
+                ((FzFront-staticFront)/2) / cfg.wheel_rate_front_Npm / 0.0254;
+            targetRear = cfg.static_rear_ride_height_in - ...
+                ((FzRear-staticRear)/2) / cfg.wheel_rate_rear_Npm / 0.0254;
+            residual = heights - [targetFront;targetRear];
+        end
+
+        function residual = aeroRideResidualBatch(obj,heights,longVel,T,steerAngle)
+            % Numeric-only residual for the paired Newton probes.  It keeps
+            % the fixed-point equations identical while allowing the map
+            % interpolator to evaluate all four probes in one batch.
+            cfg = obj.rideHeightAero;
+            frontOffsetIn = heights(1,:) - cfg.map_reference_front_ride_height_in;
+            rearOffsetIn = heights(2,:) - cfg.map_reference_rear_ride_height_in;
+            [cla,cda,D_f,D_r] = obj.aero.coefficientsNumeric( ...
+                frontOffsetIn,rearOffsetIn);
+            dynamicPressure = obj.aero.rho/2*longVel^2;
+            downforce = dynamicPressure*cla;
+            drag = dynamicPressure*cda;
+            bodyLongForce = sum(T)/obj.R*cos(steerAngle);
+            rollingResistance = obj.Crr*(obj.M*obj.g + downforce);
+            longLoadTransfer = (bodyLongForce-drag-rollingResistance)* ...
+                (obj.h_g/obj.W_b);
+            staticFront = obj.M*obj.g*obj.l_r/obj.W_b;
+            staticRear = obj.M*obj.g*obj.l_f/obj.W_b;
+            FzFront = staticFront + downforce.*D_f - longLoadTransfer;
+            FzRear = staticRear + downforce.*D_r + longLoadTransfer;
+            targetFront = cfg.static_front_ride_height_in - ...
+                ((FzFront-staticFront)/2) / cfg.wheel_rate_front_Npm / 0.0254;
+            targetRear = cfg.static_rear_ride_height_in - ...
+                ((FzRear-staticRear)/2) / cfg.wheel_rate_rear_Npm / 0.0254;
+            residual = heights - [targetFront;targetRear];
+        end
+
+        function info = aeroLoadsAtHeights(obj,longVel,T,coeff,frontHeightIn,rearHeightIn,iterations,residualIn,steerAngle)
+            if nargin < 9 || isempty(steerAngle), steerAngle = 0; end
             staticFront = obj.M*obj.g*obj.l_r/obj.W_b;
             staticRear  = obj.M*obj.g*obj.l_f/obj.W_b;
             dynamicPressure = obj.aero.rho/2*longVel^2;
             downforce = dynamicPressure*coeff.cla;
             drag = dynamicPressure*coeff.cda;
-            longLoadTransfer = (sum(T)/obj.R-drag)*(obj.h_g/obj.W_b);
+            % Use the body-longitudinal component of the wheel-frame force
+            % estimate for pitch transfer.  The previous expression used raw
+            % wheel torque, which overstates transfer during front steering
+            % and also omitted rolling resistance already present in the QSS
+            % longitudinal balance.  Wheel residuals still validate the
+            % resulting operating point after the coupled solve.
+            wheelFrameLongForce = sum(T)/obj.R;
+            bodyLongForce = wheelFrameLongForce*cos(steerAngle);
+            rollingResistance = obj.Crr*(obj.M*obj.g + downforce);
+            longitudinalForceForLoadTransfer = bodyLongForce - drag - rollingResistance;
+            longLoadTransfer = longitudinalForceForLoadTransfer*(obj.h_g/obj.W_b);
 
             info.static_front_load_N = staticFront;
             info.static_rear_load_N = staticRear;
@@ -902,6 +1040,8 @@ classdef Car
             info.downforce_front = downforce*coeff.D_f;
             info.downforce_rear = downforce*coeff.D_r;
             info.long_load_transfer = longLoadTransfer;
+            info.longitudinal_force_for_load_transfer = ...
+                longitudinalForceForLoadTransfer;
             info.cla = coeff.cla;
             info.cda = coeff.cda;
             info.D_f = coeff.D_f;
@@ -911,9 +1051,17 @@ classdef Car
             info.frontOffsetIn = coeff.frontOffsetIn;
             info.rearOffsetIn = coeff.rearOffsetIn;
             info.outsideMap = coeff.outsideMap;
+            if isfield(coeff,'coverageValid')
+                info.coverageValid = coeff.coverageValid;
+            else
+                info.coverageValid = true;
+            end
             info.iterations = iterations;
             info.residualIn = residualIn;
-            info.converged = false;
+            % For a direct/static evaluation this function has already
+            % produced the requested loads.  The ride-height fixed-point
+            % solver overwrites this with its final convergence result.
+            info.converged = true;
         end
 
         function heights = wheelRideHeights(obj,Fzvirtual,aeroInfo)
@@ -952,7 +1100,7 @@ classdef Car
         %   lateral velocity,yaw rate,wheel rotational speeds
 
         % output c: limits vehicle slip angle to less than 20 degrees (stability purposes)
-        %   also limits engine rpm to below 13000
+        %   also limits engine rpm to the configured powertrain redline
         %   also limits wheel loads to positive values (no wheel lift)
         % output ceq: constrains certain accelerations to 0 to satisfy
         %   steady-state conditions
@@ -961,7 +1109,7 @@ classdef Car
                 constraint1(obj,P,rideHeightContext,evaluationOptions)
             if nargin < 3, rideHeightContext = []; end
             if nargin < 4 || isempty(evaluationOptions)
-                evaluationOptions = struct();
+                evaluationOptions = struct('qssValidityOnly',true);
             end
             % no lateral acceleration constraint
             % used for optimizing longitudinal acceleration/braking
@@ -969,20 +1117,19 @@ classdef Car
             % must impose it through Aeq, not here -- the objective and the
             % constraints have to evaluate the same state vector
 
-            if nargin >= 4
+            returnContext = nargout >= 3;
+            useContext = returnContext || (nargin >= 3 && ~isempty(rideHeightContext));
+            if useContext
                 [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                     Fzvirtual,Fz,alpha,T,~,~,~,~,rideHeightContext] = ...
+                     Fzvirtual,Fz,alpha,T,~,~,~,ssInfo,rideHeightContext] = ...
                     obj.equations(P,rideHeightContext,evaluationOptions);
-            elseif nargin >= 3 || nargout >= 3
-                [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                     Fzvirtual,Fz,alpha,T,~,~,~,~,rideHeightContext] = ...
-                    obj.equations(P,rideHeightContext);
             else
                 [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                    Fzvirtual,Fz,alpha,T] = obj.equations(P);
+                    Fzvirtual,Fz,alpha,T,~,~,~,ssInfo] = ...
+                    obj.equations(P,[],evaluationOptions);
             end
-            c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
-            ceq = [lat_accel,yaw_accel,wheel_accel(1:4)];
+            c = obj.qssInequalities(engine_rpm,beta,Fzvirtual,ssInfo);
+            ceq = obj.qssFiniteResidual([lat_accel,yaw_accel,wheel_accel(1:4)]);
         end
 
         function [c,ceq] = constraint2(obj,P,long_accel_value)
@@ -990,10 +1137,11 @@ classdef Car
             % used for optimizing lateral force for given longitudinal acceleration
 
             [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T]...
-                = obj.equations(P);
-            c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
-            ceq = [lat_accel,long_accel-long_accel_value,yaw_accel,wheel_accel(1:4)];
+                Fzvirtual,Fz,alpha,T,~,~,~,ssInfo] = obj.equations(P,[], ...
+                    struct('qssValidityOnly',true)); %#ok<ASGLU>
+            c = obj.qssInequalities(engine_rpm,beta,Fzvirtual,ssInfo);
+            ceq = obj.qssFiniteResidual([lat_accel,long_accel-long_accel_value, ...
+                yaw_accel,wheel_accel(1:4)]);
         end
 
         function [c,ceq] = constraint3(obj,P,radius)
@@ -1002,9 +1150,11 @@ classdef Car
             % used for solving skidpad (optimizing velocity for zero longitudinal acceleration
 
             [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T] = obj.equations(P);
-            c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
-            ceq = [P(3)/(P(5))-radius,lat_accel,long_accel,yaw_accel,wheel_accel(1:4)];
+                Fzvirtual,Fz,alpha,T,~,~,~,ssInfo] = obj.equations(P,[], ...
+                    struct('qssValidityOnly',true)); %#ok<ASGLU>
+            c = obj.qssInequalities(engine_rpm,beta,Fzvirtual,ssInfo);
+            ceq = obj.qssFiniteResidual([P(3)-radius*P(5),lat_accel, ...
+                long_accel,yaw_accel,wheel_accel(1:4)]);
         end
 
         function [c,ceq] = constraint4(obj,P,lat_accel_value)
@@ -1012,10 +1162,11 @@ classdef Car
             % used for optimizing longitudinal acceleration for given lateral acceleration
 
             [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T]...
-                = obj.equations(P);
-            c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
-            ceq = [P(3)*P(5)-lat_accel_value,lat_accel,yaw_accel,wheel_accel(1:4)];
+                Fzvirtual,Fz,alpha,T,~,~,~,ssInfo] = obj.equations(P,[], ...
+                    struct('qssValidityOnly',true)); %#ok<ASGLU>
+            c = obj.qssInequalities(engine_rpm,beta,Fzvirtual,ssInfo);
+            ceq = obj.qssFiniteResidual([P(3)*P(5)-lat_accel_value,lat_accel, ...
+                yaw_accel,wheel_accel(1:4)]);
         end
 
         function [c,ceq] = constraint5(obj,P,radius)
@@ -1023,10 +1174,11 @@ classdef Car
             % used for calculating max velocity the car can corner at for given radius
 
             [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T]...
-                = obj.equations(P);
-            c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
-            ceq = [P(3)/(P(5))-radius,lat_accel,yaw_accel,wheel_accel(1:4)];
+                Fzvirtual,Fz,alpha,T,~,~,~,ssInfo] = obj.equations(P,[], ...
+                    struct('qssValidityOnly',true)); %#ok<ASGLU>
+            c = obj.qssInequalities(engine_rpm,beta,Fzvirtual,ssInfo);
+            ceq = obj.qssFiniteResidual([P(3)-radius*P(5),lat_accel, ...
+                yaw_accel,wheel_accel(1:4)]);
         end
 
         function [c,ceq] = constraint6(obj,P)
@@ -1034,10 +1186,10 @@ classdef Car
             % used for optimizing lateral acceleration
 
            [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T]...
-                = obj.equations(P);
-            c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
-            ceq = [lat_accel,yaw_accel,wheel_accel(1:4)];
+                Fzvirtual,Fz,alpha,T,~,~,~,ssInfo] = obj.equations(P,[], ...
+                    struct('qssValidityOnly',true)); %#ok<ASGLU>
+            c = obj.qssInequalities(engine_rpm,beta,Fzvirtual,ssInfo);
+            ceq = obj.qssFiniteResidual([lat_accel,yaw_accel,wheel_accel(1:4)]);
         end
 
         function [c,ceq] = constraint7(obj,P)
@@ -1046,10 +1198,10 @@ classdef Car
             % used to determine terminal under/oversteer
 
             [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T]...
-                = obj.equations(P);
-            c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
-            ceq = [lat_accel,long_accel,wheel_accel(1:4)];
+                Fzvirtual,Fz,alpha,T,~,~,~,ssInfo] = obj.equations(P,[], ...
+                    struct('qssValidityOnly',true)); %#ok<ASGLU>
+            c = obj.qssInequalities(engine_rpm,beta,Fzvirtual,ssInfo);
+            ceq = obj.qssFiniteResidual([lat_accel,long_accel,wheel_accel(1:4)]);
         end
 
         function [c,ceq] = constraint8(obj,P,radius,long_vel_value)
@@ -1059,11 +1211,11 @@ classdef Car
             % used for constant radius test
 
            [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T]...
-                = obj.equations(P);
-            c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
-            ceq = [P(3)/(P(5))-radius,P(3)-long_vel_value,lat_accel,...
-                long_accel, yaw_accel,wheel_accel(1:4)];
+                Fzvirtual,Fz,alpha,T,~,~,~,ssInfo] = obj.equations(P,[], ...
+                    struct('qssValidityOnly',true)); %#ok<ASGLU>
+            c = obj.qssInequalities(engine_rpm,beta,Fzvirtual,ssInfo);
+            ceq = obj.qssFiniteResidual([P(3)-radius*P(5),P(3)-long_vel_value, ...
+                lat_accel,long_accel,yaw_accel,wheel_accel(1:4)]);
         end
 
         function [c,ceq] = constraint9(obj,P,lat_accel_value, radius)
@@ -1073,10 +1225,63 @@ classdef Car
             % lateral acceleration AND radius
 
             [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-                Fzvirtual,Fz,alpha,T]...
-                = obj.equations(P);
-            c = [engine_rpm-13000,abs(beta)-20,-Fzvirtual(1:4)];
-            ceq = [P(3)*P(5)-lat_accel_value,P(3)/P(5)-radius, yaw_accel, wheel_accel(1:4)];
+                Fzvirtual,Fz,alpha,T,~,~,~,ssInfo] = obj.equations(P,[], ...
+                    struct('qssValidityOnly',true)); %#ok<ASGLU>
+            c = obj.qssInequalities(engine_rpm,beta,Fzvirtual,ssInfo);
+            ceq = obj.qssFiniteResidual([P(3)*P(5)-lat_accel_value,lat_accel, ...
+                P(3)-radius*P(5),yaw_accel,wheel_accel(1:4)]);
+        end
+
+        function c = qssInequalities(obj,engineRpm,beta,Fzvirtual,ssInfo)
+            % Canonical inequality contract shared by all steady-state paths.
+            rpmLimit = engineRpm-obj.powertrain.redline;
+            betaLimit = abs(beta)-20;
+            loadLimits = -Fzvirtual(1:4);
+            if ~isfinite(rpmLimit), rpmLimit = 1e6; end
+            if ~isfinite(betaLimit), betaLimit = 1e6; end
+            loadLimits(~isfinite(loadLimits)) = 1e6;
+            c = [rpmLimit,betaLimit,loadLimits];
+
+            if nargin >= 5 && isstruct(ssInfo) && ~isempty(ssInfo)
+                aeroConverged = obj.diagnosticValue(ssInfo,'aero_converged',true);
+                outsideMap = obj.diagnosticValue(ssInfo,'aero_outside_map',false);
+                coverageValid = obj.diagnosticValue(ssInfo,'aero_coverage_valid',true);
+                residual = obj.diagnosticValue(ssInfo,'aero_residual_in',0);
+                residualTolerance = obj.qssAeroResidualToleranceIn;
+                invalidAero = ~isfinite(double(aeroConverged)) || ...
+                    ~logical(aeroConverged) || logical(outsideMap) || ...
+                    ~logical(coverageValid) || ~isfinite(double(residual)) || ...
+                    any(double(residual) > residualTolerance);
+                c(end+1:end+3) = double([~logical(aeroConverged), ...
+                    logical(outsideMap) || ~logical(coverageValid), invalidAero]);
+            end
+        end
+
+        function values = qssFiniteResidual(~,values)
+            values(~isfinite(values)) = 1e6;
+        end
+
+        function radius = safeTurnRadius(~,P)
+            speed = double(P(3));
+            yawRate = double(P(5));
+            if ~isfinite(speed) || ~isfinite(yawRate)
+                radius = 1e6;
+                return
+            end
+            if yawRate == 0
+                denominator = eps;
+            else
+                denominator = sign(yawRate)*max(abs(yawRate),eps);
+            end
+            radius = speed/denominator;
+        end
+
+        function value = diagnosticValue(~,diagnostics,name,defaultValue)
+            if isfield(diagnostics,name) && ~isempty(diagnostics.(name))
+                value = diagnostics.(name);
+            else
+                value = defaultValue;
+            end
         end
 
         % objective function

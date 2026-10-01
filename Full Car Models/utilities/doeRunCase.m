@@ -13,7 +13,9 @@ try
     end
 
     if runMode == "full"
-        rawGG = gg2(car,0);
+        % doeRunBatch owns the outer case-level parfor.  Keep each case's G-G
+        % serial so worker pools are never nested, while sharing the 28 m/s cap.
+        rawGG = gg2(car,0,ggProductionOptions());
         car = makeGG(rawGG,car);
         comp = Events2(car,accelCar,eventParams);
         events = string(study.events);

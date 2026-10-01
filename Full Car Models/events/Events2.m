@@ -183,7 +183,7 @@ classdef Events2 < handle
             
             % F_accel/braking(lat_accel,long_vel) returns the max possible accel/braking
             [F_accel,F_braking] = create_scattered_interpolants2(obj.car.longAccelLookup,...
-                obj.car.longDecelLookup);
+                obj.car.longDecelLookup,obj.car.ggMask);
 
             obj.interp_info.extrema = extrema;
             obj.interp_info.extrema_indices = extrema_indices;
@@ -196,7 +196,7 @@ classdef Events2 < handle
             % through the handle object costs more there than the interpolation
             radius_vector = obj.interp_info.radius_vector;
             max_vel_corner_vector = obj.interp_info.max_vel_corner_vector;
-            v_top = obj.car.max_vel;
+            v_top = ggVelocityLimit(obj.car);
 
             % Maximum possible acceleration between apexes
             % calculating velocity and acceleration profiles as well as time
@@ -208,7 +208,7 @@ classdef Events2 < handle
                 long_vel_interp = obj.interp_info.long_vel_guess;
                 long_accel_interp = obj.interp_info.long_accel_matrix;
                 [~,ending_vel,~,~] = straight(0,obj.eventParams.track_rollout, ...
-                    long_vel_interp,long_accel_interp,obj.car.max_vel,obj.car);
+                    long_vel_interp,long_accel_interp,v_top,obj.car);
     
                 % starting velocity is ending velocity of straight
                 long_vel = ending_vel;
@@ -316,7 +316,7 @@ classdef Events2 < handle
                 lat_accel_vector_2(i) = lat_accel * sign(curvature(i));
 
                 long_accel = F_braking(lat_accel, long_vel);
-                if long_vel == obj.car.max_vel
+                if long_vel >= v_top - 1e-9*max(1,v_top)
                     long_accel = 0;
                 end
 
@@ -481,6 +481,27 @@ classdef Events2 < handle
             obj.points = points;
         end
     end
+end
+
+function v_top = ggVelocityLimit(car)
+v_top = car.max_vel;
+hasMask = (isobject(car) && isprop(car,'ggMask')) || ...
+    (isstruct(car) && isfield(car,'ggMask'));
+if ~hasMask || ~isstruct(car.ggMask) || ...
+        ~isfield(car.ggMask,'velocity') || ...
+        ~isfield(car.ggMask,'lateral')
+    return
+end
+
+velocity = double(car.ggMask.velocity(:));
+lateral = logical(car.ggMask.lateral(:));
+if numel(velocity) ~= numel(lateral)
+    return
+end
+solvedVelocity = velocity(lateral & isfinite(velocity));
+if ~isempty(solvedVelocity)
+    v_top = min(v_top,max(solvedVelocity));
+end
 end
 
 function v_cap = corner_vel_cap(radius_vector,max_vel_corner_vector,v_top,curvature)

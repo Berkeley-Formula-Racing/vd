@@ -1,5 +1,8 @@
-function [c,ceq] = steadyStateConstraint4(state,P,latAccelTarget)
-%STEADYSTATECONSTRAINT4 Constraint4 from a cached vehicle-equation state.
+function [c,ceq] = steadyStateConstraint1(state)
+%STEADYSTATECONSTRAINT1 Cached no-target steady-state constraints.
+%   This is the lateral-acceleration optimizer counterpart to
+%   steadyStateConstraint4.  It keeps the evaluator cache, configured
+%   redline, and aero-validity gates on the same path.
 
 redline = stateValue(state,'redline',NaN);
 if isscalar(redline) && isfinite(redline)
@@ -27,8 +30,7 @@ if isfield(state,'aeroConverged')
         outsideMap || ~coverageValid,invalidAero]);
 end
 
-ceq = [P(3)*P(5)-latAccelTarget,state.latAccel,state.yawAccel, ...
-    state.wheelAccel(1:4)];
+ceq = [state.latAccel,state.yawAccel,state.wheelAccel(1:4)];
 ceq(~isfinite(ceq)) = 1e6;
 end
 

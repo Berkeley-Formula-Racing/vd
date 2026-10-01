@@ -59,45 +59,87 @@ radius = 4.5:0.1:60;
 % ss_info carries one identical row per lateral grid column, so 20 copies of
 % each velocity; collapse before interpolating. Column 6 is long_vel and
 % column 3 is x(3)*x(5), the lateral acceleration at the limit.
-env    = unique(car.ss_info(:,[6 3]),'rows');
-vRows  = env(:,1);
-latRow = env(:,2);
+env = unique(car.ss_info(:,[6 3]),'rows');
+[vRows,~,rowIndex] = unique(env(:,1));
+latRow = accumarray(rowIndex,env(:,2),[],@max);
 
-% Breakpoints of the piecewise-linear envelope, plus the ends of the search.
-% lininterp1 holds its end values flat, which is the treatment clamped_query
-% already gives a velocity outside the solved range.
-v_top = car.max_vel;
-brk = unique([0; vRows; v_top]);
-brk = brk(brk <= v_top);
+% A missing g-g row is a domain gap, not a request to draw a line between the
+% nearest solved rows.  gg2/makeGG preserve that information in ggMask.  Keep
+% the old clamped behaviour for legacy cars that have no mask, but when a mask
+% is present only search within contiguous solved velocity segments.
+[expectedVelocity,validExpected,hasMask] = envelopeMask(car,vRows);
+if hasMask && any(~validExpected)
+    segmentIds = contiguousSegments(validExpected);
+else
+    expectedVelocity = vRows;
+    validExpected = true(size(vRows));
+    segmentIds = {1:numel(vRows)};
+end
+segments = cell(size(segmentIds));
+for s = 1:numel(segmentIds)
+    idx = segmentIds{s};
+    segments{s} = struct('velocity',expectedVelocity(idx), ...
+        'lateral',latAtVelocity(expectedVelocity(idx),vRows,latRow), ...
+        'startsAtMinimum',idx(1) == 1);
+end
+
+v_top = cappedEnvelopeTopVelocity(car,expectedVelocity,validExpected,hasMask);
 
 n = numel(radius);
-max_vel_corner_vector = zeros(1,n);
+max_vel_corner_vector = nan(1,n);
 for i = 1:n
     r = radius(i);
+    for s = 1:numel(segments)
+        segment = segments{s};
+        v = segment.velocity;
+        lat = segment.lateral;
+        if isempty(v), continue, end
 
-    % g(v) = v^2/r - latmax(v) is convex on every breakpoint interval, since
-    % v^2/r is convex and latmax is linear there. A convex g cannot go positive
-    % between two negative endpoints, so scanning the breakpoints for the FIRST
-    % sign change and bisecting inside it finds the lowest root exactly. That
-    % matters because the envelope is not monotone in velocity, so a plain
-    % bisection over the whole range could settle on a higher crossing and
-    % report a cornering speed the car cannot hold.
-    lo = brk(1);
-    hi = [];
-    for k = 2:numel(brk)
-        if gap(brk(k),r,vRows,latRow) >= 0, hi = brk(k); break, end
-        lo = brk(k);
-    end
-    if isempty(hi)
-        max_vel_corner_vector(i) = v_top;   % speed-limited, not grip-limited
-        continue
+        % g(v) = v^2/r - latmax(v) is convex on every breakpoint interval,
+        % since v^2/r is convex and latmax is linear there.  For the first
+        % segment, preserve the historical flat clamp below its first solved
+        % velocity.  Later segments start at a real solved row; crossing a
+        % missing interval is deliberately never allowed.
+        if segment.startsAtMinimum
+            lo = 0;
+            if gap(v(1),r,v,lat) >= 0
+                hi = v(1);
+            else
+                lo = v(1);
+                hi = [];
+                for k = 2:numel(v)
+                    if gap(v(k),r,v,lat) >= 0, hi = v(k); break, end
+                    lo = v(k);
+                end
+            end
+        else
+            lo = v(1);
+            hi = [];
+            if gap(lo,r,v,lat) == 0
+                hi = lo;
+            elseif gap(lo,r,v,lat) < 0
+                for k = 2:numel(v)
+                    if gap(v(k),r,v,lat) >= 0, hi = v(k); break, end
+                    lo = v(k);
+                end
+            end
+        end
+        if isempty(hi), continue, end
+
+        for k = 1:60
+            mid = 0.5*(lo+hi);
+            if gap(mid,r,v,lat) > 0, hi = mid; else, lo = mid; end
+        end
+        max_vel_corner_vector(i) = 0.5*(lo+hi);
+        break
     end
 
-    for k = 1:60
-        mid = 0.5*(lo+hi);
-        if gap(mid,r,vRows,latRow) > 0, hi = mid; else, lo = mid; end
+    % A speed-limited result is valid only when the g-g has a solved top row.
+    % Without a mask this retains the legacy max_vel clamp.  With a mask, a
+    % missing top row means the correct result is unknown, not max_vel.
+    if isnan(max_vel_corner_vector(i)) && (~hasMask || all(validExpected))
+        max_vel_corner_vector(i) = v_top;
     end
-    max_vel_corner_vector(i) = 0.5*(lo+hi);
 end
 
 % Nothing reads the state-vector table -- Events2 stores it and event_plotter
@@ -111,8 +153,68 @@ x_table_corner_vel = array2table([radius(:) max_vel_corner_vector(:) ...
 end
 
 
+function v_top = cappedEnvelopeTopVelocity(car,expectedVelocity,validExpected,hasMask)
+v_top = car.max_vel;
+if ~hasMask
+    return
+end
+
+solvedVelocity = expectedVelocity(validExpected);
+if ~isempty(solvedVelocity)
+    v_top = min(v_top,max(solvedVelocity));
+end
+end
+
+
 function g = gap(v,r,vRows,latRow)
 % >0 means the radius demands more lateral acceleration than the g-g has at
 % that speed
 g = v^2/r - lininterp1(vRows,latRow,v);
+end
+
+function [expectedVelocity,validExpected,hasMask] = envelopeMask(car,vRows)
+hasMask = (isobject(car) && isprop(car,'ggMask')) || ...
+    (isstruct(car) && isfield(car,'ggMask'));
+if ~hasMask || ~isstruct(car.ggMask) || ...
+        ~isfield(car.ggMask,'velocity') || ...
+        ~isfield(car.ggMask,'lateral') || isempty(car.ggMask.velocity)
+    expectedVelocity = vRows;
+    validExpected = true(size(vRows));
+    hasMask = false;
+    return
+end
+expectedVelocity = unique(round(double(car.ggMask.velocity(:)),6));
+rawVelocity = round(double(car.ggMask.velocity(:)),6);
+rawMask = logical(car.ggMask.lateral(:));
+validExpected = false(size(expectedVelocity));
+for k = 1:numel(expectedVelocity)
+    validExpected(k) = any(rawMask(abs(rawVelocity-expectedVelocity(k)) <= 1e-9));
+end
+% A mask can contain a row identity that is not represented in ss_info after
+% older saved g-g results are loaded.  It is still invalid for this lookup.
+for k = 1:numel(expectedVelocity)
+    validExpected(k) = validExpected(k) && any(abs(vRows-expectedVelocity(k)) <= 1e-9);
+end
+end
+
+function segments = contiguousSegments(validRows)
+indices = find(validRows);
+segments = {};
+if isempty(indices), return, end
+start = 1;
+for k = 2:numel(indices)
+    if indices(k) ~= indices(k-1)+1
+        segments{end+1} = indices(start:k-1); %#ok<AGROW>
+        start = k;
+    end
+end
+segments{end+1} = indices(start:end);
+end
+
+function values = latAtVelocity(queryVelocity,vRows,latRow)
+values = nan(size(queryVelocity));
+for k = 1:numel(queryVelocity)
+    hit = find(abs(vRows-queryVelocity(k)) <= 1e-9,1);
+    if ~isempty(hit), values(k) = latRow(hit); end
+end
 end

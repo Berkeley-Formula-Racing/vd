@@ -81,6 +81,30 @@ verifyError(testCase,@() car.newRideHeightAeroContext([NaN;0]), ...
     'Car:invalidRideHeightAeroInitialGuess');
 end
 
+function testEquationWithoutContextDoesNotBuildReturnedRideHeightContext(testCase)
+car = carConfigBaseline();
+P = [4,0.15,20,0.2,0.45,0,0,0.02,0.02];
+
+profile('clear');
+profile('on','-history');
+car.equations(P);
+profile('off');
+profileInfo = profile('info');
+
+contextCalls = 0;
+if isfield(profileInfo,'FunctionTable')
+    for k = 1:numel(profileInfo.FunctionTable)
+        functionName = string(profileInfo.FunctionTable(k).FunctionName);
+        if contains(functionName,'newRideHeightAeroContext')
+            contextCalls = contextCalls + profileInfo.FunctionTable(k).NumCalls;
+        end
+    end
+end
+
+verifyEqual(testCase,contextCalls,0, ...
+    'A no-context equation call should not construct a returned context.');
+end
+
 function [outputs,context] = evaluateWithContext(car,P,context)
 outputs = cell(1,16);
 [outputs{:},context] = car.equations(P,context);

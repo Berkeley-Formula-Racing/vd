@@ -54,19 +54,12 @@ lb = [steer_angle_bounds(1),throttle_bounds(1),long_vel_bounds(1),lat_vel_bounds
 ub = [steer_angle_bounds(2),throttle_bounds(2),long_vel_bounds(2),lat_vel_bounds(2),...
     yaw_rate_bounds(2),kappa_1_bounds(2),kappa_2_bounds(2),kappa_3_bounds(2),kappa_4_bounds(2)];
 
-% Reuse the converged ride-height solution across nearby fmincon evaluations.
-% The context only supplies an initial guess; every evaluation still solves
-% the coupled aero residual to the original tolerance.
-rideHeightContext = [];
-if car.hasRideHeightAero()
-    f = @objectiveWithContext;
-    constraint = @constraintWithContext;
-else
-    % Keep the legacy lightweight callback path when there is no coupled
-    % ride-height state to reuse.
-    f = @(P) -car.long_accel(P);
-    constraint = @(P) car.constraint1(P);
-end
+% Cache the exact equation state shared by fmincon's objective and nonlinear
+% constraint callbacks. This also carries ride-height context internally when
+% mapped aero is enabled, without binding an ssInfo output as a context seed.
+evaluator = steadyStateEvaluator(car);
+f = @(P) -evaluator.evaluate(P).longAccel;
+constraint = @(P) steadyStateConstraint1(evaluator.evaluate(P));
 
 % default algorithm is interior-point
 maxFunctionEvaluations = getSolverOption(solverOptions, ...
@@ -98,8 +91,15 @@ x(9) = x(8);
 
 long_accel_guess = x;
 
-[engine_rpm,beta,~,long_accel,~,~,omega,current_gear,...
-~,Fz,alpha,T] = car.equations(x);
+fullState = evaluator.evaluateFull(x);
+engine_rpm = fullState.engineRpm;
+beta = fullState.beta;
+long_accel = fullState.longAccel;
+omega = fullState.omega;
+current_gear = fullState.currentGear;
+Fz = fullState.Fz;
+alpha = fullState.alpha;
+T = fullState.T;
 
 % generate table of control variable values
 x_accel = [exitflag long_accel x(3)*x(5) x omega(1:4) engine_rpm current_gear beta...
@@ -112,23 +112,13 @@ if nargout >= 4
     diagnostics = struct();
     diagnostics.state = x;
     diagnostics.exitflag = exitflag;
-    [diagnostics.c,diagnostics.ceq] = car.constraint1(x);
+    [diagnostics.c,diagnostics.ceq] = constraint(x);
     diagnostics.max_inequality_violation = max([diagnostics.c(:);0]);
     diagnostics.max_equality_residual = max(abs(diagnostics.ceq(:)));
     diagnostics.metrics = car.metrics(x);
     diagnostics.pure_ay0 = abs(diagnostics.metrics.gLat) <= 1e-12;
 end
 
-    function value = objectiveWithContext(P)
-        [~,~,~,longAccel,~,~,~,~,~,~,~,~,~,~,~,rideHeightContext] = ...
-            car.equations(P,rideHeightContext);
-        value = -longAccel;
-    end
-
-    function [c,ceq] = constraintWithContext(P)
-        [c,ceq,rideHeightContext] = ...
-            car.constraint1(P,rideHeightContext);
-    end
 end
 
 function value = getSolverOption(solverOptions,name,default)

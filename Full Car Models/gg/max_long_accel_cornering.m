@@ -1,4 +1,5 @@
-function [x_accel,long_accel,long_accel_guess] = max_long_accel_cornering(long_vel_guess,lat_accel_value,car,x0)
+function [x_accel,long_accel,long_accel_guess,diagnostics] = ...
+        max_long_accel_cornering(long_vel_guess,lat_accel_value,car,x0)
 % uses fmincon to maximize longitudinal acceleration at a fixed longitudinal
 % velocity and a fixed lateral acceleration
 %
@@ -70,12 +71,13 @@ end
 % the same yaw rate, so the three agree with each other -- that is the whole
 % point. Clamped to the bounds below because at 5 m/s the Ackermann angle
 % runs past the 25 deg steering limit.
-steer_seed   = min(max(rad2deg(car.W_b*yaw_rate/long_vel_guess),0),25);
+steer_seed   = min(max(rad2deg(car.W_b*yaw_rate/long_vel_guess),0), ...
+    car.qssSteeringLimitDeg);
 lat_vel_seed = min(max(car.l_r*yaw_rate,-3),3);
 seeds{end+1} = [steer_seed, 1, long_vel_guess, lat_vel_seed, yaw_rate, 0, 0, 0.02, 0.02];
 
 % bounds
-steer_angle_bounds = [0,25];
+steer_angle_bounds = [0,car.qssSteeringLimitDeg];
 throttle_bounds = [0,1];
 long_vel_bounds = [long_vel_guess,long_vel_guess];
 lat_vel_bounds = [-3,3];
@@ -113,14 +115,18 @@ constraint = @(P) steadyStateConstraint4(evaluator.evaluate(P),P,lat_accel_value
 options = setOptimoptions(1000);
 
 x = []; exitflag = 0; bestVal = -inf; bestRes = inf;
+functionEvaluations = 0;
 for k = 1:numel(seeds)
-    [xk,~,flagk] = fmincon(f,min(max(seeds{k},lb),ub),A,b,Aeq,beq,lb,ub,constraint,options);
+    [xk,~,flagk,outputk] = fmincon(f,min(max(seeds{k},lb),ub),A,b,Aeq,beq,lb,ub,constraint,options);
+    if isstruct(outputk) && isfield(outputk,'funcCount')
+        functionEvaluations = functionEvaluations + outputk.funcCount;
+    end
 
     % one extra constraint evaluation per candidate, against a hundred or more
     % inside the solve -- the residual is what the selection turns on and
     % fmincon does not hand it back
     [ck,ceqk] = constraint(xk);
-    resk = max([max(abs(ceqk)), max(ck), 0]);
+    resk = qssConstraintResidual(ck,ceqk);
     valk = evaluator.evaluate(xk).longAccel;
 
     if isempty(x) || preferNew(flagk,resk,valk,exitflag,bestRes,bestVal,FEAS_TOL)
@@ -128,8 +134,21 @@ for k = 1:numel(seeds)
     end
 end
 
-[engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
-Fzvirtual,Fz,alpha,T] = car.equations(x);
+fullState = evaluator.evaluateFull(x);
+engine_rpm = fullState.engineRpm;
+beta = fullState.beta;
+long_accel = fullState.longAccel;
+omega = fullState.omega;
+current_gear = fullState.currentGear;
+Fzvirtual = fullState.Fzvirtual;
+Fz = fullState.Fz;
+alpha = fullState.alpha;
+T = fullState.T;
+
+diagnostics = struct('exitflag',exitflag,'residual',bestRes, ...
+    'valid',qssCandidateValidity(exitflag,bestRes,FEAS_TOL), ...
+    'functionEvaluations',functionEvaluations, ...
+    'equationCalls',evaluator.equationCalls());
 
 long_accel_guess = x;
 
@@ -149,18 +168,9 @@ function take = preferNew(flag,res,val,bFlag,bRes,bVal,tol)
 % constraint boundary win, since those report MORE acceleration, not less;
 % ranking on residual alone would accept a trivially feasible but badly
 % suboptimal point. Same rule as max_lat_accel.
-okNew = (flag == 1) || (flag == 2);
-okOld = (bFlag == 1) || (bFlag == 2);
-if okNew ~= okOld, take = okNew; return, end     % a converged solve always wins
-if ~okNew,         take = res < bRes; return, end % neither: less infeasible
-
-goodNew = res <= tol;
-goodOld = bRes <= tol;
-if goodNew && goodOld
-    take = val > bVal;                            % both legal -> more accel wins
-elseif goodNew ~= goodOld
-    take = goodNew;                               % only one is legal
-else
-    take = res < bRes;                            % neither legal -> less illegal
-end
+okNew = qssCandidateValidity(flag,res,tol);
+okOld = qssCandidateValidity(bFlag,bRes,tol);
+if okNew ~= okOld, take = okNew; return, end
+if okNew, take = val > bVal; return, end
+take = res < bRes;
 end

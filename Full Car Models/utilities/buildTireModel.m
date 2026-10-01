@@ -9,8 +9,9 @@ end
 modelType = lower(string(tireParams.model_type));
 switch modelType
     case "legacy"
+        camberData = getField(tireParams,'camber_data',[]);
         tire = Tire2(tireParams.p_i,tireParams.Fx_parameters, ...
-            tireParams.Fy_parameters,tireParams.friction_scaling_factor);
+            tireParams.Fy_parameters,tireParams.friction_scaling_factor,camberData);
     case {"lc0_nd","nondimensional"}
         if ~isfield(tireParams,'model_artifact') || ...
                 ~isfile(tireParams.model_artifact)

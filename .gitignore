@@ -33,6 +33,7 @@ DOE_analysis.mat
 # Local isolated worktrees and subagent-development coordination files.
 .worktrees/
 .superpowers/
+docs/
 
 # Python/uv local environment and test artifacts.
 .venv/

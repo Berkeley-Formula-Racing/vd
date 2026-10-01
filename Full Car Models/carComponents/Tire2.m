@@ -35,7 +35,9 @@ classdef Tire2
         end
 
         function out = F_y(obj,alpha,kappa,F_z,gamma)
-            cambershiftMod = 16.125*gamma*(F_z/250);
+            outputSize = size(alpha);
+            alpha = alpha(:); kappa = kappa(:); F_z = F_z(:); gamma = gamma(:);
+            cambershiftMod = 16.125.*gamma.*(F_z/250);
 
             % Camber multiplier: bilinear over (alpha, gamma) on the smoothed
             % ratio tables. This used to be five interp1 calls -- four in
@@ -172,7 +174,7 @@ classdef Tire2
 
             %Lateral Force
             F_y = D_y.*sin(C_y.*atan(B_y.*alpha_y-E_y.*(B_y.*alpha_y-atan(B_y.*alpha_y))))+S_vy;
-            F_y = transpose(G_ykappa.*F_y+S_vykappa);
+            F_y = G_ykappa.*F_y+S_vykappa;
 
             F_y(invalidLoad) = 0; %contact loss / zero load
 
@@ -185,15 +187,19 @@ classdef Tire2
             % parfor g-g that is thousands of lines of noise that identify
             % nothing. Report the inputs, once, under an ID that can be muted
             % with warning('off','Tire2:nanForce').
-            if isnan(out)
+            if any(isnan(out(:)))
                 warning('Tire2:nanForce', ...
                     ['F_y returned NaN: alpha=%g deg, kappa=%g, F_z=%g N, ' ...
                      'gamma=%g deg (pre-camber F_y2=%g).'], alpha/0.0174533, ...
-                    kappa, F_z/0.224809, cambershiftMod, F_y2);
+                    kappa(1), F_z(1)/0.224809, cambershiftMod(1), F_y2(1));
             end
+            out = reshape(out,outputSize);
         end
 
         function out = F_x(obj,alpha,kappa,F_z, gamma)
+
+            outputSize = size(alpha);
+            alpha = alpha(:); kappa = kappa(:); F_z = F_z(:); gamma = gamma(:);
 
             gamma = gamma*0.0174533; %degrees to radians
             alpha_f = alpha*0.0174533; %degrees to radians
@@ -255,9 +261,7 @@ classdef Tire2
             mu_x = (p_dx1+p_dx2.*df_z).*(1-p_dx3.*gamma.^2).*(1+p_px3.*dp_i+p_px4.*dp_i.^2).*lambda_mux;
 
             K_xkappa = (p_kx1+p_kx2.*df_z).*exp(p_kx3.*df_z).*(1+p_px1.*dp_i+p_px2.*dp_i.^2).*F_z.*lambda_kxkappa;
-            if ~isfinite(K_xkappa)
-                K_xkappa = 1e200;
-            end
+            K_xkappa(~isfinite(K_xkappa)) = 1e200;
             S_hx = (p_hx1+p_hx2.*df_z).*lambda_hx;
             S_vx = (p_vx1+p_vx2.*df_z).*F_z.*lambda_vx.*lambda_mux;
             kappa_x = kappa + S_hx;
@@ -277,12 +281,13 @@ classdef Tire2
                 .*(B_xalpha.*S_hxalpha - atan(B_xalpha.*S_hxalpha))));
 
             %Longitudinal Force
-            F_x = transpose((D_x.*sin(C_x.*atan(B_x.*kappa_x-E_x.*(B_x.*kappa_x-atan(B_x.*kappa_x))))+S_vx).*G_xalpha);
+            F_x = (D_x.*sin(C_x.*atan(B_x.*kappa_x-E_x.*(B_x.*kappa_x-atan(B_x.*kappa_x))))+S_vx).*G_xalpha;
 
             F_x(invalidLoad) = 0; %contact loss / zero load
 
             out = F_x*4.44822*obj.friction_scaling_factor; %lbf to N, scaled
             out(invalidLoad) = 0;
+            out = reshape(out,outputSize);
 
         end
 

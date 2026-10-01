@@ -23,7 +23,7 @@ if nargin < 4 || isempty(x0) % no initial guess supplied
 end
 
 % bounds
-steer_angle_bounds = [0,22];
+steer_angle_bounds = [0,car.qssSteeringLimitDeg];
 throttle_bounds = [0,0]; 
 long_vel_bounds = [0,max_vel];
 lat_vel_bounds = [-3,3];
@@ -61,25 +61,27 @@ f = @(P) -P(3)*P(5);
 % no longitidunal acceleration constraint
 constraint = @(P) car.constraint5(P,radius);
 % fval: objective function value (v^2/r)
-[x,fval,exitflag] = fmincon(f,x0,A,b,Aeq,beq,lb,ub,constraint,opts);
+[x,fval,exitflag] = fmincon(f,x0,A,b,Aeq,beq,lb,ub,constraint,opts); %#ok<ASGLU>
 % Only hand back a seed the caller can trust. vel_cornering_sweep uses this
 % as the next radius's initial guess, so returning the raw x from a
 % non-converged solve propagates a bad state down the rest of the sweep.
 % Empty tells the caller to fall back to its own deterministic guess.
-if exitflag == 1 || exitflag == 2
-    vel_corner_guess = x;
-else
-    vel_corner_guess = [];
-end
-
 % Steady-state residual at the returned point. The caller selects between
 % competing solves on this rather than on velocity: a warm-started chain that
 % has drifted reports a HIGHER cornering speed than a fresh solve while
 % sitting further outside the constraints -- measured, the drifting chain's
 % worst point had max|ceq| = 2e-2, which does not even satisfy the 1e-2
 % tolerance it was solved under, and was 0.36 m/s "faster" for it.
-[~,ceq] = constraint(x);
-ceqMax = max(abs(ceq));
+[c,ceq] = constraint(x);
+ceqMax = qssConstraintResidual(c,ceq);
+valid = qssCandidateValidity(exitflag,ceqMax,1e-4);
+if ~valid
+    x_corner_vel = [];
+    max_vel_corner = NaN;
+    vel_corner_guess = [];
+    return
+end
+vel_corner_guess = x;
 
 [engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,omega,current_gear,...
 Fzvirtual,Fz,alpha,T,gamma] = car.equations(x);  

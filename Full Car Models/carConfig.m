@@ -73,6 +73,9 @@ carParams.I_driveline = 0;
 % rolling resistance, driveline inertia and whatever else.
 
 carParams.Crr = 0.014;
+% Shared QSS steering stop.  Keep this at the existing 25 degree bound until
+% a measured physical steering stop is supplied.
+carParams.qss_steering_limit_deg = 25;
 
 % Ride-height model. Rates are spring rates at the damper, with motion ratio
 % defined as shock travel / wheel travel. The map looks up height changes in

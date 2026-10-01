@@ -1,4 +1,5 @@
-function [F_accel,F_braking] = create_scattered_interpolants2(vel_matrix_accel,vel_matrix_braking)
+function [F_accel,F_braking] = create_scattered_interpolants2( ...
+        vel_matrix_accel,vel_matrix_braking,ggMask)
 % input: vel_matrix_accel and vel_matrix_braking obtained from g-g diagram,
 %   contains velocity, lateral acceleration, and longitudinal acceleration
 % output: F_accel and F_braking, each a handle called as F(lat_accel,long_vel)
@@ -16,13 +17,19 @@ long_g_braking = vel_matrix_braking(:,1);
 lat_g_braking = vel_matrix_braking(:,2);
 vel_braking = vel_matrix_braking(:,3);
 
-F_accel   = envelope_lookup(lat_g_accel,vel_accel,long_g_accel);
-F_braking = envelope_lookup(lat_g_braking,vel_braking,long_g_braking);
+if nargin < 3, ggMask = struct(); end
+expectedVelocity = expectedVelocities(ggMask);
+accelMask = branchMask(ggMask,'acceleration',expectedVelocity);
+brakingMask = branchMask(ggMask,'braking',expectedVelocity);
+F_accel   = envelope_lookup(lat_g_accel,vel_accel,long_g_accel, ...
+    expectedVelocity,accelMask);
+F_braking = envelope_lookup(lat_g_braking,vel_braking,long_g_braking, ...
+    expectedVelocity,brakingMask);
 
 end
 
 
-function F = envelope_lookup(lat,vel,long)
+function F = envelope_lookup(lat,vel,long,expectedVelocity,branchMask)
 % F(lat_accel,long_vel) -> longitudinal capability, with the query projected
 % onto the region the g-g actually solved before it is interpolated.
 %
@@ -57,6 +64,10 @@ function F = envelope_lookup(lat,vel,long)
 % THIS CHANGES LAP TIMES. Strictly inside the sampled envelope it is
 % bit-for-bit the old answer -- verified zero difference over 8000 interior
 % samples -- so only states that were already ill-posed move.
+if isempty(lat) || isempty(vel) || isempty(long)
+    F = @(~,~) NaN;
+    return
+end
 F_grid = scatteredInterpolant([lat vel],long,'linear','nearest');
 
 vel_rows = unique(vel);
@@ -68,12 +79,14 @@ for i = 1:numel(vel_rows)
     lat_hi(i) = max(lat(row));
 end
 
-F = @(lat_q,vel_q) clamped_query(F_grid,vel_rows,lat_lo,lat_hi,lat_q,vel_q);
+F = @(lat_q,vel_q) clamped_query(F_grid,vel_rows,lat_lo,lat_hi,lat_q,vel_q, ...
+    expectedVelocity,branchMask);
 
 end
 
 
-function z = clamped_query(F_grid,vel_rows,lat_lo,lat_hi,lat_q,vel_q)
+function z = clamped_query(F_grid,vel_rows,lat_lo,lat_hi,lat_q,vel_q, ...
+        expectedVelocity,branchMask)
 % abs() because the lookups hold only the positive-lateral half of the g-g
 % (makeGG keeps p1 and p3, not the mirrored p2/p4). The solver already passes
 % v^2*abs(kappa), but a signed query would otherwise be extrapolated into empty
@@ -82,9 +95,64 @@ function z = clamped_query(F_grid,vel_rows,lat_lo,lat_hi,lat_q,vel_q)
 % Scalar queries only: lininterp1 uses find(...,1,'last'), so a vectorised
 % vel_q would silently take one bracket for the whole vector. Every caller is
 % scalar -- Events2 and Events3 both call this once per track sample.
+requestedVel = vel_q;
+if ~velocityCovered(requestedVel,expectedVelocity,branchMask)
+    z = NaN;
+    return
+end
 vel_q = min(max(vel_q,vel_rows(1)),vel_rows(end));
 lat_q = min(max(abs(lat_q),lininterp1(vel_rows,lat_lo,vel_q)), ...
                            lininterp1(vel_rows,lat_hi,vel_q));
 z = F_grid(lat_q,vel_q);
+end
+
+function mask = branchMask(ggMask,name,expectedVelocity)
+if ~isstruct(ggMask) || ~isfield(ggMask,name) || ...
+        ~isfield(ggMask,'velocity') || isempty(ggMask.(name)) || ...
+        isempty(expectedVelocity)
+    mask = [];
+    return
+end
+raw = logical(ggMask.(name)(:));
+velocity = round(double(ggMask.velocity(:)),6);
+if numel(raw) ~= numel(velocity)
+    mask = [];
+    return
+end
+mask = false(size(expectedVelocity));
+for i = 1:numel(expectedVelocity)
+    mask(i) = any(raw(abs(velocity-expectedVelocity(i)) <= 1e-9));
+end
+end
+
+function velocities = expectedVelocities(ggMask)
+if isstruct(ggMask) && isfield(ggMask,'velocity') && ~isempty(ggMask.velocity)
+    velocities = unique(round(double(ggMask.velocity(:)),6));
+else
+    velocities = [];
+end
+end
+
+function tf = velocityCovered(velocity,expectedVelocity,branchMask)
+if isempty(expectedVelocity) || isempty(branchMask)
+    tf = true;
+    return
+end
+velocity = round(double(velocity),6);
+tol = 1e-9;
+exact = find(abs(expectedVelocity-velocity) <= tol,1);
+if ~isempty(exact)
+    tf = branchMask(exact);
+    return
+end
+lower = find(expectedVelocity < velocity,1,'last');
+upper = find(expectedVelocity > velocity,1,'first');
+if isempty(lower)
+    tf = branchMask(1);
+elseif isempty(upper)
+    tf = branchMask(end);
+else
+    tf = all(branchMask(lower:upper));
+end
 end
 

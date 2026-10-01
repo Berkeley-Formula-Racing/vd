@@ -111,7 +111,7 @@ classdef Events2 < handle
             
             % F_accel/braking(lat_accel,long_vel) returns the max possible accel/braking
             [F_accel,F_braking] = create_scattered_interpolants2(obj.car.longAccelLookup,...
-                obj.car.longDecelLookup);
+                obj.car.longDecelLookup,obj.car.ggMask);
 
             % Maximum possible acceleration between apexes
             % calculating velocity and acceleration profiles as well as time

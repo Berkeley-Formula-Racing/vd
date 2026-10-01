@@ -22,6 +22,8 @@ classdef AeroMap
         claScale = 1
         cdaScale = 1
         copOffset = 0
+        coverageTriangulation
+        coverageEdgeLimitIn = 0.5
     end
 
     methods
@@ -57,6 +59,14 @@ classdef AeroMap
             obj.sampleCla = cla;
             obj.sampleCda = cda;
             obj.sampleCop = cop;
+            try
+                obj.coverageTriangulation = delaunayTriangulation(front,rear);
+            catch
+                % A degenerate map has no measured two-dimensional coverage.
+                % Keep legacy interpolation available, but mark finite queries
+                % invalid through coverageForQuery below.
+                obj.coverageTriangulation = [];
+            end
 
             % A complete rectilinear grid is safe for gridded interpolation
             % only when every cell is planar for all coefficients. In that
@@ -94,13 +104,14 @@ classdef AeroMap
 
         function aero = evaluate(obj,frontOffsetIn,rearOffsetIn)
             %EVALUATE Return the legacy coefficient struct for one state.
-            [aero.cla,aero.cda,aero.D_f,aero.D_r,aero.outsideMap] = ...
+            [aero.cla,aero.cda,aero.D_f,aero.D_r,aero.outsideMap, ...
+                aero.coverageValid] = ...
                 obj.evaluateNumeric(frontOffsetIn,rearOffsetIn);
             aero.frontOffsetIn = frontOffsetIn;
             aero.rearOffsetIn = rearOffsetIn;
         end
 
-        function [cla,cda,D_f,D_r,outsideMap] = ...
+        function [cla,cda,D_f,D_r,outsideMap,coverageValid] = ...
                 evaluateNumeric(obj,frontOffsetIn,rearOffsetIn)
             %EVALUATENUMERIC Evaluate one or more paired ride-height queries.
             % Inputs must have equal sizes, or one input may be scalar and
@@ -117,6 +128,15 @@ classdef AeroMap
                 frontQuery > obj.frontRangeIn(2) | ...
                 rearQuery < obj.rearRangeIn(1) | ...
                 rearQuery > obj.rearRangeIn(2);
+            if nargout >= 6
+                coverageValid = obj.coverageForQuery(frontQuery,rearQuery, ...
+                    outsideMap);
+            else
+                % Coverage geometry is a validity diagnostic, not part of the
+                % coefficient residual.  Avoid pointLocation in every Newton
+                % and line-search probe; the final QSS state requests output 6.
+                coverageValid = true(size(frontQuery));
+            end
 
             claRaw = nan(size(frontQuery));
             cdaRaw = nan(size(frontQuery));
@@ -166,6 +186,45 @@ classdef AeroMap
             cda = obj.cdaScale*cdaRaw;
             D_f = min(max(copRaw/100 + obj.copOffset,0),1);
             D_r = 1-D_f;
+        end
+
+        function coverageValid = coverageForQuery(obj,frontQuery,rearQuery, ...
+                outsideMap)
+            % Keep scattered interpolation numerically compatible while
+            % exposing whether the query is supported by a measured simplex.
+            finiteQuery = isfinite(frontQuery) & isfinite(rearQuery);
+            coverageValid = finiteQuery & ~outsideMap;
+            if obj.interpolationMode == "gridded"
+                return
+            end
+            if isempty(obj.coverageTriangulation)
+                coverageValid(:) = false;
+                return
+            end
+
+            queryPoints = [frontQuery(:),rearQuery(:)];
+            coverageFlat = false(size(queryPoints,1),1);
+            finiteInside = find(finiteQuery(:) & ~outsideMap(:));
+            triangleIndex = nan(size(queryPoints,1),1);
+            if ~isempty(finiteInside)
+                triangleIndex(finiteInside) = pointLocation( ...
+                    obj.coverageTriangulation,queryPoints(finiteInside,:));
+            end
+            inside = finiteQuery(:) & ~outsideMap(:) & isfinite(triangleIndex);
+            if any(inside)
+                connectivity = obj.coverageTriangulation.ConnectivityList;
+                points = obj.coverageTriangulation.Points;
+                triangles = connectivity(triangleIndex(inside),:);
+                p1 = points(triangles(:,1),:);
+                p2 = points(triangles(:,2),:);
+                p3 = points(triangles(:,3),:);
+                edge12 = hypot(p1(:,1)-p2(:,1),p1(:,2)-p2(:,2));
+                edge23 = hypot(p2(:,1)-p3(:,1),p2(:,2)-p3(:,2));
+                edge31 = hypot(p3(:,1)-p1(:,1),p3(:,2)-p1(:,2));
+                coverageFlat(inside) = max([edge12,edge23,edge31],[],2) <= ...
+                    obj.coverageEdgeLimitIn;
+            end
+            coverageValid = reshape(coverageFlat,size(frontQuery));
         end
 
         function obj = withCorrections(obj,claScale,cdaScale,copOffset)

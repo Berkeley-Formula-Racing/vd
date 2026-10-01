@@ -21,7 +21,7 @@ if nargin == 2 % no initial guess supplied
 end
 
 % bounds
-steer_angle_bounds = [0,22];
+steer_angle_bounds = [0,car.qssSteeringLimitDeg];
 throttle_bounds = [0,1]; 
 long_vel_bounds = [0,25];
 lat_vel_bounds = [-3,3];
@@ -51,7 +51,18 @@ constraint = @(P) car.constraint3(P,radius);
 options = optimoptions('fmincon','MaxFunctionEvaluations',5000,'ConstraintTolerance',1e-2,...
     'StepTolerance',1e-10,'Display','notify-detailed');
 
-[x,fval,exitflag] = fmincon(f,x0,A,b,Aeq,beq,lb,ub,constraint,options);
+[x,fval,exitflag,output] = fmincon(f,x0,A,b,Aeq,beq,lb,ub,constraint,options); %#ok<ASGLU>
+
+[c,ceq] = constraint(x);
+residual = qssConstraintResidual(c,ceq);
+valid = qssCandidateValidity(exitflag,residual,1e-4);
+if ~valid
+    x_table_skid = generate_table(nan(1,31));
+    max_vel_skid = NaN;
+    skidpad_time = NaN;
+    skid_guess = [];
+    return
+end
 
 max_vel_skid = x(3);
 skid_guess = x;

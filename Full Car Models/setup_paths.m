@@ -47,7 +47,7 @@ function checkShadowing(folder)
 % mismatch means something else is loaded under that name.
 watch = {'Tire2','Car','Aero','Powertrain','Events2','gg2','makeGG', ...
          'carConfig','parameters_loop','straight','max_lat_accel'};
-arity = struct('Tire2',4,'Aero',5,'Events2',3);
+arity = struct('Tire2',5,'Aero',6,'Events2',3);
 
 bad = {};
 for k = 1:numel(watch)

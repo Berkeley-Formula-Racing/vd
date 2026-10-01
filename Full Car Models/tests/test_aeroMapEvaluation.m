@@ -108,6 +108,25 @@ verifyEqual(testCase,aero.D_r,1-aero.D_f,'AbsTol',1e-12);
 verifyTrue(testCase,isfinite(aero.cla) && isfinite(aero.cda));
 end
 
+function testSparseInteriorHoleIsReportedAsInvalidCoverage(testCase)
+csvPath = writeSparseRingMap(testCase);
+map = AeroMap(csvPath);
+
+[cla,cda,D_f,D_r,outsideMap,coverageValid] = map.evaluateNumeric(0,0); %#ok<ASGLU>
+
+verifyFalse(testCase,outsideMap);
+verifyFalse(testCase,coverageValid);
+end
+
+function testNonfiniteCoverageQueryIsInvalidWithoutThrowing(testCase)
+modelRoot = fileparts(which('carConfig'));
+map = AeroMap(fullfile(modelRoot,'aeromap_b26.csv'));
+
+[~,~,~,~,~,coverageValid] = map.evaluateNumeric(NaN,0);
+
+verifyFalse(testCase,coverageValid);
+end
+
 function csvPath = writeSyntheticMap(testCase,isComplete,isPlanar)
 testFolder = tempname;
 mkdir(testFolder);
@@ -140,6 +159,22 @@ end
 rows = [{'Simulation Number','FFR offset','RRH offset','CLA','CDA','COP'}; ...
     num2cell([(1:numel(front))' front rear cla cda cop])];
 csvPath = fullfile(testFolder,'synthetic_aeromap.csv');
+writecell(rows,csvPath);
+end
+
+function csvPath = writeSparseRingMap(testCase)
+testFolder = tempname;
+mkdir(testFolder);
+testCase.addTeardown(@() rmdir(testFolder,'s'));
+
+front = [-0.4;-0.4;-0.4;0;0;0.4;0.4;0.4];
+rear  = [-0.4;0;0.4;-0.4;0.4;-0.4;0;0.4];
+cla = 2.5 + 0.3*front - 0.2*rear;
+cda = 1.2 + 0.04*front + 0.03*rear;
+cop = 51 + 2*front - 1.5*rear;
+rows = [{'Simulation Number','FFR offset','RRH offset','CLA','CDA','COP'}; ...
+    num2cell([(1:numel(front))' front rear cla cda cop])];
+csvPath = fullfile(testFolder,'sparse_ring_aeromap.csv');
 writecell(rows,csvPath);
 end
 

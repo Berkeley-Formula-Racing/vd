@@ -6,22 +6,35 @@ decel_info = [];
 longAccelLookup = [];
 longDecelLookup = [];
 arr = reshape(paramArr,[numel(paramArr) 1]);
+latMask = false(size(arr));
+accelMask = false(size(arr));
+brakeMask = false(size(arr));
 for i = 1:numel(arr)
     pSet = arr(i);
     p1 = []; p2 = []; p3 = []; p4 = []; x0 = []; x1 = []; x2 = [];
 
-    if converged(pSet.maxLatFlag)
+    latOk = converged(pSet.maxLatFlag) && branchValid(pSet,'maxLatValid');
+    accelOk = latOk && converged(pSet.maxLongFlag) && ...
+        branchValid(pSet,'maxLongValid');
+    brakeOk = latOk && converged(pSet.maxBrakeFlag) && ...
+        branchValid(pSet,'maxBrakeValid');
+
+    latMask(i) = latOk;
+    accelMask(i) = accelOk;
+    brakeMask(i) = brakeOk;
+
+    if latOk
         x0 = pSet.maxLatx;
     end
 
     %x: long %y: lat %z: velo
-    if converged(pSet.maxLatFlag) && converged(pSet.maxLongFlag)
+    if accelOk
         p1 = [pSet.maxLongLongAccel pSet.maxLongLatAccel pSet.longVel];
         p2 = [pSet.maxLongLongAccel -pSet.maxLongLatAccel pSet.longVel];
         x1 = pSet.maxLongAccelx;
     end
 
-    if converged(pSet.maxLatFlag) && converged(pSet.maxBrakeFlag)
+    if brakeOk
         p3 = [pSet.maxBrakeLongDecel pSet.maxBrakeLatAccel pSet.longVel];
         p4 = [pSet.maxBrakeLongDecel -pSet.maxBrakeLatAccel pSet.longVel];
         x2 = pSet.maxBrakeDecelx;
@@ -41,6 +54,10 @@ car.accel_info = accel_info;
 car.decel_info = decel_info;
 car.longAccelLookup = longAccelLookup;
 car.longDecelLookup = longDecelLookup;
+car.ggMask = struct('lateral',reshape(latMask,size(paramArr)), ...
+    'acceleration',reshape(accelMask,size(paramArr)), ...
+    'braking',reshape(brakeMask,size(paramArr)), ...
+    'velocity',reshape([arr.longVel],size(paramArr)));
 
 % Say what was thrown away. A dropped velocity removes its whole row -- 20
 % accel and 20 brake points -- from the table the lap sim interpolates, and
@@ -63,6 +80,7 @@ if ~isempty(lostV)
     for k = 1:numel(lostV)
         m = abs(round([arr.longVel],6) - lostV(k)) < 1e-9;
         f = [arr(m).maxLatFlag];
+        if isempty(f), f = 0; end
         lostFlag(k) = f(1);
     end
     warning('makeGG:droppedVelocities', ...
@@ -71,6 +89,16 @@ if ~isempty(lostV)
          'and brake lookups too.'], ...
         numel(gotV),numel(allV),strjoin(compose('%.2f',lostV),', '), ...
         strjoin(compose('%d',lostFlag),', '));
+end
+
+function tf = branchValid(pSet,name)
+if isprop(pSet,name)
+    tf = logical(pSet.(name));
+else
+    % ParamSet objects made by older saved code have no diagnostic field; the
+    % legacy exitflag gate remains the compatibility fallback for them.
+    tf = true;
+end
 end
 end
 
@@ -87,5 +115,6 @@ function ok = converged(exitflag)
 %
 % This also makes the g-g agree with the rest of the toolchain --
 % aeroEnvelope.filterSolved, ggMetrics and rampSweep all accept 1 or 2.
-ok = (exitflag == 1) | (exitflag == 2);
+ok = ~isempty(exitflag) && isscalar(exitflag) && ...
+    (exitflag == 1 || exitflag == 2);
 end

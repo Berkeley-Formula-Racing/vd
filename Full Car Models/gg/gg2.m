@@ -8,7 +8,11 @@ function paramArr = gg2(car,numWorkers,opts)
 %   rows: different longitudinal velocities, columns: different lat accels
 
 if nargin < 3, opts = struct(); end
-grid = ggGrid(car.max_vel,opts);
+maxVelocity = optionOr(opts,'maxVelocity',car.max_vel);
+validateattributes(maxVelocity,{'numeric'}, ...
+    {'scalar','real','finite','positive','<=',car.max_vel}, ...
+    mfilename,'opts.maxVelocity');
+grid = ggGrid(maxVelocity,opts);
 longVelArr = grid.velocity;
 latAgrid = grid.lateralCount;
 useContinuation = optionOr(opts,'continuation',false);
@@ -61,45 +65,61 @@ end
 
 function [row,nextMaxLatStart] = solveRow(longVel,latAgrid,car,maxLatStart,useContinuation)
 if useContinuation && ~isempty(maxLatStart)
-    [maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0] = ...
+    [maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0,maxLatDiagnostics] = ...
         max_lat_accel(longVel,car,maxLatStart);
 else
-    [maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0] = max_lat_accel(longVel,car);
+    [maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0,maxLatDiagnostics] = ...
+        max_lat_accel(longVel,car);
 end
-if solved(maxLatx(1))
+if maxLatDiagnostics.valid
     nextMaxLatStart = maxLatx0;
 else
-    nextMaxLatStart = maxLatStart;
+    % Do not carry a failed row's state into the next velocity.  A stale
+    % continuation seed can be numerically plausible while violating the new
+    % fixed speed/yaw-rate constraints.
+    nextMaxLatStart = [];
+end
+
+% Initialize every cell with the requested velocity even when the lateral
+% solve fails.  makeGG needs that explicit row identity to preserve a missing
+% velocity mask instead of silently dropping the row from the domain.
+row = repmat(ParamSet(car,longVel),1,numel(latAgrid));
+% Preserve a full missing-row mask when the lateral solve is not a valid QSS
+% point.  Do not manufacture accel/brake targets from an infeasible maximum.
+if ~maxLatDiagnostics.valid
+    return
 end
 
 latAccelArr = linspace(0.1,maxLatLatAccel-0.1,latAgrid);
-row = ParamSet();
-row(numel(latAccelArr)) = ParamSet();
 accelStart = [];
 brakingStart = [];
 for c2 = 1:numel(latAccelArr)
     latAccel = latAccelArr(c2);
     if useContinuation && ~isempty(accelStart)
-        [xAccel,longAccel,longAccelx0] = ...
+        [xAccel,longAccel,longAccelx0,accelDiagnostics] = ...
             max_long_accel_cornering(longVel,latAccel,car,accelStart);
     else
-        [xAccel,longAccel,longAccelx0] = max_long_accel_cornering(longVel,latAccel,car);
+        [xAccel,longAccel,longAccelx0,accelDiagnostics] = ...
+            max_long_accel_cornering(longVel,latAccel,car);
     end
-    if solved(xAccel(1)), accelStart = longAccelx0; end
+    if accelDiagnostics.valid, accelStart = longAccelx0; end
 
     if useContinuation && ~isempty(brakingStart)
-        [xBraking,longDecel,brakingDecelx0] = ...
+        [xBraking,longDecel,brakingDecelx0,brakingDiagnostics] = ...
             max_braking_decel_cornering(longVel,latAccel,car,brakingStart);
     else
-        [xBraking,longDecel,brakingDecelx0] = ...
+        [xBraking,longDecel,brakingDecelx0,brakingDiagnostics] = ...
             max_braking_decel_cornering(longVel,latAccel,car);
     end
-    if solved(xBraking(1)), brakingStart = brakingDecelx0; end
+    if brakingDiagnostics.valid, brakingStart = brakingDecelx0; end
 
     carParams = ParamSet(car,longVel);
-    carParams = carParams.setMaxLatParams(maxLatx,maxLatLatAccel,maxLatLongAccel,maxLatx0);
-    carParams = carParams.setMaxAccelParams(xAccel,longAccel,latAccel,longAccelx0);
-    carParams = carParams.setMaxDecelParams(xBraking,longDecel,latAccel,brakingDecelx0);
+    carParams = carParams.setMaxLatParams(maxLatx,maxLatLatAccel,maxLatLongAccel, ...
+        maxLatx0,maxLatDiagnostics);
+    carParams = carParams.setMaxAccelParams(xAccel,longAccel,latAccel, ...
+        longAccelx0,accelDiagnostics);
+    carParams = carParams.setMaxDecelParams(xBraking,longDecel,latAccel, ...
+        brakingDecelx0,brakingDiagnostics);
     row(c2) = carParams;
 end
 end
