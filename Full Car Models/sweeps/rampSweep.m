@@ -135,6 +135,14 @@ for iv = 1:numel(speeds)
     end
 
     ayTargets = linspace(ayMinFrac*ayLim, ayMaxFrac*ayLim, nRamp);
+    % Reuse one exact equation evaluator for every point at this speed.  It
+    % memoizes repeated optimizer states and carries the coupled ride-height
+    % context between compatible evaluations.
+    % Coast can use the coupled ride-height context while its reduced state
+    % walks nearby points. Balanced keeps the historical minimal equation
+    % tuple in the hot loop; its full residual acceptance and final metrics
+    % still evaluate the reconstructed nine-state exactly.
+    evaluator = rampEquationEvaluator(car,~holdSpeed);
 
     % --- walk the ramp upward, warm starting each point from the last ---
     x0 = seedState(v,ayTargets(1),xLim);
@@ -148,11 +156,11 @@ for iv = 1:numel(speeds)
             break
         end
 
-        % Continuation first, then two fallback seeds. Without the retries a
-        % merely awkward warm start is indistinguishable from a point the car
-        % genuinely cannot reach, and in 'balanced' mode that distinction is
-        % the whole story at high speed.
-        seeds = {x0, seedState(v,ay,xLim), [2,0,v,0.05,ay/v,0,0,0,0]};
+        % Continuation first, then the historical fallback seeds. Without the
+        % retries a merely awkward warm start is indistinguishable from a
+        % point the car genuinely cannot reach, and in 'balanced' mode that
+        % distinction is the whole story at high speed.
+        seeds = {x0,seedState(v,ay,xLim),[2,0,v,0.05,ay/v,0,0,0,0]};
         got = false;
         for si = 1:numel(seeds)
             if ~isempty(cancelFcn) && cancelFcn()
@@ -162,7 +170,9 @@ for iv = 1:numel(speeds)
             xs = seeds{si};
             xs(3) = v;
             xs(5) = ay/v;         % the yaw rate the constraint will enforce
-            [x,exitflag,ceqMax] = solveRampPoint(car,xs,v,ay,holdSpeed,solverOptions);
+            useReduced = ~holdSpeed;
+            [x,exitflag,ceqMax] = solveRampPoint(car,xs,v,ay,holdSpeed, ...
+                solverOptions,evaluator,useReduced);
             % Exitflag alone is not enough. fmincon's exitflag 2 means the
             % step got small, which it also does when it is stuck at an
             % INFEASIBLE point -- and that is exactly what happens where a
@@ -214,13 +224,16 @@ for iv = 1:numel(speeds)
         for b = 1:nBisect
             aym = 0.5*(ayOK+ayBad);
             hit = false;
-            for xs = {x0, seedState(v,aym,xLim)}
+            bisectSeeds = {x0, seedState(v,aym,xLim)};
+            for bsi = 1:numel(bisectSeeds)
                 if ~isempty(cancelFcn) && cancelFcn()
                     cancelled = true;
                     break
                 end
-                z = xs{1}; z(3) = v; z(5) = aym/v;
-                [x,exitflag,ceqMax] = solveRampPoint(car,z,v,aym,holdSpeed,solverOptions);
+                z = bisectSeeds{bsi}; z(3) = v; z(5) = aym/v;
+                useReduced = ~holdSpeed;
+                [x,exitflag,ceqMax] = solveRampPoint(car,z,v,aym, ...
+                    holdSpeed,solverOptions,evaluator,useReduced);
                 if (exitflag == 1 || exitflag == 2) && ceqMax <= ceqTol
                     hit = true; break
                 end
@@ -303,53 +316,148 @@ end
 end
 
 %% ------------------------------------------------------------------------
-function [x,exitflag,ceqMax] = solveRampPoint(car,x0,v,ayTarget,holdSpeed,solverOptions)
+function [x,exitflag,ceqMax] = solveRampPoint(car,x0,v,ayTarget, ...
+        holdSpeed,solverOptions,evaluator,useReduced)
 % One steady-state point: the smallest steer angle that produces ayTarget.
+% Coast has two independent controls and uses the reduced solve. Balanced
+% mode retains the historical full solve because its four requested controls
+% must satisfy five independent physical residuals (lat, yaw, two rear-wheel,
+% and longitudinal) after the exact front identities are removed.
 
-% bounds mirror max_lat_accel, except that 'balanced' mode has to be allowed
-% throttle and rear slip ratio to trim out drag
-if holdSpeed
-    throttle_bounds = [0,1];
-    kappa_r_bounds  = [0,0.25];
-else
-    throttle_bounds = [0,0];
-    kappa_r_bounds  = [0,0];
+if nargin < 7 || isempty(evaluator)
+    evaluator = rampEquationEvaluator(car);
+end
+if nargin < 8
+    useReduced = true;
+end
+if ~useReduced
+    [x,exitflag,ceqMax] = solveRampPointFull(car,x0,v,ayTarget, ...
+        holdSpeed,solverOptions,evaluator);
+    return
 end
 
-lb = [ 0, throttle_bounds(1), v, -3, 0, 0, 0, kappa_r_bounds(1), kappa_r_bounds(1)];
-ub = [25, throttle_bounds(2), v,  3, 2, 0, 0, kappa_r_bounds(2), kappa_r_bounds(2)];
+% These bounds are the original nine-state coast bounds projected onto the
+% two independent variables. Fixed speed, yaw rate, front slips, and rear
+% slips are reconstructed by rampSweepState below.
+zScale = [25,3];
+lb = [0,-1];
+ub = [1,1];
 
-% long_vel pinned, front slip ratios zero (undriven, unbraked), rear slip
-% ratios symmetric. The symmetry goes in Aeq rather than being forced inside
-% the objective -- objective and constraints must evaluate the same state.
+% Work in normalized coordinates so the small rear-slip and lateral-velocity
+% controls receive the same finite-difference resolution as steer.  The
+% physical bounds and reconstructed state remain exactly the original ones.
+z0 = reduceRampState(x0,holdSpeed);
+u0 = z0 ./ zScale;
+opts = lateralOptimoptions(solverOptions,1500);
+f = @(u) zScale(1)*u(1);              % minimum steer -> stable branch
+nl = @(u) rampConstraint(car,scaledRampState(u,zScale,v,ayTarget,holdSpeed), ...
+    ayTarget,holdSpeed,evaluator,true,true,~holdSpeed);
+
+[u,~,exitflag] = fmincon(f,u0,[],[],[],[],lb,ub,nl,opts);
+z = u(:).' .* zScale;
+x = rampSweepState(z,v,ayTarget,holdSpeed);
+
+[~,ceq] = rampConstraint(car,x,ayTarget,holdSpeed,evaluator);
+ceqMax = max(abs(ceq));
+if isempty(ceqMax) || ~isfinite(ceqMax)
+    ceqMax = Inf;
+end
+
+end
+
+function [x,exitflag,ceqMax] = solveRampPointFull(car,x0,v,ayTarget, ...
+        holdSpeed,solverOptions,evaluator)
+% Exact historical nine-state solve used by balanced mode. All original
+% linear equalities and nonlinear residuals remain here.
+if holdSpeed
+    throttleBounds = [0,1];
+    kappaBounds = [0,0.25];
+else
+    throttleBounds = [0,0];
+    kappaBounds = [0,0];
+end
+lb = [0,throttleBounds(1),v,-3,0,0,0,kappaBounds(1),kappaBounds(1)];
+ub = [25,throttleBounds(2),v,3,2,0,0,kappaBounds(2),kappaBounds(2)];
 Aeq = [0 0 1 0 0 0 0 0 0
        0 0 0 0 0 1 0 0 0
        0 0 0 0 0 0 1 0 0
        0 0 0 0 0 0 0 1 -1];
 beq = [v 0 0 0];
-
 opts = lateralOptimoptions(solverOptions,1500);
-f = @(P) P(1);                       % minimum steer -> the stable branch
-nl = @(P) rampConstraint(car,P,ayTarget,holdSpeed);
-
+f = @(P)P(1);
+nl = @(P)rampConstraint(car,P,ayTarget,holdSpeed,evaluator);
 [x,~,exitflag] = fmincon(f,x0,[],[],Aeq,beq,lb,ub,nl,opts);
-
-[~,ceq] = rampConstraint(car,x,ayTarget,holdSpeed);
+[~,ceq] = rampConstraint(car,x,ayTarget,holdSpeed,evaluator);
 ceqMax = max(abs(ceq));
+if isempty(ceqMax) || ~isfinite(ceqMax)
+    ceqMax = Inf;
+end
 end
 
-function [c,ceq] = rampConstraint(car,P,ayTarget,holdSpeed)
+function [c,ceq] = rampConstraint(car,P,ayTarget,holdSpeed,evaluator, ...
+        omitAyIdentity,omitFrontWheel,omitRearWheel)
 % Steady state at a prescribed lateral acceleration. Built here rather than
 % added to Car.m so this sweep stays self-contained: constraint4 does the Ay
 % target but cannot also hold longitudinal acceleration at zero, which is
 % what makes a constant-SPEED ramp a constant-speed ramp.
-[engine_rpm,beta,lat_accel,long_accel,yaw_accel,wheel_accel,~,~,Fzvirtual] = ...
-    car.equations(P);
-c   = [engine_rpm-13000, abs(beta)-20, -Fzvirtual(1:4)];
-ceq = [P(3)*P(5)-ayTarget, lat_accel, yaw_accel, wheel_accel(1:4)];
-if holdSpeed
-    ceq = [ceq, long_accel];
+if nargin < 5 || isempty(evaluator)
+    evaluator = rampEquationEvaluator(car);
 end
+if nargin < 6
+    omitAyIdentity = false;
+end
+if nargin < 7
+    omitFrontWheel = false;
+end
+if nargin < 8
+    omitRearWheel = false;
+end
+state = evaluator.evaluate(P);
+c   = [state.engineRpm-13000, abs(state.beta)-20, -state.Fzvirtual(1:4)];
+if omitFrontWheel
+    % The reduced state has no independent yaw-rate bound, so carry the
+    % original P(5) limits as inequalities. Full mode already enforces them
+    % through its original lower/upper bounds.
+    c = [c,-P(5),P(5)-2];
+    % With front slip ratios and front wheel torque fixed to zero, the first
+    % two wheel rows are exact identities.  Keep both rear rows because their
+    % equilibrium remains an independent physical condition in balanced mode.
+    if omitRearWheel
+        wheelResidual = zeros(1,0);
+    else
+        wheelResidual = state.wheelAccel(3:4);
+    end
+else
+    wheelResidual = state.wheelAccel(1:4);
+end
+ceq = [state.latAccel, state.yawAccel, wheelResidual];
+if ~omitAyIdentity
+    % The full residual is retained for acceptance and reporting.  The
+    % reduced state reconstructs P(5)=ayTarget/P(3), so this row is an
+    % algebraic identity with a zero optimizer Jacobian and must not be
+    % presented to fmincon as an independent equality.
+    ceq = [P(3)*P(5)-ayTarget, ceq];
+end
+if holdSpeed
+    ceq = [ceq, state.longAccel];
+end
+end
+
+function z = reduceRampState(P,holdSpeed)
+% Project a full continuation/fallback state onto the independent variables.
+P = P(:).';
+if holdSpeed
+    z = [P(1),P(4),P(2),0.5*(P(8)+P(9))];
+else
+    z = [P(1),P(4)];
+end
+end
+
+function P = scaledRampState(u,zScale,v,ayTarget,holdSpeed)
+% Convert the normalized optimizer variables back to the physical reduced
+% state before evaluating the exact car equations.
+z = u(:).' .* zScale;
+P = rampSweepState(z,v,ayTarget,holdSpeed);
 end
 
 function x0 = seedState(v,ay,xLim)

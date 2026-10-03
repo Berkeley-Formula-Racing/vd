@@ -8,6 +8,7 @@ classdef StudyJob < handle
         error = []
         cancelRequested = false
         future = []
+        scheduler = struct()
         cancelFile = ""
         started = NaT
         completed = NaT
