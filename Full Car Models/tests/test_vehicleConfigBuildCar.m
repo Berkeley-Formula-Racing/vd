@@ -74,6 +74,17 @@ for k = 1:numel(badValues)
 end
 end
 
+function testMalformedTorqueCurvesAreRejectedAtBuildTime(testCase)
+base = vehicleConfig.defaultSetup();
+badCurves = {42,ones(3,2),ones(2,1),[1 Inf;2 3], ...
+    [1+1i 2;3 4],"42"};
+for k = 1:numel(badCurves)
+    setup = base;
+    setup.fixed.torque_fn = badCurves{k};
+    verifyError(testCase,@() vehicleConfig.buildCar(setup,"lap"), ...
+        'vehicleConfig:invalidParameter');
+end
+end
 function testUnknownFieldsRolesProfilesAndSchemasHaveSpecificErrors(testCase)
 base = vehicleConfig.defaultSetup();
 setup = base;

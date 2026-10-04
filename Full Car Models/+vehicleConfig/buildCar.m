@@ -113,8 +113,11 @@ if ~isnumeric(fixed.gears) || isempty(fixed.gears) || ~isvector(fixed.gears) || 
     invalidParameter('fixed.gears','must be a finite positive numeric vector');
 end
 validatePositiveScalar(fixed.primary_reduction,'fixed.primary_reduction');
-if isempty(fixed.torque_fn)
-    invalidParameter('fixed.torque_fn','must not be empty');
+validateFiniteNumericArray(fixed.torque_fn,'fixed.torque_fn');
+if ~ismatrix(fixed.torque_fn) || size(fixed.torque_fn,1) ~= 2 || ...
+        size(fixed.torque_fn,2) < 2
+    invalidParameter('fixed.torque_fn', ...
+        'must be a two-row torque curve with at least two samples');
 end
 validateFiniteNumericArray(fixed.Fx_parameters,'fixed.Fx_parameters');
 validateFiniteNumericArray(fixed.Fy_parameters,'fixed.Fy_parameters');
