@@ -319,3 +319,16 @@ for k = 1:numel(names)
     output.(names{k}) = source.(names{k});
 end
 end
+
+function testFromLegacyGroupsDefaultsExplicitlyEmptyOptionalTireFields(testCase)
+base = vehicleConfig.defaultSetup();
+[cP,aP,eP,DTp,Bp,tP] = legacyGroupsFromSetup(base);
+tP.model_type = [];
+tP.model_artifact = [];
+tP.model_uncertainty = [];
+
+setup = vehicleConfig.fromLegacyGroups(cP,aP,eP,DTp,Bp,tP);
+verifyEqual(testCase,setup.fixed.model_type,"legacy");
+verifyEqual(testCase,setup.fixed.model_artifact,"");
+verifyEqual(testCase,setup.fixed.model_uncertainty,"nominal");
+end

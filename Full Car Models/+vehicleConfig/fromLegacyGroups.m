@@ -56,7 +56,7 @@ setup = struct( ...
 end
 
 function value = fieldOr(source,name,defaultValue)
-if isfield(source,name)
+if isfield(source,name) && ~isempty(source.(name))
     value = source.(name);
 else
     value = defaultValue;
