@@ -132,11 +132,49 @@ classdef RampSpeedSession < handle
             end
             current = obj.setupSpecifications(index);
             edited = mergeStruct(current,changes);
-            edited.id = current.id;
+            edited.id = strtrim(string(edited.id));
+            if ~isscalar(edited.id) || ismissing(edited.id) || ...
+                    strlength(edited.id) == 0
+                error("rampSpeed:invalidSetupId", ...
+                    "Setup ID must be a nonempty text value.");
+            end
+            otherIds = string({obj.cases.id});
+            otherIds(index) = [];
+            if any(otherIds == edited.id)
+                error("rampSpeed:duplicateSetupId", ...
+                    "Setup ID %s already exists.",edited.id);
+            end
             edited.isBaseline = false;
             specs = obj.setupSpecifications;
             specs(index) = edited;
+            selection = obj.selectedCaseIds;
+            selection(selection == string(current.id)) = edited.id;
             obj.commitSetupCatalog(specs,index);
+            obj.selectedCaseIds = selection;
+            if edited.id ~= string(current.id)
+                for runIndex = 1:numel(obj.study.runs)
+                    run = obj.study.runs(runIndex);
+                    if string(run.caseId) ~= string(current.id)
+                        continue
+                    end
+                    run.caseId = edited.id;
+                    if isfield(run.runMeta,"caseInfo")
+                        run.runMeta.caseInfo.id = edited.id;
+                        if isfield(run.runMeta.caseInfo,"setupSpec")
+                            run.runMeta.caseInfo.setupSpec.id = edited.id;
+                        end
+                    end
+                    if isfield(run.runMeta,"setupSpec")
+                        run.runMeta.setupSpec.id = edited.id;
+                    end
+                    obj.study.runs(runIndex) = run;
+                end
+                % A completed job is polled again by viewModel; keep its
+                % snapshot aligned so it cannot restore the previous ID.
+                if ~isempty(obj.job)
+                    obj.job.study = obj.study;
+                end
+            end
         end
 
         function deleteSetup(obj,setupId)

@@ -64,7 +64,7 @@ app.SetupLegendToggleButton.ButtonPushedFcn( ...
 verifyEqual(testCase,string(app.SetupLegendPanel.Visible),"on");
 end
 
-function testRunConfigurationLivesInSidebarAndSetupTabIsSetupOnly(testCase)
+function testBasicSettingsStayInSidebarAndAdvancedSettingsHaveTheirOwnTab(testCase)
 ensureRampSpeedAppPath();
 app = RampSpeedApp("Visible","off");
 cleanup = onCleanup(@()deleteIfValid(app)); %#ok<NASGU>
@@ -75,10 +75,7 @@ verifyTrue(testCase,isdescendantOf(app.RunConfigPanel,app.SetupLegendPanel));
 verifyTrue(testCase,isdescendantOf(app.SetupTable,app.SetupPanel));
 
 globalControls = [app.RampTypeDropDown;app.LateralModeDropDown; ...
-    app.SpeedStartEditField;app.SpeedStopEditField;app.SpeedStepEditField; ...
-    app.SpeedVectorEditField;app.NRampEditField;app.NBisectEditField; ...
-    app.ResidualToleranceEditField;app.ExecutionModeDropDown; ...
-    app.WorkersEditField;app.UnitDropDown;app.SolverProfileDropDown; ...
+    app.SpeedStartEditField;app.SpeedStopEditField;app.UnitDropDown; ...
     app.SpeedGridModeDropDown;app.BaselineDropDown;app.RunButton; ...
     app.CancelButton;app.LoadButton;app.SaveButton;app.ExportButton; ...
     app.ClearButton;app.ProgressTextArea];
@@ -86,6 +83,19 @@ for control = globalControls(:).'
     verifyTrue(testCase,isdescendantOf(control,app.RunConfigPanel));
     verifyFalse(testCase,isdescendantOf(control,app.SetupPanel));
 end
+advancedControls = [app.SpeedStepEditField;app.SpeedVectorEditField; ...
+    app.NRampEditField;app.NBisectEditField;app.ResidualToleranceEditField; ...
+    app.ExecutionModeDropDown;app.WorkersEditField;app.SolverProfileDropDown];
+verifyEqual(testCase,string(app.AdvancedSettingsTab.Title),"Advanced Settings");
+for control = advancedControls(:).'
+    verifyTrue(testCase,isdescendantOf(control,app.AdvancedSettingsTab));
+    verifyFalse(testCase,isdescendantOf(control,app.RunConfigPanel));
+end
+app.UIFigure.Position = [100 100 1200 800];
+drawnow;
+pause(1);
+drawnow;
+verifyGreaterThanOrEqual(testCase,app.ProgressTextArea.Position(4),120);
 end
 
 function testOverlayLegendControlsSelectedSetups(testCase)

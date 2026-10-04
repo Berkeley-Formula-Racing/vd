@@ -74,6 +74,23 @@ verifySize(testCase,app.Cars,[1 1]);
 verifyEqual(testCase,string(app.Cases(1).id),"ramp-baseline");
 end
 
+function testSetupIdEditorRenamesAndRejectsDuplicates(testCase)
+ensureRampSpeedAppPath();
+app = RampSpeedApp("Visible","off");
+cleanup = onCleanup(@()deleteIfValid(app));
+verifyEqual(testCase,string(app.SetupIdEditField.Enable),"off");
+app.duplicateSelectedSetup("old-id","Custom setup");
+app.SetupIdEditField.Value = 'new-id';
+app.SetupIdEditField.ValueChangedFcn(app.SetupIdEditField,[]);
+verifyEqual(testCase,string(app.Cases(2).id),"new-id");
+verifyEqual(testCase,app.Session.viewModel().selectedCaseIds,"new-id");
+verifyEqual(testCase,string(app.SetupTable.Data.id(2)),"new-id");
+app.SetupIdEditField.Value = 'ramp-baseline';
+app.SetupIdEditField.ValueChangedFcn(app.SetupIdEditField,[]);
+verifyEqual(testCase,string(app.SetupIdEditField.Value),"new-id");
+verifyEqual(testCase,string(app.Cases(2).id),"new-id");
+end
+
 function testBaselineCannotBeDeleted(testCase)
 ensureRampSpeedAppPath();
 app = RampSpeedApp("Visible","off");
