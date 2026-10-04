@@ -1,4 +1,4 @@
-function resolved = doeResolveStudy(study,baselineTable)
+﻿function resolved = doeResolveStudy(study,baselineTable)
 %DOERESOLVESTUDY Validate a DOE study and resolve its physical design bounds.
 
 validateStudy(study);
@@ -49,7 +49,7 @@ end
 knownNames = parameterRegistry();
 if any(~ismember(name,knownNames))
     error('doeResolveStudy:unknownParameter', ...
-        'Every study parameter must be listed by parameters_loop.m.')
+        'Every study parameter must be listed by vehicleConfig.parameterNames.')
 end
 if ~istable(baselineTable) || height(baselineTable) ~= 1
     error('doeResolveStudy:badBaseline', ...
@@ -95,18 +95,7 @@ P = table(name,rangeType,lowerInput,upperInput,baseline,lowerPhysical,upperPhysi
 end
 
 function knownNames = parameterRegistry()
-registryFile = which('parameters_loop');
-if isempty(registryFile)
-    registryFile = fullfile(fileparts(mfilename('fullpath')),'parameters_loop.m');
-end
-source = fileread(registryFile);
-match = regexp(source,'names\s*=\s*\{([\s\S]*?)\};','tokens','once');
-if isempty(match)
-    error('doeResolveStudy:registryUnavailable', ...
-        'Could not read the parameter registry from parameters_loop.m.')
-end
-tokens = regexp(match{1},'''([^'']+)''','tokens');
-knownNames = string(cellfun(@(token) token{1},tokens,'UniformOutput',false))';
+knownNames = string(vehicleConfig.parameterNames()).';
 end
 
 function physical = toPhysical(U,P)
