@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -26,6 +27,56 @@ from .models import (
 )
 from .repository import SQLiteRepository
 from .validation import ValidationError
+
+
+class UnsafeCsvDestinationError(ValueError):
+    """A CSV export would overwrite data owned by the test log."""
+
+
+def _resolved_path(path: Path) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
+
+
+def _same_existing_file(first: Path, second: Path) -> bool:
+    try:
+        return first.exists() and second.exists() and os.path.samefile(first, second)
+    except OSError:
+        return False
+
+
+def _is_within(path: Path, directory: Path) -> bool:
+    try:
+        path.relative_to(directory)
+    except ValueError:
+        return False
+    return True
+
+
+def _guard_csv_destination(paths: DataPaths, destination: Path) -> None:
+    resolved_destination = _resolved_path(destination)
+    database = Path(paths.database)
+    protected_files = (
+        database,
+        Path(f"{database}-wal"),
+        Path(f"{database}-shm"),
+        Path(f"{database}-journal"),
+        Path(paths.lock_file),
+    )
+    for protected_file in protected_files:
+        resolved_protected = _resolved_path(protected_file)
+        if resolved_destination == resolved_protected or _same_existing_file(
+            resolved_destination, resolved_protected
+        ):
+            raise UnsafeCsvDestinationError(
+                "Choose a CSV destination outside the test log database, sidecars, and lock file."
+            )
+
+    for owned_directory in (Path(paths.attachments), Path(paths.backup_root)):
+        resolved_directory = _resolved_path(owned_directory)
+        if _is_within(resolved_destination, resolved_directory):
+            raise UnsafeCsvDestinationError(
+                "Choose a CSV destination outside the test log attachments and backup folders."
+            )
 
 
 class BackupInProgressError(RuntimeError):
@@ -378,4 +429,5 @@ class TestLogServices:
 
     def export_setup(self, setup_id: str, destination: Path) -> Path:
         self._ensure_open()
+        _guard_csv_destination(self.paths, destination)
         return write_setup_csv(self._repository, setup_id, destination)
