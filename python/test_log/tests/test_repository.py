@@ -356,6 +356,115 @@ class RepositoryTests(unittest.TestCase):
                 self.assertEqual(raised.exception.field, "attachments")
         self.assertEqual(self.repository.list_attachments("event_layout", event.id), [])
 
+    def test_save_lap_holds_write_lock_across_archived_event_check(self):
+        self.add_context()
+        writer_results = []
+
+        def archive_event_from_second_connection():
+            connection = sqlite3.connect(self.database_path, timeout=0)
+            try:
+                connection.execute(
+                    "UPDATE event_layouts SET archived = 1 WHERE id = ?",
+                    ("event-1",),
+                )
+                connection.commit()
+                writer_results.append("committed")
+            except sqlite3.OperationalError as error:
+                connection.rollback()
+                writer_results.append(error.sqlite_errorname)
+            finally:
+                connection.close()
+
+        original_get_event_layout = self.repository.get_event_layout
+        archive_attempted = False
+
+        def read_event_then_attempt_archive(identifier):
+            nonlocal archive_attempted
+            event = original_get_event_layout(identifier)
+            if identifier == "event-1" and not archive_attempted:
+                archive_attempted = True
+                writer = Thread(target=archive_event_from_second_connection)
+                writer.start()
+                writer.join(timeout=3)
+                self.assertFalse(writer.is_alive(), "the competing writer must finish promptly")
+            return event
+
+        self.repository.get_event_layout = read_event_then_attempt_archive
+        try:
+            saved = self.repository.save_lap(make_lap())
+        finally:
+            self.repository.get_event_layout = original_get_event_layout
+
+        self.assertEqual(writer_results, ["SQLITE_BUSY"])
+        self.assertFalse(self.repository.get_event_layout("event-1").archived)
+        self.assertEqual(saved.id, "lap-1")
+        self.assertEqual(self.repository.get_lap("lap-1").event_layout_id, "event-1")
+
+    def test_reorder_laps_holds_write_lock_across_exact_membership_check(self):
+        self.add_context()
+        self.repository.save_lap(make_lap("lap-1", sequence=1))
+        self.repository.save_lap(make_lap("lap-2", sequence=2))
+        writer_results = []
+
+        def insert_lap_from_second_connection():
+            connection = sqlite3.connect(self.database_path, timeout=0)
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO laps(
+                        id, setup_id, event_layout_id, sequence, time_ms, status,
+                        driver, time_of_day, notes, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "concurrent-lap",
+                        "setup-1",
+                        "event-1",
+                        3,
+                        41_000,
+                        "valid",
+                        "Driver 2",
+                        "10:16",
+                        None,
+                        CREATED_AT,
+                    ),
+                )
+                connection.commit()
+                writer_results.append("committed")
+            except sqlite3.OperationalError as error:
+                connection.rollback()
+                writer_results.append(error.sqlite_errorname)
+            finally:
+                connection.close()
+
+        membership_read_interleaved = False
+
+        def attempt_insert_before_membership_read(statement):
+            nonlocal membership_read_interleaved
+            if (
+                not membership_read_interleaved
+                and statement.startswith("SELECT id, sequence FROM laps WHERE setup_id =")
+            ):
+                membership_read_interleaved = True
+                writer = Thread(target=insert_lap_from_second_connection)
+                writer.start()
+                writer.join(timeout=3)
+                self.assertFalse(writer.is_alive(), "the competing writer must finish promptly")
+
+        self.repository._connection.set_trace_callback(attempt_insert_before_membership_read)
+        try:
+            reordered = self.repository.reorder_laps("setup-1", ("lap-2", "lap-1"))
+        finally:
+            self.repository._connection.set_trace_callback(None)
+
+        self.assertEqual(writer_results, ["SQLITE_BUSY"])
+        self.assertEqual(
+            [(lap.id, lap.sequence) for lap in reordered],
+            [("lap-2", 1), ("lap-1", 2)],
+        )
+        self.assertIsNone(self.repository.get_lap("concurrent-lap"))
+
     def test_delete_lap_serializes_attachment_capture_with_concurrent_writer(self):
         self.add_context()
         lap = make_lap()

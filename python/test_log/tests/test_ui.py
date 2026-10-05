@@ -124,6 +124,71 @@ class TestLogUiTests(unittest.TestCase):
         tree.selection_set(item_id)
         self.root.update()
 
+    def test_minimum_main_window_keeps_setup_and_lap_controls_visible(self):
+        _, setup, _, lap = self.save_hierarchy()
+        window = self.require_window()
+        self.root.deiconify()
+        self.root.geometry("900x580")
+        self.root.update()
+
+        self.assertEqual(
+            (self.root.winfo_width(), self.root.winfo_height()),
+            (900, 630),
+            "the window must enforce its declared 900x630 minimum",
+        )
+
+        def assert_inside_client(widget, description):
+            self.assertTrue(widget.winfo_ismapped(), f"{description} must be mapped")
+            left = widget.winfo_rootx() - self.root.winfo_rootx()
+            top = widget.winfo_rooty() - self.root.winfo_rooty()
+            right = left + widget.winfo_width()
+            bottom = top + widget.winfo_height()
+            self.assertGreater(widget.winfo_width(), 0, f"{description} must have width")
+            self.assertGreater(widget.winfo_height(), 0, f"{description} must have height")
+            self.assertGreaterEqual(left, 0, f"{description} must stay inside the client")
+            self.assertGreaterEqual(top, 0, f"{description} must stay inside the client")
+            self.assertLessEqual(
+                right, self.root.winfo_width(),
+                f"{description} must stay inside the client",
+            )
+            self.assertLessEqual(
+                bottom, self.root.winfo_height(),
+                f"{description} must stay inside the client",
+            )
+            return left, top, right, bottom
+
+        def overlaps(first, second):
+            return (
+                first[0] < second[2]
+                and second[0] < first[2]
+                and first[1] < second[3]
+                and second[1] < first[3]
+            )
+
+        for item_id in (f"setup:{setup.id}", f"lap:{lap.id}"):
+            with self.subTest(item_id=item_id):
+                self.select_tree_item(window.tree, item_id)
+                window._set_dirty_text("Unsaved changes")
+                window._set_status("Minimum-size layout check")
+                self.root.update()
+
+                tree_bounds = assert_inside_client(window.tree, "record tree")
+                attachment_bounds = assert_inside_client(window.attachment_list, "attachment list")
+                for name, widget in window.fields.items():
+                    assert_inside_client(widget, f"{name} field")
+                for name, button in window.actions.items():
+                    assert_inside_client(button, f"{name} button")
+
+                dirty_bounds = assert_inside_client(window.dirty_label, "dirty indicator")
+                status_bounds = assert_inside_client(window.status_label, "status indicator")
+                self.assertEqual(window.dirty_label.winfo_height(), 19)
+                self.assertEqual(window.status_label.winfo_height(), 19)
+                self.assertFalse(overlaps(dirty_bounds, status_bounds))
+                self.assertFalse(overlaps(dirty_bounds, tree_bounds))
+                self.assertFalse(overlaps(status_bounds, tree_bounds))
+                self.assertFalse(overlaps(dirty_bounds, attachment_bounds))
+                self.assertFalse(overlaps(status_bounds, attachment_bounds))
+
     def test_add_day_setup_lap_callbacks_save_the_three_level_hierarchy(self):
         event = self.services.save_event_layout(self.make_event())
         window = self.require_window()

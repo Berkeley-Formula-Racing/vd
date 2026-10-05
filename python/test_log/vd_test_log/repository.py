@@ -442,6 +442,7 @@ class SQLiteRepository:
     ) -> Setup:
         staged = self._prepare_attachments(attachments, "setup")
         with self._connection:
+            self._connection.execute("BEGIN IMMEDIATE")
             previous = self.get_setup(record.id)
             if previous is not None and previous.test_day_id != record.test_day_id:
                 raise ValidationError("test_day_id", "A saved setup cannot be moved to another test day.")
@@ -633,6 +634,7 @@ class SQLiteRepository:
     ) -> Lap:
         staged = self._prepare_attachments(attachments, "lap")
         with self._connection:
+            self._connection.execute("BEGIN IMMEDIATE")
             previous = self.get_lap(record.id)
             if previous is not None and previous.setup_id != record.setup_id:
                 raise ValidationError("setup_id", "A saved lap cannot be moved to another setup.")
@@ -804,6 +806,7 @@ class SQLiteRepository:
         if not isinstance(archived, bool):
             raise ValidationError("archived", "Archived must be true or false.")
         with self._connection:
+            self._connection.execute("BEGIN IMMEDIATE")
             record = self.get_event_layout(identifier)
             if record is None:
                 raise ValidationError("event_layout", "The event/layout no longer exists.")
@@ -847,6 +850,7 @@ class SQLiteRepository:
 
     def reorder_laps(self, setup_id: str, lap_ids: Sequence[str]) -> list[Lap]:
         with self._connection:
+            self._connection.execute("BEGIN IMMEDIATE")
             return self._reorder_laps_in_transaction(setup_id, lap_ids)
 
     def best_laps_by_event(self, setup_id: str) -> dict[str, Lap]:

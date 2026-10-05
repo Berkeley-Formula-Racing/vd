@@ -54,7 +54,7 @@ class TestLogWindow:
         self._built = True
         self.root.title("VD Vehicle Test Log")
         self.root.geometry("1180x720")
-        self.root.minsize(900, 580)
+        self.root.minsize(900, 630)
         self.root.protocol("WM_DELETE_WINDOW", self.close_request)
 
         toolbar = ttk.Frame(self.root, padding=(8, 8, 8, 4))
