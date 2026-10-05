@@ -37,6 +37,21 @@ class LockBackupTests(unittest.TestCase):
             created_at=utc_now_iso(),
         )
 
+    def create_junction(self, link, target):
+        if not str(link).startswith("\\\\") and not Path(link).drive:
+            self.fail("The junction test requires an absolute Windows path.")
+        command = (
+            f"New-Item -ItemType Junction -Path '{str(link).replace(chr(39), chr(39) * 2)}' "
+            f"-Target '{str(target).replace(chr(39), chr(39) * 2)}' | Out-Null"
+        )
+        result = __import__("subprocess").run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
     def test_backup_is_reopenable_and_copies_only_snapshot_manifest(self):
         source = self.root / "referenced.txt"
         source.write_bytes(b"referenced contents")
@@ -83,6 +98,81 @@ class LockBackupTests(unittest.TestCase):
 
         self.assertEqual(marker.read_text(encoding="utf-8"), "valid earlier backup")
         self.assertEqual(list(self.paths.backup_root.iterdir()), [previous])
+
+    def test_backup_rejects_backup_root_outside_data_root_without_touching_it(self):
+        selected_root = self.root / "malformed-data"
+        outside = self.root / "outside-backups"
+        previous = outside / "prior-backup"
+        previous.mkdir(parents=True)
+        marker = previous / "keep.txt"
+        marker.write_text("prior backup", encoding="utf-8")
+        source = self.root / "original-source.txt"
+        source.write_bytes(b"original bytes")
+        paths = DataPaths(
+            root=selected_root,
+            database=selected_root / "test_log.sqlite3",
+            attachments=selected_root / "attachments",
+            lock_file=selected_root / ".test_log.lock",
+            backup_root=outside,
+        )
+        services = TestLogServices.open(paths)
+        try:
+            day = self.make_day()
+            staged = services.stage_attachment(source, "file")
+            services.save_day(day, (staged,))
+
+            with self.assertRaises(BackupError):
+                services.create_backup()
+
+            self.assertEqual(marker.read_text(encoding="utf-8"), "prior backup")
+            self.assertEqual(list(outside.iterdir()), [previous])
+            self.assertEqual(source.read_bytes(), b"original bytes")
+            self.assertEqual(services.list_days(), [day])
+        finally:
+            services.close()
+
+    def test_open_does_not_create_malformed_backup_root_outside_selected_data_root(self):
+        selected_root = self.root / "uncreated-data"
+        outside = self.root / "must-not-be-created"
+        paths = DataPaths(
+            root=selected_root,
+            database=selected_root / "test_log.sqlite3",
+            attachments=selected_root / "attachments",
+            lock_file=selected_root / ".test_log.lock",
+            backup_root=outside,
+        )
+        services = TestLogServices.open(paths)
+        try:
+            self.assertFalse(outside.exists())
+            with self.assertRaises(BackupError):
+                services.create_backup()
+            self.assertFalse(outside.exists())
+        finally:
+            services.close()
+
+    def test_backup_rejects_backup_junction_without_writing_through_it(self):
+        outside = self.root / "junction-target"
+        previous = outside / "prior-backup"
+        previous.mkdir(parents=True)
+        marker = previous / "keep.txt"
+        marker.write_text("prior backup", encoding="utf-8")
+        source = self.root / "original-source.txt"
+        source.write_bytes(b"original bytes")
+        day = self.make_day()
+        staged = self.services.stage_attachment(source, "file")
+        self.services.save_day(day, (staged,))
+        self.create_junction(self.paths.backup_root, outside)
+
+        try:
+            with self.assertRaises(BackupError):
+                self.services.create_backup()
+
+            self.assertEqual(marker.read_text(encoding="utf-8"), "prior backup")
+            self.assertEqual(list(outside.iterdir()), [previous])
+            self.assertEqual(source.read_bytes(), b"original bytes")
+            self.assertEqual(self.services.list_days(), [day])
+        finally:
+            self.paths.backup_root.rmdir()
 
     def test_failed_service_startup_releases_data_root_lock(self):
         self.services.close()

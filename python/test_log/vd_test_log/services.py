@@ -69,7 +69,6 @@ class TestLogServices:
             lock.acquire()
             Path(paths.root).mkdir(parents=True, exist_ok=True)
             Path(paths.attachments).mkdir(parents=True, exist_ok=True)
-            Path(paths.backup_root).mkdir(parents=True, exist_ok=True)
             repository = SQLiteRepository.open(paths.database)
             return cls(paths, lock, repository)
         except BaseException:
