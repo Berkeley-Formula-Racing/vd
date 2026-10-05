@@ -715,6 +715,7 @@ class SQLiteRepository:
 
     def delete_day(self, identifier: str) -> list[Attachment]:
         with self._connection:
+            self._connection.execute("BEGIN IMMEDIATE")
             attachments = self._attachments_for_query(
                 """
                 day_owner_id = ?
@@ -734,6 +735,7 @@ class SQLiteRepository:
 
     def delete_setup(self, identifier: str) -> list[Attachment]:
         with self._connection:
+            self._connection.execute("BEGIN IMMEDIATE")
             setup = self.get_setup(identifier)
             if setup is None:
                 return []
@@ -750,6 +752,7 @@ class SQLiteRepository:
 
     def delete_lap(self, identifier: str) -> list[Attachment]:
         with self._connection:
+            self._connection.execute("BEGIN IMMEDIATE")
             lap = self.get_lap(identifier)
             if lap is None:
                 return []
@@ -770,6 +773,7 @@ class SQLiteRepository:
 
     def delete_event_layout(self, identifier: str) -> list[Attachment]:
         with self._connection:
+            self._connection.execute("BEGIN IMMEDIATE")
             event = self.get_event_layout(identifier)
             if event is None:
                 return []

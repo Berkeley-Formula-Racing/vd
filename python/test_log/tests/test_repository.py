@@ -3,6 +3,7 @@ from contextlib import closing
 import math
 import sqlite3
 import tempfile
+from threading import Thread
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -354,6 +355,65 @@ class RepositoryTests(unittest.TestCase):
                     )
                 self.assertEqual(raised.exception.field, "attachments")
         self.assertEqual(self.repository.list_attachments("event_layout", event.id), [])
+
+    def test_delete_lap_serializes_attachment_capture_with_concurrent_writer(self):
+        self.add_context()
+        lap = make_lap()
+        initial_attachment = StagedAttachment(
+            "file",
+            "before.txt",
+            "laps/before.txt",
+        )
+        self.repository.save_lap(lap, attachments=(initial_attachment,))
+        writer_results = []
+
+        def concurrent_writer():
+            connection = sqlite3.connect(self.database_path, timeout=0)
+            try:
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute(
+                    """
+                    INSERT INTO attachments(
+                        id, owner_type, lap_owner_id, role, original_name,
+                        relative_path, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "interleaved-attachment",
+                        "lap",
+                        lap.id,
+                        "file",
+                        "during.txt",
+                        "laps/during.txt",
+                        CREATED_AT,
+                    ),
+                )
+                connection.commit()
+                writer_results.append("committed")
+            except sqlite3.OperationalError as error:
+                connection.rollback()
+                writer_results.append(error.sqlite_errorname)
+            finally:
+                connection.close()
+
+        original_capture = self.repository._attachments_for_query
+
+        def capture_then_attempt_write(predicate, parameters):
+            captured = original_capture(predicate, parameters)
+            writer = Thread(target=concurrent_writer)
+            writer.start()
+            writer.join(timeout=3)
+            self.assertFalse(writer.is_alive(), "the competing writer must finish promptly")
+            return captured
+
+        self.repository._attachments_for_query = capture_then_attempt_write
+        removed = self.repository.delete_lap(lap.id)
+
+        self.assertEqual([item.relative_path for item in removed], ["laps/before.txt"])
+        self.assertEqual(writer_results, ["SQLITE_BUSY"])
+        self.assertIsNone(self.repository.get_lap(lap.id))
+        self.assertEqual(self.repository.list_attachments("lap", lap.id), [])
 
     def test_delete_event_returns_attachments_and_refuses_referenced_event(self):
         self.add_context()
