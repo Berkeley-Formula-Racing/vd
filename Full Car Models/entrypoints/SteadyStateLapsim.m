@@ -7,7 +7,7 @@ run(fullfile(entrypointDir, 'bootstrap.m'));
 eventsToRun = ["skidpad","accel","autocross"];
 
 % carConfig is the single source of vehicle and event configuration.  The
-% explicit tire-model argument selects the new nondimensional LC0 model.
+% legacy tire-model selection is retained for this event runner.
 [carCell,eventParams] = carConfig("FullFactorial",[],"legacy");
 ggOptions = ggProductionOptions();
 ggWorkers = productionGgWorkers(numel(ggGrid(ggOptions.maxVelocity,ggOptions).velocity));

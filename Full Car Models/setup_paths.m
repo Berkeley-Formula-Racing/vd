@@ -26,6 +26,11 @@ setPlotFont();
 
 
 function checkShadowing(folder)
+folder = lower(strrep(char(string(folder)),'/',filesep));
+while numel(folder) > 1 && endsWith(folder,filesep)
+    folder(end) = [];
+end
+projectPrefix = [folder filesep];
 % Two different failures, one message.
 %
 % 1. PATH SHADOW -- a copy outside this folder wins on the path. addpath
@@ -54,7 +59,8 @@ for k = 1:numel(watch)
     nm = watch{k};
     w = which(nm);
     if isempty(w), continue, end
-    if ~startsWith(lower(w),lower(folder))
+    w = lower(strrep(char(string(w)),'/',filesep));
+    if ~startsWith(w,projectPrefix)
         bad{end+1} = sprintf('    %-16s shadowed by %s',nm,w); %#ok<AGROW>
         continue
     end

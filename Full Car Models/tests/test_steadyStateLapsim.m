@@ -1,27 +1,21 @@
 function tests = test_steadyStateLapsim
-%TEST_STEADYSTATELAPSIM Verify the simple LC0 event-runner entry points.
+%TEST_STEADYSTATELAPSIM Verify the retained legacy event-runner source contract.
 tests = functiontests(localfunctions);
 end
 
-function testRootEntrypointUsesSimpleLc0Runner(testCase)
-assertSimpleLc0Runner(testCase, 'SteadyStateLapsim.m');
-end
-
-function testPortableEntrypointUsesSimpleLc0Runner(testCase)
-assertSimpleLc0Runner(testCase, fullfile('entrypoints', 'SteadyStateLapsim.m'));
-end
-
-function assertSimpleLc0Runner(testCase, relativePath)
+function testPortableEntrypointUsesLegacyRunner(testCase)
 fullCarModelsDir = fileparts(fileparts(mfilename('fullpath')));
-source = fileread(fullfile(fullCarModelsDir, relativePath));
+sourcePath = fullfile(fullCarModelsDir, 'entrypoints', 'SteadyStateLapsim.m');
+source = fileread(sourcePath);
 normalized = regexprep(source, '\s+', '');
 
 verifyTrue(testCase, contains(normalized, ...
-    '[carCell,eventParams]=carConfig("FullFactorial",[],"lc0_nd");'));
+    '[carCell,eventParams]=carConfig("FullFactorial",[],"legacy");'));
 verifyTrue(testCase, contains(source, 'eventsToRun'));
 verifyTrue(testCase, contains(source, 'makeGG(gg2('));
 verifyTrue(testCase, contains(source, 'Events2('));
 verifyTrue(testCase, contains(source, 'eventSim.(solverName)();'));
+verifyFalse(testCase, contains(normalized, '"lc0_nd"'));
 verifyFalse(testCase, contains(source, 'runAdaptiveDOE'));
 verifyFalse(testCase, contains(source, 'DOEStudyConfig'));
 end
