@@ -9,7 +9,12 @@
   </Application>
   <Files>
     <File path="RampSpeedApp.mlapp" role="app" />
+    <File path="carConfig.m" role="required-model" />
+    <File path="carConfigBaseline.m" role="required-model" />
+    <File path="runRampSpeedStudy.m" role="required-model" />
+    <File path="aeromap_b26.csv" role="required-model" />
     <Folder path="+rampSpeed" role="package" />
+    <Folder path="+vehicleConfig" role="package" />
     <Folder path="tests" role="tests" />
     <Folder path="carComponents" role="required-model" />
     <Folder path="events" role="required-model" />

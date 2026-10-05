@@ -58,6 +58,44 @@ verifyTrue(testCase,all(ismember(requiredArtifacts, ...
     string(manifest.missingRequiredModelPaths))));
 end
 
+function testManifestInventoriesCarConfigurationInputs(testCase)
+rootFolder = fileparts(fileparts(mfilename("fullpath")));
+manifest = rampSpeed.releaseManifest(rootFolder);
+requiredPaths = string(manifest.requiredModelPaths);
+files = string(manifest.files);
+requiredInputs = ["+vehicleConfig"; "carConfig.m"; "carConfigBaseline.m"; ...
+    "runRampSpeedStudy.m"; "aeromap_b26.csv"];
+verifyTrue(testCase,all(ismember(requiredInputs,requiredPaths)), ...
+    "The release manifest must declare the shared factory and its root inputs.");
+verifyTrue(testCase,all(ismember(requiredInputs,files)), ...
+    "Every required configuration input must be inventoried as a release file.");
+verifyTrue(testCase,any(contains(files,"+vehicleConfig") & ...
+    endsWith(files,"defaultSetup.m")));
+end
+
+function testManifestNestedPathsHaveNoLeadingSeparator(testCase)
+rootFolder = fileparts(fileparts(mfilename("fullpath")));
+manifest = rampSpeed.releaseManifest(rootFolder);
+files = string(manifest.files);
+leadingSeparator = startsWith(files,string(filesep));
+verifyFalse(testCase,any(leadingSeparator), ...
+    "Nested release inventory paths must be relative without a leading separator.");
+end
+
+function testProjectDescriptorIncludesVehicleConfigurationInputs(testCase)
+rootFolder = fileparts(fileparts(mfilename("fullpath")));
+projectText = fileread(fullfile(rootFolder,"RampSpeedApp.prj"));
+verifyTrue(testCase,contains(projectText,'<RootFolder>.</RootFolder>'));
+verifyTrue(testCase,contains(projectText, ...
+    '<Folder path="+vehicleConfig" role="package" />'));
+requiredFiles = ["carConfig.m"; "carConfigBaseline.m"; ...
+    "runRampSpeedStudy.m"; "aeromap_b26.csv"];
+for k = 1:numel(requiredFiles)
+    entry = ['path="' char(requiredFiles(k)) '"'];
+    verifyTrue(testCase,contains(projectText,entry), ...
+        "Project descriptor is missing " + requiredFiles(k));
+end
+end
 function testProjectDescriptorUsesContainingFolderRoot(testCase)
 sourceRoot = fileparts(fileparts(mfilename("fullpath")));
 sourceProject = fullfile(sourceRoot,"RampSpeedApp.prj");

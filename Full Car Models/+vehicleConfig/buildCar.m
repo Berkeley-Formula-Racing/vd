@@ -1,5 +1,5 @@
 function [car,derived] = buildCar(setup,role,assets)
-%BUILDCAR Build one fresh QSS lap or acceleration Car from editable sources.
+%BUILDCAR Build a fresh QSS car or frozen ramp acceleration Car.
 if nargin < 2 || isempty(role), role = "lap"; end
 if nargin < 3, assets = []; end
 
