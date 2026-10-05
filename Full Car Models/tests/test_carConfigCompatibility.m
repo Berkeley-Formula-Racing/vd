@@ -198,3 +198,75 @@ function root = repositoryRoot()
 modelRoot = fileparts(fileparts(which('vehicleConfig.defaultSetup')));
 root = fileparts(modelRoot);
 end
+
+function testCarConfigMissingMapErrorPrecedesDispatch(testCase)
+[fixtureModelRoot,cleanup] = installMissingMapFixture(testCase);
+verifyEqual(testCase, ...
+    normalizeFixturePath(which('carConfig')), ...
+    normalizeFixturePath(fullfile(fixtureModelRoot,'carConfig.m')));
+verifyEqual(testCase, ...
+    normalizeFixturePath(which('vehicleConfig.defaultSetup')), ...
+    normalizeFixturePath(fullfile(fixtureModelRoot,'+vehicleConfig','defaultSetup.m')));
+
+missingMapId = 'parameters_loop:aeroMapNotFound';
+nonempty = table(155,'VariableNames',{'mass'});
+empty = table(zeros(0,1),'VariableNames',{'mass'});
+verifyError(testCase,@() carConfig(),missingMapId);
+verifyError(testCase,@() carConfig("Explicit",nonempty),missingMapId);
+verifyError(testCase,@() carConfig( ...
+    "Explicit",empty,"legacy","nominal","cases"),missingMapId);
+verifyError(testCase,@() carConfig("not-a-request"),missingMapId);
+clear cleanup
+end
+
+function [fixtureModelRoot,cleanup] = installMissingMapFixture(testCase)
+repositoryDefaultSetup = which('vehicleConfig.defaultSetup');
+repositoryModelRoot = fileparts(fileparts(repositoryDefaultSetup));
+originalPath = path;
+originalFolder = pwd;
+fixtureRoot = tempname(tempdir);
+fixtureModelRoot = fullfile(fixtureRoot,'Full Car Models');
+cleanup = onCleanup(@() restoreMissingMapFixture( ...
+    originalPath,originalFolder,fixtureRoot));
+
+[ok,message] = mkdir(fullfile(fixtureModelRoot,'+vehicleConfig'));
+assert(ok,message);
+[ok,message] = mkdir(fullfile(fixtureModelRoot,'carComponents'));
+assert(ok,message);
+copyfile(fullfile(repositoryModelRoot,'carConfig.m'),fixtureModelRoot);
+copyfile(fullfile(repositoryModelRoot,'+vehicleConfig','defaultSetup.m'), ...
+    fullfile(fixtureModelRoot,'+vehicleConfig'));
+copyfile(fullfile(repositoryModelRoot,'carComponents', ...
+    'Fx_combined_parameters_run38_30.mat'), ...
+    fullfile(fixtureModelRoot,'carComponents'));
+copyfile(fullfile(repositoryModelRoot,'carComponents', ...
+    'Lapsim_Fy_combined_parameters_1965run15.mat'), ...
+    fullfile(fixtureModelRoot,'carComponents'));
+
+addpath(fixtureModelRoot,'-begin');
+clear carConfig
+eval('clear vehicleConfig.defaultSetup');
+assert(strcmp(normalizeFixturePath(which('carConfig')), ...
+    normalizeFixturePath(fullfile(fixtureModelRoot,'carConfig.m'))));
+assert(strcmp(normalizeFixturePath(which('vehicleConfig.defaultSetup')), ...
+    normalizeFixturePath(fullfile(fixtureModelRoot,'+vehicleConfig','defaultSetup.m'))));
+assert(~isfile(fullfile(fixtureModelRoot,'aeromap_b26.csv')));
+end
+
+function restoreMissingMapFixture(originalPath,originalFolder,fixtureRoot)
+path(originalPath);
+cd(originalFolder);
+clear carConfig
+eval('clear vehicleConfig.defaultSetup');
+[tempParent,~] = fileparts(fixtureRoot);
+assert(strcmp(normalizeFixturePath(tempParent),normalizeFixturePath(tempdir)), ...
+    'Refusing to remove the fixture outside MATLAB tempdir.');
+if isfolder(fixtureRoot)
+    rmdir(fixtureRoot,'s');
+end
+end
+
+function normalized = normalizeFixturePath(pathValue)
+normalized = lower(strrep(char(pathValue),'\','/'));
+normalized = regexprep(normalized,'/+$','');
+end

@@ -21,6 +21,11 @@ outputFormat = validateOutputFormat(outputFormat);
 [baselineSetups,baselineTable] = ...
     vehicleConfig.sampleSetups(baseSetup,"FullFactorial",[]);
 
+if baseSetup.aeroMap.enabled && ~readableMap(baseSetup.aeroMap.path)
+    error('parameters_loop:aeroMapNotFound', ...
+        'use_aeromap is true but aeroParams.map_path does not name a readable CSV file.')
+end
+
 request = lower(string(samplingType));
 switch request
     case {"fullfactorial","grid"}
@@ -67,4 +72,20 @@ if ~any(outputFormat == ["cells","cases"])
     error('carConfig:badOutputFormat', ...
         'outputFormat must be "cells" or "cases".');
 end
+end
+
+function tf = readableMap(path)
+tf = false;
+if isempty(path) || ~(ischar(path) || (isstring(path) && isscalar(path)))
+    return
+end
+if ~isfile(path)
+    return
+end
+[fid,~] = fopen(char(path),'r');
+if fid < 0
+    return
+end
+fclose(fid);
+tf = true;
 end
