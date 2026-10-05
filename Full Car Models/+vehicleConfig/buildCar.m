@@ -3,6 +3,11 @@ function [car,derived] = buildCar(setup,role,assets)
 if nargin < 2 || isempty(role), role = "lap"; end
 if nargin < 3, assets = []; end
 
+if isRampProfile(setup)
+    [car,derived] = buildRampCar(setup,role,assets);
+    return
+end
+
 [q,identity] = validateSetup(setup);
 role = validateRole(role);
 if isempty(assets) || (isstruct(assets) && isscalar(assets) && ...
@@ -335,4 +340,196 @@ end
 function assetMismatch()
 error('vehicleConfig:assetMismatch', ...
     'The supplied asset context belongs to a different setup identity. Reload assets for this setup.');
+end
+
+function tf = isRampProfile(setup)
+tf = isstruct(setup) && isscalar(setup) && isfield(setup,'profile') && ...
+    isTextScalar(setup.profile) && lower(string(setup.profile)) == "ramp";
+end
+
+function [car,derived] = buildRampCar(setup,role,assets)
+[p,fixed,mapSpec,suspension] = validateRampSetup(setup);
+role = validateRole(role);
+if role ~= "accel"
+    error('vehicleConfig:badRole', ...
+        'The ramp profile supports the accel role only.');
+end
+
+roll = rampSpeed.deriveRollStiffness(p.frontSpringRate_lb_in, ...
+    p.rearSpringRate_lb_in,p.motion_ratio_front,p.motion_ratio_rear, ...
+    p.track_width,suspension.frontArbStiffness_NmPerRad, ...
+    suspension.rearArbStiffness_NmPerRad);
+if isempty(assets) || (isstruct(assets) && isscalar(assets) && ...
+        isempty(fieldnames(assets)))
+    assets = struct();
+elseif ~isstruct(assets) || ~isscalar(assets)
+    assetMismatch();
+end
+
+map = [];
+if mapSpec.enabled
+    if isfield(assets,'map') && isa(assets.map,'AeroMap') && ...
+            string(assets.map.sourcePath) == string(mapSpec.path)
+        map = assets.map;
+    else
+        map = AeroMap(char(mapSpec.path));
+    end
+    if map.claScale ~= mapSpec.claScale || ...
+            map.cdaScale ~= mapSpec.cdaScale || ...
+            map.copOffset ~= mapSpec.copOffset
+        map = map.withCorrections(mapSpec.claScale,mapSpec.cdaScale, ...
+            mapSpec.copOffset);
+    end
+end
+
+aq = p;
+aq.weight_dist = p.rearWeightDistribution_percent/100;
+aq.spring_rate_front_lb_in = p.frontSpringRate_lb_in;
+aq.spring_rate_rear_lb_in = p.rearSpringRate_lb_in;
+aq.static_front_ride_height_in = p.frontRideHeight_in;
+aq.static_rear_ride_height_in = p.rearRideHeight_in;
+aero = Aero(aq.accel_cda,aq.accel_cla,aq.aero_distribution, ...
+    aq.accel_cla_p_deg_p,aq.accel_D_p_deg_p,map);
+powertrain = Powertrain(aq.redline,aq.shift_point,fixed.gears, ...
+    fixed.primary_reduction,fixed.torque_fn,aq.shift_time,aq.final_drive, ...
+    aq.wheel_radius,aq.drivetrain_efficiency,aq.G_d1,aq.G_d2_overrun, ...
+    aq.G_d2_driving,aq.brake_distribution,aq.max_braking_torque);
+camberRatios = [];
+if isfield(assets,'camberRatios')
+    camberRatios = assets.camberRatios;
+elseif isfield(assets,'camberRatioData')
+    camberRatios = assets.camberRatioData;
+end
+tire = Tire2(aq.p_i,fixed.Fx_parameters,fixed.Fy_parameters, ...
+    fixed.friction_scaling_factor,camberRatios);
+rideHeightAero = makeRideHeightAero(aq);
+camberKinematics = struct( ...
+    'roll_gradient_deg_per_g',aq.roll_gradient_deg_per_g, ...
+    'rear_roll_camber_outer_deg_per_deg',aq.rear_roll_camber_outer_deg_per_deg, ...
+    'rear_roll_camber_inner_deg_per_deg',aq.rear_roll_camber_inner_deg_per_deg, ...
+    'ride_camber_front_deg_per_in',aq.ride_camber_front_deg_per_in, ...
+    'ride_camber_rear_deg_per_in',aq.ride_camber_rear_deg_per_in);
+if isfield(assets,'camberModelData')
+    camberKinematics.camberModelData = assets.camberModelData;
+end
+
+car = buildCarFromParameterSet(aq,p.driverWeight_kg,aero,powertrain,tire, ...
+    rideHeightAero,camberKinematics,roll.R_sf);
+car.k_rf = suspension.frontArbStiffness_NmPerRad;
+car.k_rr = suspension.rearArbStiffness_NmPerRad;
+car.k_f_b = roll.wheelRateFront_Npm;
+car.k_r_b = roll.wheelRateRear_Npm;
+car.k_f_r = roll.wheelRateFront_Npm;
+car.k_r_r = roll.wheelRateRear_Npm;
+car.rs_total = (roll.frontRollStiffness_NmPerRad + ...
+    roll.rearRollStiffness_NmPerRad)*pi/180;
+
+derived = roll;
+derived.driverWeight_kg = p.driverWeight_kg;
+derived.rearWeightDistribution_percent = p.rearWeightDistribution_percent;
+derived.frontWeightDistribution_percent = ...
+    100-p.rearWeightDistribution_percent;
+derived.totalMass_kg = car.M;
+derived.staticRearLoad_N = car.M*car.g* ...
+    p.rearWeightDistribution_percent/100;
+derived.staticFrontLoad_N = car.M*car.g* ...
+    (1-p.rearWeightDistribution_percent/100);
+if isfield(assets,'fingerprints')
+    derived.assetFingerprints = assets.fingerprints;
+end
+end
+
+function [p,fixed,map,suspension] = validateRampSetup(setup)
+if ~isstruct(setup) || ~isscalar(setup)
+    error('vehicleConfig:badSchema','setup must be one scalar configuration struct.');
+end
+expectedTop = {'schemaVersion','profile','id','label','parameters', ...
+    'fixed','aeroMap','suspension'};
+validateKnownFields(setup,expectedTop,'setup');
+requireFields(setup,expectedTop,'setup');
+if ~isnumeric(setup.schemaVersion) || ~isscalar(setup.schemaVersion) || ...
+        ~isreal(setup.schemaVersion) || ~isfinite(double(setup.schemaVersion)) || ...
+        double(setup.schemaVersion) ~= 1
+    error('vehicleConfig:badSchema','Only scalar schemaVersion 1 is supported.');
+end
+if ~isTextScalar(setup.profile) || lower(string(setup.profile)) ~= "ramp"
+    error('vehicleConfig:badSchema','buildCar supports ramp profile only on this path.');
+end
+if ~isTextScalar(setup.id) || ~isTextScalar(setup.label)
+    error('vehicleConfig:badSchema','setup id and label must be scalar text.');
+end
+
+parameterNames = rampParameterNames();
+if ~isstruct(setup.parameters) || ~isscalar(setup.parameters)
+    error('vehicleConfig:badSchema','setup.parameters must be one scalar struct.');
+end
+validateKnownFields(setup.parameters,parameterNames,'setup.parameters');
+requireFields(setup.parameters,parameterNames,'setup.parameters');
+p = struct();
+for k = 1:numel(parameterNames)
+    name = parameterNames{k};
+    value = setup.parameters.(name);
+    if ~isnumeric(value) || ~isscalar(value) || ~isreal(value) || ...
+            ~isfinite(double(value))
+        invalidParameter(['parameters.' name], ...
+            'must be a finite, real numeric scalar');
+    end
+    p.(name) = double(value);
+end
+if p.mass <= 0 || p.wheelbase <= 0 || p.wheel_radius <= 0 || ...
+        p.motion_ratio_front <= 0 || p.motion_ratio_rear <= 0
+    invalidParameter('parameters','mass, geometry, and motion ratios must be positive');
+end
+if p.driverWeight_kg < 0 || p.rearWeightDistribution_percent <= 0 || ...
+        p.rearWeightDistribution_percent >= 100
+    invalidParameter('parameters', ...
+        'driver weight and rear distribution must be within ramp setup bounds');
+end
+
+fixedNames = {'gears','primary_reduction','torque_fn','Fx_parameters', ...
+    'Fy_parameters','friction_scaling_factor','model_type'};
+validateNestedStruct(setup,'fixed',fixedNames);
+fixed = setup.fixed;
+if ~isnumeric(fixed.gears) || isempty(fixed.gears) || ~isvector(fixed.gears) || ...
+        ~isreal(fixed.gears) || any(~isfinite(double(fixed.gears(:)))) || ...
+        any(double(fixed.gears(:)) <= 0)
+    invalidParameter('fixed.gears','must be a finite positive numeric vector');
+end
+validatePositiveScalar(fixed.primary_reduction,'fixed.primary_reduction');
+validateFiniteNumericArray(fixed.torque_fn,'fixed.torque_fn');
+validateFiniteNumericArray(fixed.Fx_parameters,'fixed.Fx_parameters');
+validateFiniteNumericArray(fixed.Fy_parameters,'fixed.Fy_parameters');
+validatePositiveScalar(fixed.friction_scaling_factor, ...
+    'fixed.friction_scaling_factor');
+if ~isTextScalar(fixed.model_type) || lower(string(fixed.model_type)) ~= "legacy"
+    error('vehicleConfig:badSchema', ...
+        'The ramp profile requires the legacy Tire2 model.');
+end
+
+mapNames = {'enabled','path','claScale','cdaScale','copOffset'};
+suspensionNames = {'rollSplitPolicy','frontArbStiffness_NmPerRad', ...
+    'rearArbStiffness_NmPerRad'};
+validateNestedStruct(setup,'aeroMap',mapNames);
+validateNestedStruct(setup,'suspension',suspensionNames);
+map = setup.aeroMap;
+suspension = setup.suspension;
+validateFlag(map.enabled,'aeroMap.enabled');
+if ~isTextScalar(map.path)
+    error('vehicleConfig:badSchema','aeroMap.path must be scalar text.');
+end
+validatePositiveScalar(map.claScale,'aeroMap.claScale');
+validatePositiveScalar(map.cdaScale,'aeroMap.cdaScale');
+validateFiniteScalar(map.copOffset,'aeroMap.copOffset');
+if logical(map.enabled) && strlength(string(map.path)) == 0
+    error('vehicleConfig:badSchema','An enabled ramp aero map requires a path.');
+end
+if ~isTextScalar(suspension.rollSplitPolicy) || ...
+        lower(string(suspension.rollSplitPolicy)) ~= "derived"
+    error('vehicleConfig:badSchema', ...
+        'Ramp construction requires the derived rollSplitPolicy.');
+end
+validateFiniteScalar(suspension.frontArbStiffness_NmPerRad, ...
+    'suspension.frontArbStiffness_NmPerRad');
+validateFiniteScalar(suspension.rearArbStiffness_NmPerRad, ...
+    'suspension.rearArbStiffness_NmPerRad');
 end

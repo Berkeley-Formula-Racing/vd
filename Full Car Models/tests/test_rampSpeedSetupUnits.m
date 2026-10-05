@@ -10,8 +10,10 @@ cleanup = onCleanup(@()deleteIfValid(app));
 app.duplicateSelectedSetup("unit-test","Unit test");
 
 verifyEqual(testCase,string(app.UnitDropDown.Value),"SI");
-verifyEqual(testCase,app.FrontRideHeightEditField.Value,4,"AbsTol",1e-12);
-verifyEqual(testCase,app.RearRideHeightEditField.Value,5.7,"AbsTol",1e-12);
+verifyEqual(testCase,app.FrontRideHeightEditField.Value, ...
+    app.Cases(1).setupSpec.frontRideHeight_in,"AbsTol",1e-12);
+verifyEqual(testCase,app.RearRideHeightEditField.Value, ...
+    app.Cases(1).setupSpec.rearRideHeight_in,"AbsTol",1e-12);
 app.FrontRideHeightEditField.Value = 2;
 app.FrontRideHeightEditField.ValueChangedFcn( ...
     app.FrontRideHeightEditField,[]);
