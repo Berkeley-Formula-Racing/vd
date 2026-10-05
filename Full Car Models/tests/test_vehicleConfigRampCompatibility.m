@@ -43,6 +43,49 @@ verifyError(testCase,@() vehicleConfig.buildCar(spec,"accel",assets), ...
     'vehicleConfig:unknownField');
 end
 
+function testRampTrackWidthMustBePositive(testCase)
+[~,config] = carConfigBaseline();
+source = config.defaultSetup;
+for invalidWidth = [0 -1]
+    setup = vehicleConfig.fromRampSetup(config.fixedParameters,source);
+    setup.parameters.track_width = invalidWidth;
+    verifyError(testCase,@() vehicleConfig.buildCar(setup,"accel"), ...
+        'vehicleConfig:invalidParameter');
+end
+end
+
+function testRampCanonicalIdentityMustBeNonempty(testCase)
+[~,config] = carConfigBaseline();
+source = config.defaultSetup;
+setup = vehicleConfig.fromRampSetup(config.fixedParameters,source);
+emptyValues = {''; ""};
+identityFields = {'id','label'};
+for fieldIndex = 1:numel(identityFields)
+    for valueIndex = 1:numel(emptyValues)
+        invalidSetup = setup;
+        invalidSetup.(identityFields{fieldIndex}) = emptyValues{valueIndex};
+        verifyError(testCase,@() vehicleConfig.buildCar(invalidSetup,"accel"), ...
+            'vehicleConfig:badSchema');
+    end
+end
+end
+
+function testRampAdapterSuppliesDeterministicLegacyIdentity(testCase)
+[~,config] = carConfigBaseline();
+source = rmfield(config.defaultSetup,{'id','label'});
+setup = vehicleConfig.fromRampSetup(config.fixedParameters,source);
+verifyEqual(testCase,string(setup.id),"legacy-ramp");
+verifyEqual(testCase,string(setup.label),"Legacy ramp setup");
+car = vehicleConfig.buildCar(setup,"accel");
+verifyGreaterThan(testCase,car.M,0);
+
+source.id = "";
+source.label = '';
+setup = vehicleConfig.fromRampSetup(config.fixedParameters,source);
+verifyEqual(testCase,string(setup.id),"legacy-ramp");
+verifyEqual(testCase,string(setup.label),"Legacy ramp setup");
+end
+
 function testRampEditsRebuildDerivedRollRatesAndTransientFields(testCase)
 [~,config] = carConfigBaseline();
 setup = config.defaultSetup;

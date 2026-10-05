@@ -41,6 +41,10 @@ base = vehicleConfig.defaultSetup();
 cases = { ...
     'wheelbase',0; ...
     'wheelbase',-1; ...
+    'mass',0; ...
+    'mass',-1; ...
+    'track_width',0; ...
+    'track_width',-1; ...
     'wheel_radius',0; ...
     'wheel_radius',-0.1; ...
     'weight_dist',0; ...
@@ -60,6 +64,39 @@ for k = 1:size(cases,1)
     setup.parameters.(cases{k,1}) = cases{k,2};
     verifyError(testCase,@() vehicleConfig.buildCar(setup,"lap"), ...
         'vehicleConfig:invalidParameter');
+end
+end
+
+function testDriverWeightsAreNonnegativeAndZeroRemainsValid(testCase)
+setup = vehicleConfig.defaultSetup();
+setup.parameters.driver_weight = -1;
+verifyError(testCase,@() vehicleConfig.buildCar(setup,"lap"), ...
+    'vehicleConfig:invalidParameter');
+setup = vehicleConfig.defaultSetup();
+setup.parameters.accel_driver_weight = -1;
+verifyError(testCase,@() vehicleConfig.buildCar(setup,"accel"), ...
+    'vehicleConfig:invalidParameter');
+
+setup = vehicleConfig.defaultSetup();
+setup.parameters.driver_weight = 0;
+setup.parameters.accel_driver_weight = 0;
+lap = vehicleConfig.buildCar(setup,"lap");
+accel = vehicleConfig.buildCar(setup,"accel");
+verifyEqual(testCase,lap.M,setup.parameters.mass,'AbsTol',1e-12);
+verifyEqual(testCase,accel.M,setup.parameters.mass,'AbsTol',1e-12);
+end
+
+function testCanonicalSetupIdentityMustBeNonempty(testCase)
+base = vehicleConfig.defaultSetup();
+emptyValues = {''; ""};
+identityFields = {'id','label'};
+for fieldIndex = 1:numel(identityFields)
+    for valueIndex = 1:numel(emptyValues)
+        setup = base;
+        setup.(identityFields{fieldIndex}) = emptyValues{valueIndex};
+        verifyError(testCase,@() vehicleConfig.buildCar(setup,"lap"), ...
+            'vehicleConfig:badSchema');
+    end
 end
 end
 

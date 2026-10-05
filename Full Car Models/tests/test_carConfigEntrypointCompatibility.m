@@ -2,7 +2,16 @@
 % Construction-only assertion script. Run this file with RUN, not RUNTESTS.
 callerPath = path;
 callerFolder = pwd;
+compatibilityTestsDir = fileparts(mfilename('fullpath'));
+compatibilitySourceManifest = fullfile(compatibilityTestsDir, ...
+    'car_configuration_entrypoints.csv');
+compatibilityOriginalManifestBytes = readManifestBytes( ...
+    compatibilitySourceManifest);
 runCompatibilityChecks(false);
+assert(isequal(readManifestBytes(compatibilitySourceManifest), ...
+    compatibilityOriginalManifestBytes), ...
+    'Task6:sourceManifestChangedOnSuccess', ...
+    'The construction checker changed the tracked entrypoint matrix on success.');
 assert(strcmp(path,callerPath),'Task6:callerPathLeaked', ...
     'The compatibility script changed the caller MATLAB path.');
 assert(strcmp(pwd,callerFolder),'Task6:callerFolderLeaked', ...
@@ -16,6 +25,10 @@ catch ME
     assert(strcmp(ME.identifier,'Task6:cleanupFailureProbe'), ...
         'Task6:cleanupProbeWrongError','Unexpected cleanup probe error: %s',ME.message);
 end
+assert(isequal(readManifestBytes(compatibilitySourceManifest), ...
+    compatibilityOriginalManifestBytes), ...
+    'Task6:sourceManifestChangedOnFailure', ...
+    'The construction checker changed the tracked entrypoint matrix on failure.');
 assert(strcmp(path,callerPath),'Task6:failurePathLeaked', ...
     'Caller MATLAB path was not restored after the forced failure.');
 assert(strcmp(pwd,callerFolder),'Task6:failureFolderLeaked', ...
@@ -42,8 +55,19 @@ if forceFailure
     error('Task6:cleanupFailureProbe','Intentional cleanup failure-path probe.');
 end
 manifestPath = fullfile(testsDir,'car_configuration_entrypoints.csv');
-evidenceDirectory = fullfile(repoRoot,'artifacts','car_configuration_refactor', ...
-    'task6-exec-20261005T015204');
+evidenceRoot = fullfile(repoRoot,'artifacts','car_configuration_refactor', ...
+    'final-fix-wave');
+if ~isfolder(evidenceRoot), mkdir(evidenceRoot); end
+evidenceDirectory = tempname(evidenceRoot);
+if ~mkdir(evidenceDirectory)
+    error('Task6:evidenceDirectory','Could not create isolated checker evidence folder.');
+end
+manifestCopyPath = fullfile(evidenceDirectory, ...
+    'car_configuration_entrypoints.task6-checker-copy.csv');
+if ~copyfile(manifestPath,manifestCopyPath)
+    error('Task6:manifestCopy','Could not create the isolated matrix copy.');
+end
+manifestPath = manifestCopyPath;
 
 report = runCarConfigurationChecks(manifestPath,evidenceDirectory);
 assert(istable(report),'Task6:badReport','Construction driver must return a table.');
@@ -54,7 +78,10 @@ assert(all(ismember(report.status,["construction-pass","baseline-failure","block
 manifest = readtable(manifestPath,'TextType','string');
 assert(height(manifest) == height(report));
 assert(all(manifest.postStatus == report.status));
-assert(all(contains(manifest.evidencePath,'task6-exec-20261005T015204')));
+relativeEvidenceDirectory = replace(string(evidenceDirectory), ...
+    [string(repoRoot) + filesep],"");
+relativeEvidenceDirectory = replace(relativeEvidenceDirectory,'\','/');
+assert(all(contains(manifest.evidencePath,relativeEvidenceDirectory)));
 rampFunctionRow = manifest.path == "Full Car Models/runRampSpeedStudy.m";
 rampScriptRow = manifest.path == "Full Car Models/entrypoints/runRampSpeedStudy.m";
 assert(nnz(rampFunctionRow) == 1 && nnz(rampScriptRow) == 1);
@@ -273,6 +300,15 @@ value = lower(strrep(char(string(value)),'/','\'));
 while numel(value) > 3 && endsWith(value,'\')
     value(end) = [];
 end
+end
+
+function bytes = readManifestBytes(filePath)
+fid = fopen(filePath,'rb');
+if fid < 0
+    error('Task6:manifestRead','Could not read entrypoint matrix: %s',filePath);
+end
+fileCleanup = onCleanup(@() fclose(fid)); %#ok<NASGU>
+bytes = fread(fid,Inf,'*uint8').';
 end
 
 

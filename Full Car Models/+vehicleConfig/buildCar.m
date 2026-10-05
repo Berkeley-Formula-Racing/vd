@@ -76,8 +76,10 @@ end
 if ~isTextScalar(setup.profile) || lower(string(setup.profile)) ~= "qss"
     error('vehicleConfig:badSchema','buildCar supports the QSS profile only.');
 end
-if ~isTextScalar(setup.id) || ~isTextScalar(setup.label)
-    error('vehicleConfig:badSchema','setup id and label must be scalar text.');
+if ~isTextScalar(setup.id) || strlength(string(setup.id)) == 0 || ...
+        ~isTextScalar(setup.label) || strlength(string(setup.label)) == 0
+    error('vehicleConfig:badSchema', ...
+        'setup id and label must be non-empty scalar text.');
 end
 
 names = vehicleConfig.parameterNames();
@@ -163,12 +165,20 @@ identity = setupAssetIdentity(setup);
 end
 
 function validateSourceConstraints(q)
-positiveNames = {'wheelbase','wheel_radius','spring_rate_front_lb_in', ...
-    'spring_rate_rear_lb_in','motion_ratio_front','motion_ratio_rear'};
+positiveNames = {'mass','track_width','wheelbase','wheel_radius', ...
+    'spring_rate_front_lb_in','spring_rate_rear_lb_in', ...
+    'motion_ratio_front','motion_ratio_rear'};
 for k = 1:numel(positiveNames)
     name = positiveNames{k};
     if q.(name) <= 0
         invalidParameter(['parameters.' name],'must be positive');
+    end
+end
+nonnegativeNames = {'driver_weight','accel_driver_weight'};
+for k = 1:numel(nonnegativeNames)
+    name = nonnegativeNames{k};
+    if q.(name) < 0
+        invalidParameter(['parameters.' name],'must be nonnegative');
     end
 end
 if q.weight_dist <= 0 || q.weight_dist >= 1
@@ -455,8 +465,10 @@ end
 if ~isTextScalar(setup.profile) || lower(string(setup.profile)) ~= "ramp"
     error('vehicleConfig:badSchema','buildCar supports ramp profile only on this path.');
 end
-if ~isTextScalar(setup.id) || ~isTextScalar(setup.label)
-    error('vehicleConfig:badSchema','setup id and label must be scalar text.');
+if ~isTextScalar(setup.id) || strlength(string(setup.id)) == 0 || ...
+        ~isTextScalar(setup.label) || strlength(string(setup.label)) == 0
+    error('vehicleConfig:badSchema', ...
+        'setup id and label must be non-empty scalar text.');
 end
 
 parameterNames = rampParameterNames();
@@ -476,9 +488,11 @@ for k = 1:numel(parameterNames)
     end
     p.(name) = double(value);
 end
-if p.mass <= 0 || p.wheelbase <= 0 || p.wheel_radius <= 0 || ...
-        p.motion_ratio_front <= 0 || p.motion_ratio_rear <= 0
-    invalidParameter('parameters','mass, geometry, and motion ratios must be positive');
+if p.mass <= 0 || p.wheelbase <= 0 || p.track_width <= 0 || ...
+        p.wheel_radius <= 0 || p.motion_ratio_front <= 0 || ...
+        p.motion_ratio_rear <= 0
+    invalidParameter('parameters', ...
+        'mass, geometry, track width, and motion ratios must be positive');
 end
 if p.driverWeight_kg < 0 || p.rearWeightDistribution_percent <= 0 || ...
         p.rearWeightDistribution_percent >= 100
