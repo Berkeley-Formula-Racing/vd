@@ -233,8 +233,15 @@ class TestLogServices:
         self,
         record: Lap,
         staged: Sequence[StagedAttachment] = (),
+        *,
+        lap_order: Sequence[str] | None = None,
     ) -> Lap:
-        return self._save(self._repository.save_lap, record, staged)
+        if lap_order is None:
+            return self._save(self._repository.save_lap, record, staged)
+        def save_with_order(lap, *, attachments):
+            return self._repository.save_lap(lap, attachments, lap_order=lap_order)
+
+        return self._save(save_with_order, record, staged)
 
     def stage_attachment(self, source: Path, role: AttachmentRole) -> StagedAttachment:
         with self._mutation():

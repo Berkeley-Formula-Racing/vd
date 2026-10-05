@@ -628,6 +628,8 @@ class SQLiteRepository:
         self,
         record: Lap,
         attachments: Sequence[StagedAttachment] = (),
+        *,
+        lap_order: Sequence[str] | None = None,
     ) -> Lap:
         staged = self._prepare_attachments(attachments, "lap")
         with self._connection:
@@ -711,6 +713,8 @@ class SQLiteRepository:
                     (sequence, lap_id),
                 )
             self._insert_attachments("lap", saved.id, staged)
+            if lap_order is not None:
+                self._reorder_laps_in_transaction(saved.setup_id, lap_order)
         return self.get_lap(saved.id)
 
     def delete_day(self, identifier: str) -> list[Attachment]:
@@ -809,38 +813,41 @@ class SQLiteRepository:
             )
         return self.get_event_layout(identifier)
 
-    def reorder_laps(self, setup_id: str, lap_ids: Sequence[str]) -> list[Lap]:
-        order = tuple(lap_ids)
+    def _reorder_laps_in_transaction(self, setup_id: str, lap_ids: Sequence[str]) -> list[Lap]:
         if isinstance(lap_ids, (str, bytes)):
             raise ValidationError("lap_ids", "Provide the lap IDs in the desired order.")
-        with self._connection:
-            if self.get_setup(setup_id) is None:
-                raise ValidationError("setup_id", "Select an existing setup.")
-            rows = list(
-                self._connection.execute(
-                    "SELECT id, sequence FROM laps WHERE setup_id = ? ORDER BY sequence, id",
-                    (setup_id,),
-                )
-            )
-            existing_ids = [row["id"] for row in rows]
-            if len(order) != len(existing_ids) or set(order) != set(existing_ids):
-                raise ValidationError(
-                    "lap_ids",
-                    "Lap order must contain every lap in this setup exactly once.",
-                )
-            if not order:
-                return []
-            offset = max(row["sequence"] for row in rows) + len(rows) + 1
+        order = tuple(lap_ids)
+        if self.get_setup(setup_id) is None:
+            raise ValidationError("setup_id", "Select an existing setup.")
+        rows = list(
             self._connection.execute(
-                "UPDATE laps SET sequence = sequence + ? WHERE setup_id = ?",
-                (offset, setup_id),
+                "SELECT id, sequence FROM laps WHERE setup_id = ? ORDER BY sequence, id",
+                (setup_id,),
             )
-            for sequence, lap_id in enumerate(order, start=1):
-                self._connection.execute(
-                    "UPDATE laps SET sequence = ? WHERE id = ? AND setup_id = ?",
-                    (sequence, lap_id, setup_id),
-                )
+        )
+        existing_ids = [row["id"] for row in rows]
+        if len(order) != len(existing_ids) or set(order) != set(existing_ids):
+            raise ValidationError(
+                "lap_ids",
+                "Lap order must contain every lap in this setup exactly once.",
+            )
+        if not order:
+            return []
+        offset = max(row["sequence"] for row in rows) + len(rows) + 1
+        self._connection.execute(
+            "UPDATE laps SET sequence = sequence + ? WHERE setup_id = ?",
+            (offset, setup_id),
+        )
+        for sequence, lap_id in enumerate(order, start=1):
+            self._connection.execute(
+                "UPDATE laps SET sequence = ? WHERE id = ? AND setup_id = ?",
+                (sequence, lap_id, setup_id),
+            )
         return self.list_laps(setup_id)
+
+    def reorder_laps(self, setup_id: str, lap_ids: Sequence[str]) -> list[Lap]:
+        with self._connection:
+            return self._reorder_laps_in_transaction(setup_id, lap_ids)
 
     def best_laps_by_event(self, setup_id: str) -> dict[str, Lap]:
         rows = self._connection.execute(

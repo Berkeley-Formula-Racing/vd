@@ -350,7 +350,22 @@ class TestLogUiTests(unittest.TestCase):
         self.assertEqual(len(backups), 1)
         self.assertTrue((backups[0] / "test_log.sqlite3").is_file())
 
-    def test_lap_move_buttons_reorder_saved_lap_sequences(self):
+    def test_open_data_folder_button_uses_current_root_and_reports_os_errors(self):
+        window = self.require_window()
+        self.assertIn("open_data_folder", window.actions)
+
+        with patch("vd_test_log.ui.os.startfile") as startfile:
+            window.actions["open_data_folder"].invoke()
+        startfile.assert_called_once_with(str(self.paths.root))
+
+        with patch("vd_test_log.ui.os.startfile", side_effect=OSError("shell denied")), patch(
+            "tkinter.messagebox.showerror"
+        ) as showerror:
+            window.actions["open_data_folder"].invoke()
+        self.assertIn("shell denied", window.status_label.cget("text"))
+        showerror.assert_called_once()
+
+    def test_lap_move_stays_pending_until_save(self):
         day = self.services.save_day(self.make_day())
         setup = self.services.save_setup(self.make_setup(day.id))
         event = self.services.save_event_layout(self.make_event())
@@ -361,10 +376,122 @@ class TestLogUiTests(unittest.TestCase):
 
         window.actions["move_lap_up"].invoke()
 
+        self.assertEqual([lap.id for lap in self.services.list_laps(setup.id)], [first.id, second.id])
+        self.assertEqual(window.tree.get_children(f"setup:{setup.id}"), (f"lap:{second.id}", f"lap:{first.id}"))
+        self.assertIn("pending", window.dirty_label.cget("text").lower())
+        window.actions["save"].invoke()
+
         laps = self.services.list_laps(setup.id)
         self.assertEqual([lap.id for lap in laps], [second.id, first.id])
         self.assertEqual([lap.sequence for lap in laps], [1, 2])
         self.assertEqual(window.tree.parent(f"lap:{second.id}"), f"setup:{setup.id}")
+        self.assertEqual(window.dirty_label.cget("text"), "")
+
+    def test_canceling_pending_lap_order_restores_selection_and_form(self):
+        day = self.services.save_day(self.make_day())
+        setup = self.services.save_setup(self.make_setup(day.id))
+        event = self.services.save_event_layout(self.make_event())
+        first = self.services.save_lap(self.make_lap(setup.id, event.id, sequence=1, time_ms=42318))
+        second = self.services.save_lap(self.make_lap(setup.id, event.id, sequence=2, time_ms=43111))
+        window = self.require_window()
+        self.select_tree_item(window.tree, f"lap:{second.id}")
+        window.actions["move_lap_up"].invoke()
+        self.set_field(window.fields["notes"], "Keep this unsaved note")
+
+        with patch("tkinter.messagebox.askyesnocancel", return_value=None):
+            window.tree.selection_set(f"lap:{first.id}")
+            self.root.update()
+
+        self.assertEqual(window.tree.selection(), (f"lap:{second.id}",))
+        self.assertEqual(window.fields["notes"].get("1.0", "end-1c"), "Keep this unsaved note")
+        self.assertIn("pending", window.dirty_label.cget("text").lower())
+        self.assertEqual([lap.id for lap in self.services.list_laps(setup.id)], [first.id, second.id])
+
+    def test_discarding_pending_lap_order_leaves_stored_order_unchanged(self):
+        day = self.services.save_day(self.make_day())
+        setup = self.services.save_setup(self.make_setup(day.id))
+        event = self.services.save_event_layout(self.make_event())
+        first = self.services.save_lap(self.make_lap(setup.id, event.id, sequence=1, time_ms=42318))
+        second = self.services.save_lap(self.make_lap(setup.id, event.id, sequence=2, time_ms=43111))
+        window = self.require_window()
+        self.select_tree_item(window.tree, f"lap:{second.id}")
+        window.actions["move_lap_up"].invoke()
+        self.set_field(window.fields["notes"], "Discard this note")
+
+        with patch("tkinter.messagebox.askyesnocancel", return_value=False):
+            self.select_tree_item(window.tree, f"lap:{first.id}")
+
+        self.assertEqual([lap.id for lap in self.services.list_laps(setup.id)], [first.id, second.id])
+        self.assertEqual(window._record.id, first.id)
+        self.assertEqual(window.dirty_label.cget("text"), "")
+        self.assertEqual(window.fields["notes"].get("1.0", "end-1c"), "")
+
+    def test_save_commits_pending_lap_order_with_fields_and_attachments(self):
+        day = self.services.save_day(self.make_day())
+        setup = self.services.save_setup(self.make_setup(day.id))
+        event = self.services.save_event_layout(self.make_event())
+        first = self.services.save_lap(self.make_lap(setup.id, event.id, sequence=1, time_ms=42318))
+        second = self.services.save_lap(self.make_lap(setup.id, event.id, sequence=2, time_ms=43111))
+        window = self.require_window()
+        self.select_tree_item(window.tree, f"lap:{second.id}")
+        window.actions["move_lap_up"].invoke()
+        self.set_field(window.fields["notes"], "saved with order")
+        source = self.root_path / "lap-evidence.txt"
+        source.write_text("braking trace", encoding="utf-8")
+        with patch("tkinter.filedialog.askopenfilename", return_value=str(source)):
+            window.actions["attach_file"].invoke()
+
+        self.assertIn("pending", window.dirty_label.cget("text").lower())
+        self.assertEqual([lap.id for lap in self.services.list_laps(setup.id)], [first.id, second.id])
+        window.actions["save"].invoke()
+
+        laps = self.services.list_laps(setup.id)
+        saved_second = self.services.get_lap(second.id)
+        attachments = self.services.list_attachments("lap", second.id)
+        self.assertEqual([lap.id for lap in laps], [second.id, first.id])
+        self.assertEqual(saved_second.notes, "saved with order")
+        self.assertEqual(window._record.sequence, 1)
+        self.assertEqual([item.original_name for item in attachments], ["lap-evidence.txt"])
+        self.assertEqual(self.services.resolve_attachment(attachments[0]).read_text(encoding="utf-8"), "braking trace")
+
+    def test_late_lap_order_failure_rolls_back_fields_and_attachment_rows(self):
+        day = self.services.save_day(self.make_day())
+        setup = self.services.save_setup(self.make_setup(day.id))
+        event = self.services.save_event_layout(self.make_event())
+        first = self.services.save_lap(self.make_lap(setup.id, event.id, sequence=1, time_ms=42318))
+        second = self.services.save_lap(self.make_lap(setup.id, event.id, sequence=2, time_ms=43111))
+        third = self.services.save_lap(self.make_lap(setup.id, event.id, sequence=3, time_ms=43999))
+        existing_source = self.root_path / "existing-lap-file.txt"
+        existing_source.write_text("existing", encoding="utf-8")
+        existing_staged = self.services.stage_attachment(existing_source, "file")
+        self.services.save_lap(second, (existing_staged,))
+        original_attachments = self.services.list_attachments("lap", second.id)
+        window = self.require_window()
+        self.select_tree_item(window.tree, f"lap:{second.id}")
+        window.actions["move_lap_up"].invoke()
+        self.set_field(window.fields["notes"], "must roll back")
+        source = self.root_path / "new-lap-file.txt"
+        source.write_text("new evidence", encoding="utf-8")
+        with patch("tkinter.filedialog.askopenfilename", return_value=str(source)):
+            window.actions["attach_file"].invoke()
+        staged_path = self.paths.root / window.staged_attachments[0].relative_path
+        self.assertTrue(staged_path.is_file())
+
+        # Simulate a concurrent deletion after the editor staged its full permutation.
+        self.services.delete_lap(third.id)
+        before_failed_save = self.services.list_laps(setup.id)
+        self.assertEqual([lap.id for lap in before_failed_save], [first.id, second.id])
+        window.actions["save"].invoke()
+
+        after_failed_save = self.services.list_laps(setup.id)
+        self.assertEqual([(lap.id, lap.sequence) for lap in after_failed_save], [(first.id, 1), (second.id, 2)])
+        self.assertEqual(self.services.get_lap(second.id).notes, second.notes)
+        self.assertEqual(self.services.list_attachments("lap", second.id), original_attachments)
+        self.assertFalse(staged_path.exists())
+        self.assertEqual(window.staged_attachments, [])
+        self.assertEqual(window.fields["notes"].get("1.0", "end-1c"), "must roll back")
+        self.assertIn("every lap", window.status_label.cget("text").lower())
+        self.assertIn("reattach", window.status_label.cget("text").lower())
 
     def test_event_map_stages_and_opens_through_library_callbacks(self):
         window = self.require_window()

@@ -37,6 +37,8 @@ class TestLogWindow:
         self._field_errors: dict[str, ttk.Label] = {}
         self._event_id_by_label: dict[str, str] = {}
         self._event_label_by_id: dict[str, str] = {}
+        self._lap_order_original: list[str] = []
+        self._pending_lap_order: list[str] | None = None
         self._suppress_tree_selection = False
         self._built = False
         self._closed = False
@@ -65,6 +67,7 @@ class TestLogWindow:
             ("manage_events", "Manage Event/Layouts", self.manage_events),
             ("attach_file", "Attach File", self.attach_file),
             ("open_attachment", "Open Attachment", self.open_attachment),
+            ("open_data_folder", "Open Data Folder", self.open_data_folder),
             ("move_lap_up", "Move Lap Up", lambda: self.move_lap(-1)),
             ("move_lap_down", "Move Lap Down", lambda: self.move_lap(1)),
             ("save", "Save", self.save_current),
@@ -147,6 +150,13 @@ class TestLogWindow:
         self._record = record
         self._is_new = is_new
         self._context_id = context_id
+        self._lap_order_original = []
+        self._pending_lap_order = None
+        if kind == "lap":
+            setup_id = record.setup_id if isinstance(record, Lap) else context_id
+            if setup_id:
+                self._lap_order_original = [lap.id for lap in self.services.list_laps(setup_id)]
+                self._pending_lap_order = list(self._lap_order_original)
         self._staged.clear()
         self._event_id_by_label.clear()
         self._event_label_by_id.clear()
@@ -348,7 +358,23 @@ class TestLogWindow:
                 self.tree.insert(day_item, "end", iid=setup_item, text=setup_label, open=True)
                 laps = self.services.list_laps(setup.id)
                 best_by_event = self.services.best_laps_by_event(setup.id)
-                for lap in sorted(laps, key=lambda value: value.sequence):
+                pending_order = None
+                if (
+                    self._current_kind == "lap"
+                    and self._pending_lap_order is not None
+                    and isinstance(self._record, Lap)
+                    and self._record.setup_id == setup.id
+                ):
+                    pending_order = self._pending_lap_order
+                if pending_order is None:
+                    ordered_laps = sorted(laps, key=lambda value: value.sequence)
+                else:
+                    positions = {lap_id: index for index, lap_id in enumerate(pending_order)}
+                    ordered_laps = sorted(
+                        laps,
+                        key=lambda value: (positions.get(value.id, len(positions) + value.sequence), value.sequence),
+                    )
+                for lap in ordered_laps:
                     event = self.services.get_event_layout(lap.event_layout_id)
                     event_label = (
                         f"{event.event_name + ' · ' if event.event_name else ''}{event.track_name} / {event.layout_name}"
@@ -400,6 +426,7 @@ class TestLogWindow:
             self.refresh_tree()
             return
         self._show_editor(target_kind, record, is_new=False)
+        self._restore_tree_selection()
 
     def _restore_tree_selection(self) -> None:
         if self.tree is None:
@@ -414,8 +441,17 @@ class TestLogWindow:
             self.tree.selection_remove(self.tree.selection())
         self._suppress_tree_selection = False
 
+    def _has_pending_lap_order(self) -> bool:
+        return (
+            self._current_kind == "lap"
+            and self._pending_lap_order is not None
+            and self._pending_lap_order != self._lap_order_original
+        )
+
     def _is_dirty(self) -> bool:
         if self._staged:
+            return True
+        if self._has_pending_lap_order():
             return True
         values = self._capture_values()
         if self._is_new:
@@ -423,7 +459,11 @@ class TestLogWindow:
         return values != self._loaded_values
 
     def _update_dirty_indicator(self) -> None:
-        self._set_dirty_text("Unsaved changes" if self._is_dirty() else "")
+        if self._has_pending_lap_order():
+            dirty_text = "Unsaved changes · lap order pending"
+        else:
+            dirty_text = "Unsaved changes" if self._is_dirty() else ""
+        self._set_dirty_text(dirty_text)
         self._update_action_states()
 
     def _discard_staged(self) -> None:
@@ -436,6 +476,13 @@ class TestLogWindow:
             message = "Could not remove staged file copies:\n" + "\n".join(map(str, failures))
             self._set_status(message)
             messagebox.showwarning("Staged files need cleanup", message, parent=self.root)
+
+    def _discard_pending_lap_order(self) -> None:
+        if not self._has_pending_lap_order():
+            return
+        self._pending_lap_order = list(self._lap_order_original)
+        self.refresh_tree()
+        self._update_dirty_indicator()
 
     def _resolve_unsaved(self) -> bool:
         if not self._is_dirty():
@@ -450,6 +497,7 @@ class TestLogWindow:
         if answer:
             return self.save_current()
         self._discard_staged()
+        self._discard_pending_lap_order()
         return True
 
     def _selection_item(self) -> str | None:
@@ -621,7 +669,17 @@ class TestLogWindow:
             self._set_status(f"Could not read form values: {error}")
             return False
         try:
-            saved = getattr(self.services, f"save_{self._current_kind}")(record, tuple(self._staged))
+            if self._current_kind == "lap":
+                lap_order = self._pending_lap_order
+                if lap_order == self._lap_order_original:
+                    lap_order = None
+                saved = self.services.save_lap(
+                    record,
+                    tuple(self._staged),
+                    lap_order=tuple(lap_order) if lap_order is not None else None,
+                )
+            else:
+                saved = getattr(self.services, f"save_{self._current_kind}")(record, tuple(self._staged))
         except ValidationError as error:
             had_staged = bool(self._staged)
             self._staged.clear()
@@ -681,8 +739,18 @@ class TestLogWindow:
             return
         self._staged.append(staged)
         self._refresh_attachment_list()
-        self._set_dirty_text("Unsaved changes")
+        self._update_dirty_indicator()
         self._set_status("File copied into the data folder. Save this record to keep it.")
+
+    def open_data_folder(self) -> None:
+        try:
+            opener = getattr(os, "startfile", None)
+            if opener is None:
+                raise OSError("Opening folders is available on Windows.")
+            opener(str(self.services.paths.root))
+        except Exception as error:
+            self._set_status(f"Could not open data folder: {error}")
+            messagebox.showerror("Open data folder", str(error), parent=self.root)
 
     def open_attachment(self) -> None:
         selection = self.attachment_list.curselection() if self.attachment_list is not None else ()
@@ -783,34 +851,40 @@ class TestLogWindow:
             self._set_status(f"{kind.title()} deleted.")
 
     def move_lap(self, direction: int) -> None:
-        if not self._resolve_unsaved():
-            return
         kind, record = self._current_saved_record()
         if kind != "lap" or not isinstance(record, Lap):
             kind, record = self._item_from_selection()
         if kind != "lap" or not isinstance(record, Lap):
             self._set_status("Select a saved lap to change its order.")
             return
-        laps = self.services.list_laps(record.setup_id)
-        current_index = next((index for index, lap in enumerate(laps) if lap.id == record.id), None)
-        if current_index is None:
+        if (
+            self._current_kind == "lap"
+            and self._pending_lap_order is not None
+            and isinstance(self._record, Lap)
+            and self._record.setup_id == record.setup_id
+        ):
+            lap_ids = list(self._pending_lap_order)
+        else:
+            lap_ids = [lap.id for lap in self.services.list_laps(record.setup_id)]
+        try:
+            current_index = lap_ids.index(record.id)
+        except ValueError:
             return
         destination = current_index + direction
-        if destination < 0 or destination >= len(laps):
+        if destination < 0 or destination >= len(lap_ids):
             return
-        lap_ids = [lap.id for lap in laps]
         lap_ids[current_index], lap_ids[destination] = lap_ids[destination], lap_ids[current_index]
-        try:
-            self.services.reorder_laps(record.setup_id, lap_ids)
-        except Exception as error:
-            self._set_status(f"Could not reorder laps: {error}")
-            messagebox.showerror("Reorder laps", str(error), parent=self.root)
-            return
+        if self._current_kind == "lap" and isinstance(self._record, Lap):
+            self._pending_lap_order = lap_ids
+        else:
+            self._lap_order_original = [lap.id for lap in self.services.list_laps(record.setup_id)]
+            self._pending_lap_order = lap_ids
         self.refresh_tree(select_item=f"lap:{record.id}")
-        updated = self.services.get_lap(record.id)
-        if updated is not None:
-            self._show_editor("lap", updated, is_new=False)
-        self._set_status("Lap order updated.")
+        self._update_dirty_indicator()
+        if self._pending_lap_order != self._lap_order_original:
+            self._set_status("Lap order pending. Save to apply or choose Discard when leaving this lap.")
+        else:
+            self._set_status("Lap order restored to its saved order.")
 
     def create_backup(self) -> None:
         if not self._resolve_unsaved():
