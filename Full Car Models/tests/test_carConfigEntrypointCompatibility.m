@@ -1,11 +1,46 @@
 %% test_carConfigEntrypointCompatibility
 % Construction-only assertion script. Run this file with RUN, not RUNTESTS.
+callerPath = path;
+callerFolder = pwd;
+runCompatibilityChecks(false);
+assert(strcmp(path,callerPath),'Task6:callerPathLeaked', ...
+    'The compatibility script changed the caller MATLAB path.');
+assert(strcmp(pwd,callerFolder),'Task6:callerFolderLeaked', ...
+    'The compatibility script changed the caller current directory.');
+
+try
+    runCompatibilityChecks(true);
+    error('Task6:cleanupProbeMissing', ...
+        'The forced-failure cleanup probe did not fail as expected.');
+catch ME
+    assert(strcmp(ME.identifier,'Task6:cleanupFailureProbe'), ...
+        'Task6:cleanupProbeWrongError','Unexpected cleanup probe error: %s',ME.message);
+end
+assert(strcmp(path,callerPath),'Task6:failurePathLeaked', ...
+    'Caller MATLAB path was not restored after the forced failure.');
+assert(strcmp(pwd,callerFolder),'Task6:failureFolderLeaked', ...
+    'Caller directory was not restored after the forced failure.');
+fprintf('PASS caller path/cwd unchanged after successful and forced-failure run(filePath).\n');
+
+function runCompatibilityChecks(forceFailure)
+oldPath = path;
+oldFolder = pwd;
+foreignFolder = '';
+rampFolder = '';
+fixtureFolder = '';
+if nargin < 1
+    forceFailure = false;
+end
+try
 testFile = mfilename('fullpath');
 testsDir = fileparts(testFile);
 fullCarModelsDir = fileparts(testsDir);
 repoRoot = fileparts(fullCarModelsDir);
 addpath(genpath(fullCarModelsDir));
 setup_paths;
+if forceFailure
+    error('Task6:cleanupFailureProbe','Intentional cleanup failure-path probe.');
+end
 manifestPath = fullfile(testsDir,'car_configuration_entrypoints.csv');
 evidenceDirectory = fullfile(repoRoot,'artifacts','car_configuration_refactor', ...
     'task6-exec-20261005T015204');
@@ -20,6 +55,14 @@ manifest = readtable(manifestPath,'TextType','string');
 assert(height(manifest) == height(report));
 assert(all(manifest.postStatus == report.status));
 assert(all(contains(manifest.evidencePath,'task6-exec-20261005T015204')));
+rampFunctionRow = manifest.path == "Full Car Models/runRampSpeedStudy.m";
+rampScriptRow = manifest.path == "Full Car Models/entrypoints/runRampSpeedStudy.m";
+assert(nnz(rampFunctionRow) == 1 && nnz(rampScriptRow) == 1);
+assert(contains(manifest.blocker(rampFunctionRow), ...
+    "Function resolution and load-only behavior only"));
+assert(contains(manifest.blocker(rampScriptRow), ...
+    "explicit run(scriptPath) invocation is unverified"));
+assert(contains(manifest.blocker(rampScriptRow),"Task 8 numerical run"));
 assert(~any(manifest.postStatus == "full-pass"), ...
     'Task6:overclaimed','Construction evidence cannot be labeled full-pass.');
 fprintf('PASS manifest driver: %d rows, %d construction passes, %d baseline failures, %d blocked inputs.\n', ...
@@ -27,12 +70,8 @@ fprintf('PASS manifest driver: %d rows, %d construction passes, %d baseline fail
     nnz(report.status=="baseline-failure"),nnz(report.status=="blocked-input"));
 
 % Bootstrap from a foreign working directory and verify canonical class paths.
-oldPath = path;
-oldFolder = pwd;
-restoreSession = onCleanup(@() restoreSessionState(oldPath,oldFolder)); %#ok<NASGU>
 foreignFolder = tempname;
 mkdir(foreignFolder);
-removeForeign = onCleanup(@() removeFolder(foreignFolder)); %#ok<NASGU>
 cd(foreignFolder);
 bootstrapPath = fullfile(fullCarModelsDir,'entrypoints','bootstrap.m');
 run(bootstrapPath);
@@ -68,7 +107,6 @@ assert(nargin('runRampSpeedStudy') == 1 && nargout('runRampSpeedStudy') == 4, ..
 % A load-only call proves the options function is callable without starting a solve.
 rampFolder = tempname;
 mkdir(rampFolder);
-removeRampFolder = onCleanup(@() removeFolder(rampFolder)); %#ok<NASGU>
 study = rampSpeed.makeStudy("task6-entrypoint");
 rampCache = fullfile(rampFolder,'study.mat');
 save(rampCache,'study','-v7.3');
@@ -77,9 +115,9 @@ rampOptions = struct('loadFromPrev',true,'cacheName',rampCache, ...
 [loadedStudy,loadedRuns,figures,events] = runRampSpeedStudy(rampOptions);
 assert(loadedStudy.schemaVersion == 1 && isempty(loadedRuns));
 assert(isempty(figures) && isempty(events));
-% Executing the legacy script itself starts its configured ramp solve; that full
-% invocation remains explicitly deferred to the bounded Task 8 run.
-fprintf('PASS ramp function resolution and load-only call; explicit solving script deferred to Task 8.\n');
+% The script path is present, but its invocation has not been tested. Running it
+% starts its configured study and remains deferred to bounded Task 8.
+fprintf('PASS root ramp function load-only API and legacy script path presence; script invocation unverified, deferred to Task 8.\n');
 
 % Preserve cells by default and lap/acceleration order in named cases.
 Q = table([155;170],'VariableNames',{'mass'});
@@ -165,7 +203,6 @@ times = table((1:5)',[46;47;48;49;50], ...
 traces = repmat(struct('time_s',[0;1],'speed_mps',[10;11]),5,1);
 fixtureFolder = tempname;
 mkdir(fixtureFolder);
-removeFixture = onCleanup(@() removeFolder(fixtureFolder)); %#ok<NASGU>
 legacyPath = fullfile(fixtureFolder,'legacy-cache.mat');
 save(legacyPath,'carCell','plan','designTable','metricTable','times','traces','-v7.3');
 variables = whos('-file',legacyPath);
@@ -222,9 +259,15 @@ assert(all([adaptiveResults.Passed]),'Task6:adaptiveGripFailed', ...
 fprintf('PASS runnable setup example and adaptive-grip hooks (%d tests).\n', ...
     numel(adaptiveResults));
 
-clear restoreSession removeForeign removeRampFolder removeFixture
+catch ME
+    restoreSessionState(oldPath,oldFolder, ...
+        {foreignFolder,rampFolder,fixtureFolder});
+    rethrow(ME)
+end
+restoreSessionState(oldPath,oldFolder, ...
+    {foreignFolder,rampFolder,fixtureFolder});
 fprintf('Task 6 compatibility assertions completed without solver or Events2 construction.\n');
-
+end
 function value = normalizePath(value)
 value = lower(strrep(char(string(value)),'/','\'));
 while numel(value) > 3 && endsWith(value,'\')
@@ -232,11 +275,14 @@ while numel(value) > 3 && endsWith(value,'\')
 end
 end
 
-function restoreSessionState(oldPath,oldFolder)
+
+function restoreSessionState(oldPath,oldFolder,temporaryFolders)
 path(oldPath);
 cd(oldFolder);
+for i = 1:numel(temporaryFolders)
+    removeFolder(temporaryFolders{i});
 end
-
+end
 function removeFolder(folder)
 if isfolder(folder)
     rmdir(folder,'s');

@@ -116,6 +116,14 @@ for row = 1:count
             constructionCheck(row) = "QSS Car construction passed; required historical input is absent.";
             blocker(row) = "Missing historical input required by the script: " + string(inputPath);
         end
+    elseif string(manifest.path(row)) == "Full Car Models/runRampSpeedStudy.m"
+        status(row) = "construction-pass";
+        constructionCheck(row) = "Root options function resolved and load-only cache API was verified; no study solve was run.";
+        blocker(row) = "Function resolution and load-only behavior only; the legacy script invocation is unverified and outstanding for Task 8.";
+    elseif string(manifest.path(row)) == "Full Car Models/entrypoints/runRampSpeedStudy.m"
+        status(row) = "construction-pass";
+        constructionCheck(row) = "Legacy script path presence was verified; run(scriptPath) was not invoked.";
+        blocker(row) = "Only the root function load-only API and legacy script path presence are verified; explicit run(scriptPath) invocation is unverified and outstanding for the Task 8 numerical run.";
     elseif contains(route,"carConfigBaseline")
         status(row) = "construction-pass";
         constructionCheck(row) = "Frozen ramp baseline Car constructed; no ramp solver was invoked.";

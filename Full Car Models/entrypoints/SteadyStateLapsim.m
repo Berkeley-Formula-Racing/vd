@@ -1,4 +1,4 @@
-%% SteadyStateLapsim - simple LC0 event runner
+%% SteadyStateLapsim - legacy tire event runner
 clear classes
 entrypointDir = fileparts(mfilename('fullpath'));
 run(fullfile(entrypointDir, 'bootstrap.m'));
