@@ -1,0 +1,3287 @@
+diff --git a/Bicycle Model/BicycleModel.m b/Bicycle Model/BicycleModel.m
+index 362a38f0a11361bd52f6a66ea99cf5683119cc6e..d8431f28c43b355ff60f56962662526377e392b3 100644
+--- a/Bicycle Model/BicycleModel.m	
++++ b/Bicycle Model/BicycleModel.m	
+@@ -2,25 +2,29 @@
+ clear
+ setup_paths
+ 
+-weight_dist = 0.54; % rearwards
+-m = 535*0.453592; % mass, kg
+-L = 1.6; % wheelbase, m
++addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++weight_dist = sharedStudyVehicle.studies.Bicycle_Model_BicycleModel.weight_dist; % rearwards
++m = sharedStudyVehicle.studies.Bicycle_Model_BicycleModel.m; % mass, kg
++L = sharedStudyVehicle.studies.Bicycle_Model_BicycleModel.L; % wheelbase, m
+ 
+ a = L*weight_dist; % front axle to cg, m
+ b = L*(1-weight_dist); % rear axle to cg, m
+ 
+-load('Fy_pure_parameters_run24_new2.mat')
+-C_f = 0.55*2*4.448*cornering_stiffness(Xbestcell,0,535*(1-weight_dist),12,0);
+-C_r = 0.55*2*4.448*cornering_stiffness(Xbestcell,0,535*(weight_dist),12,0);
++sharedFitData = load(sharedStudyTire.studies.Bicycle_Model_BicycleModel.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell;
++C_f = sharedStudyTire.studies.Bicycle_Model_BicycleModel.cornering_force_scale*2*4.448*cornering_stiffness(Xbestcell,0,sharedStudyTire.studies.Bicycle_Model_BicycleModel.cornering_load_mass_lb*(1-weight_dist),sharedStudyTire.studies.Bicycle_Model_BicycleModel.cornering_pressure_psi,0);
++C_r = sharedStudyTire.studies.Bicycle_Model_BicycleModel.cornering_force_scale*2*4.448*cornering_stiffness(Xbestcell,0,sharedStudyTire.studies.Bicycle_Model_BicycleModel.cornering_load_mass_lb*(weight_dist),sharedStudyTire.studies.Bicycle_Model_BicycleModel.cornering_pressure_psi,0);
+ 
+ u = 10; % forward velocity, m/s
+ 
+-I_zz = 83.28; % yaw inertia, kg-m^2
++I_zz = sharedStudyVehicle.studies.Bicycle_Model_BicycleModel.I_zz; % yaw inertia, kg-m^2
+ %C_f = 136*4.448; % front cornering stiffness, N/deg @ 150 lb
+ %C_r = 136*4.448; % rear cornering stiffness, N/deg @ 150 lb
+ g = 9.806; % gravitational constant, m/sec^2
+ 
+-N = 4; % steering ratio
++N = sharedStudyVehicle.studies.Bicycle_Model_BicycleModel.N; % steering ratio
+ 
+ %% Outputs
+ a = L*weight_dist; % front axle to cg, m
+diff --git a/Bicycle Model/LatAccelResponseTimePlotter.m b/Bicycle Model/LatAccelResponseTimePlotter.m
+index 5c24eda8e8a4a95b7f207c842d7aeb6cad6afc8a..e2bbf35a7b9dca96a17a86df2d743f1bfca3d231 100644
+--- a/Bicycle Model/LatAccelResponseTimePlotter.m	
++++ b/Bicycle Model/LatAccelResponseTimePlotter.m	
+@@ -2,19 +2,21 @@
+ clear all
+ clc
+ 
+-weight_dist = 0.51; % rearwards
+-m = 535*0.453592; % mass, kg
+-L = 1.524; % wheelbase, m
++addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++weight_dist = sharedStudyVehicle.studies.Bicycle_Model_LatAccelResponseTimePlotter.weight_dist; % rearwards
++m = sharedStudyVehicle.studies.Bicycle_Model_LatAccelResponseTimePlotter.m; % mass, kg
++L = sharedStudyVehicle.studies.Bicycle_Model_LatAccelResponseTimePlotter.L; % wheelbase, m
+ 
+ u = 20; % forward velocity, m/s
+ 
+-I_zz = 83.28; % yaw inertia, kg-m^2
++I_zz = sharedStudyVehicle.studies.Bicycle_Model_LatAccelResponseTimePlotter.I_zz; % yaw inertia, kg-m^2
+ 
+ %C_f = 136*4.448; % front cornering stiffness, N/deg @ 150 lb
+ %C_r = 136*4.448; % rear cornering stiffness, N/deg @ 150 lb
+ g = 9.806; % gravitational constant, m/sec^2
+ 
+-N = 4; % steering ratio
++N = sharedStudyVehicle.studies.Bicycle_Model_LatAccelResponseTimePlotter.N; % steering ratio
+ 
+ %% Outputs
+ a = L*weight_dist; % front axle to cg, m
+diff --git a/Bicycle Model/ODE Formulation/BicycleModelODE.m b/Bicycle Model/ODE Formulation/BicycleModelODE.m
+index 0f04f26ea8c3fbeecbfdad2a287e9798bc872ab9..d368e91140e0e16a0885c2187bf59c77ec60a238 100644
+--- a/Bicycle Model/ODE Formulation/BicycleModelODE.m	
++++ b/Bicycle Model/ODE Formulation/BicycleModelODE.m	
+@@ -1,16 +1,19 @@
+ %% Inputs
+-weight_dist = 0.3; % rearwards
+-m = 242.6718; % mass, kg
+-L = 1.524; % wheelbase
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++weight_dist = sharedStudyVehicle.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.weight_dist; % rearwards
++m = sharedStudyVehicle.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.m; % mass, kg
++L = sharedStudyVehicle.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.L; % wheelbase
+ 
+ u = 20; % forward velocity, m/s
+ 
+-I_zz = 83.28; % yaw inertia, kg-m^2
+-C_f = 136*4.448*180/pi; % front cornering stiffness, N/deg @ 150 lb
+-C_r = 136*4.448*180/pi; % rear cornering stiffness, N/deg @ 150 lb
++I_zz = sharedStudyVehicle.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.I_zz; % yaw inertia, kg-m^2
++C_f = sharedStudyTire.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.C_f; % front cornering stiffness, N/deg @ 150 lb
++C_r = sharedStudyTire.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.C_r; % rear cornering stiffness, N/deg @ 150 lb
+ g = 9.806; % gravitational constant, m/sec^2
+ 
+-N = 16; % steering ratio, made up for now lol
++N = sharedStudyVehicle.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.N; % steering ratio, made up for now lol
+ 
+ a = L*weight_dist; % front axle to cg, m
+ b = L*(1-weight_dist); % rear axle to cg, m
+@@ -19,7 +22,8 @@ D_f = (g*m*b)/(L*C_f); % front cornering compliance, deg/g
+ D_r = (g*m*a)/(L*C_r); % rear cornering compliance, deg/g
+ %%
+ 
+-load('Fy_pure_parameters_run24_17.mat')
++sharedFitData = load(sharedStudyTire.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell;
+ Xcell = Xbestcell;
+ 
+ BicycleODE2 = @(t,x) BicycleODE(t,x,a,b,u,delta,C_f,C_r,m,I_zz,Xcell);
+diff --git a/Bicycle Model/Simulink Models/BicycleModelSim.m b/Bicycle Model/Simulink Models/BicycleModelSim.m
+index 470609026d4230168dca1bbbaad9a09ac5b3576f..146f616e38986a1f376ac4e0d06f421ea3b02617 100644
+--- a/Bicycle Model/Simulink Models/BicycleModelSim.m	
++++ b/Bicycle Model/Simulink Models/BicycleModelSim.m	
+@@ -1,14 +1,17 @@
+ %% Inputs
+-m = 1500; % mass, kg
+-L = 2500; % wheelbase
+-a = 1.1; % front axle to cg, m
+-b = 1.6; % rear axle to cg, m
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++m = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.m; % mass, kg
++L = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.L; % wheelbase
++a = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.a; % front axle to cg, m
++b = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.b; % rear axle to cg, m
+ 
+ u = 140/3.6; % forward velocity, m/s
+ 
+-I_zz = 2500; % yaw inertia, kg-m^2
+-C_f = 55000; % front cornering stiffness, N/rad
+-C_r = 60000; % rear cornering stiffness, N/rad
++I_zz = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.I_zz; % yaw inertia, kg-m^2
++C_f = sharedStudyTire.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.C_f; % front cornering stiffness, N/rad
++C_r = sharedStudyTire.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.C_r; % rear cornering stiffness, N/rad
+ 
+ %% Plotting
+ 
+diff --git a/Bicycle Model/Simulink Models/BicycleModelSimv2.m b/Bicycle Model/Simulink Models/BicycleModelSimv2.m
+index 575b61275c8bb3ba875c561a6c8c40d3c1a63cf5..5356babfdd273b36bb7cfe3be16052ef907041d9 100644
+--- a/Bicycle Model/Simulink Models/BicycleModelSimv2.m	
++++ b/Bicycle Model/Simulink Models/BicycleModelSimv2.m	
+@@ -1,16 +1,19 @@
+ %% Inputs
+-weight_dist = 0.3; % rearwards
+-m = 242.6718; % mass, kg
+-L = 1.524; % wheelbase
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++weight_dist = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.weight_dist; % rearwards
++m = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.m; % mass, kg
++L = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.L; % wheelbase
+ 
+ a = L*weight_dist; % front axle to cg, m
+ b = L*(1-weight_dist); % rear axle to cg, m
+ 
+ u = 20; % forward velocity, m/s
+ 
+-I_zz = 83.28; % yaw inertia, kg-m^2
+-C_f = 136*4.448*180/pi/2; % front cornering stiffness, N/deg @ 150 lb
+-C_r = 136*4.448*180/pi/2; % rear cornering stiffness, N/deg @ 150 lb
++I_zz = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.I_zz; % yaw inertia, kg-m^2
++C_f = sharedStudyTire.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.C_f; % front cornering stiffness, N/deg @ 150 lb
++C_r = sharedStudyTire.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.C_r; % rear cornering stiffness, N/deg @ 150 lb
+ 
+ step_steer = 1; % rad
+ 
+diff --git a/Bicycle Model/Simulink Models/FullCarModel.m b/Bicycle Model/Simulink Models/FullCarModel.m
+index cbbf2426db565801f065ccc5a09abb0ed53573d0..c5c89929048c93428e5d24779f5efbff4a837507 100644
+--- a/Bicycle Model/Simulink Models/FullCarModel.m	
++++ b/Bicycle Model/Simulink Models/FullCarModel.m	
+@@ -1,28 +1,32 @@
+ %% Inputs
+-weight_dist = 0.6; % rearwards
+-m = 242.6718; % mass, kg
+-L = 1.524; % wheelbase
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++weight_dist = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.weight_dist; % rearwards
++m = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.m; % mass, kg
++L = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.L; % wheelbase
+ 
+ a = L*weight_dist; % front axle to cg, m
+ b = L*(1-weight_dist); % rear axle to cg, m
+ 
+ u = 20; % forward velocity, m/s
+ 
+-I_zz = 83.28; % yaw inertia, kg-m^2
+-C_f = 136*4.448*180/pi/2; % front cornering stiffness, N/deg @ 150 lb
+-C_r = 136*4.448*180/pi/2; % rear cornering stiffness, N/deg @ 150 lb
++I_zz = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.I_zz; % yaw inertia, kg-m^2
++C_f = sharedStudyTire.studies.Bicycle_Model_Simulink_Models_FullCarModel.C_f; % front cornering stiffness, N/deg @ 150 lb
++C_r = sharedStudyTire.studies.Bicycle_Model_Simulink_Models_FullCarModel.C_r; % rear cornering stiffness, N/deg @ 150 lb
+ 
+-load('Fy_pure_parameters_run24_18.mat')
++sharedFitData = load(sharedStudyTire.studies.Bicycle_Model_Simulink_Models_FullCarModel.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell;
+ X = cell2mat(Xbestcell);
+ 
+-track_width_f = 1.1938;
+-track_width_r = 1.1938;
++track_width_f = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.track_width_f;
++track_width_r = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.track_width_r;
+ 
+-cla = 1.771;
+-cp = 0.5; % proportion of downforce in front
++cla = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.cla;
++cp = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.cp; % proportion of downforce in front
+ 
+-LLTD = 0.6;
+-cg_height = 0.3048;
++LLTD = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.LLTD;
++cg_height = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_FullCarModel.cg_height;
+ 
+ step_steer = 3*pi/180; % rad
+ 
+diff --git a/Bicycle Model/Simulink Models/NonLin_BicycleModel.m b/Bicycle Model/Simulink Models/NonLin_BicycleModel.m
+index 5b42ab445260f76330b7162a213ebf17bfa4839c..fd13046616b2ce5d44377a6cea9abaf0df18e29e 100644
+--- a/Bicycle Model/Simulink Models/NonLin_BicycleModel.m	
++++ b/Bicycle Model/Simulink Models/NonLin_BicycleModel.m	
+@@ -1,18 +1,22 @@
+ %% Inputs
+-weight_dist = 0.55; % rearwards
+-m = 242.6718; % mass, kg
+-L = 1.524; % wheelbase
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++weight_dist = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.weight_dist; % rearwards
++m = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.m; % mass, kg
++L = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.L; % wheelbase
+ 
+ a = L*weight_dist; % front axle to cg, m
+ b = L*(1-weight_dist); % rear axle to cg, m
+ 
+ u = 20; % forward velocity, m/s
+ 
+-I_zz = 83.28; % yaw inertia, kg-m^2
+-C_f = 136*4.448*180/pi/2; % front cornering stiffness, N/deg @ 150 lb
+-C_r = 136*4.448*180/pi/2; % rear cornering stiffness, N/deg @ 150 lb
++I_zz = sharedStudyVehicle.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.I_zz; % yaw inertia, kg-m^2
++C_f = sharedStudyTire.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.C_f; % front cornering stiffness, N/deg @ 150 lb
++C_r = sharedStudyTire.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.C_r; % rear cornering stiffness, N/deg @ 150 lb
+ 
+-load('Fy_pure_parameters_run24_17.mat')
++sharedFitData = load(sharedStudyTire.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell;
+ X = cell2mat(Xbestcell);
+ 
+ step_steer = 7*pi/180; % rad
+diff --git a/Bicycle Model/YawResponseTimePlotter.m b/Bicycle Model/YawResponseTimePlotter.m
+index def4c85026afc3f5081ba8d2d837821728f92ad2..82e372699504214efe0f1d22664977cb2d65058d 100644
+--- a/Bicycle Model/YawResponseTimePlotter.m	
++++ b/Bicycle Model/YawResponseTimePlotter.m	
+@@ -2,19 +2,21 @@
+ clear all
+ clc
+ 
+-weight_dist = 0.51; % rearwards
+-m = 535*0.453592; % mass, kg
+-L = 1.524; % wheelbase, m
++addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++weight_dist = sharedStudyVehicle.studies.Bicycle_Model_YawResponseTimePlotter.weight_dist; % rearwards
++m = sharedStudyVehicle.studies.Bicycle_Model_YawResponseTimePlotter.m; % mass, kg
++L = sharedStudyVehicle.studies.Bicycle_Model_YawResponseTimePlotter.L; % wheelbase, m
+ 
+ u = 20; % forward velocity, m/s
+ 
+-I_zz = 83.28; % yaw inertia, kg-m^2
++I_zz = sharedStudyVehicle.studies.Bicycle_Model_YawResponseTimePlotter.I_zz; % yaw inertia, kg-m^2
+ 
+ %C_f = 136*4.448; % front cornering stiffness, N/deg @ 150 lb
+ %C_r = 136*4.448; % rear cornering stiffness, N/deg @ 150 lb
+ g = 9.806; % gravitational constant, m/sec^2
+ 
+-N = 4; % steering ratio
++N = sharedStudyVehicle.studies.Bicycle_Model_YawResponseTimePlotter.N; % steering ratio
+ 
+ %% Outputs
+ a = L*weight_dist; % front axle to cg, m
+diff --git a/Bicycle Model/toe_compliance.m b/Bicycle Model/toe_compliance.m
+index 503a89d9cdc86cc3041fb1cdcf0d7310a4d76369..5fd21152178a7abff63fe9ab3e10de09cf924d49 100644
+--- a/Bicycle Model/toe_compliance.m	
++++ b/Bicycle Model/toe_compliance.m	
+@@ -3,22 +3,26 @@ clear;
+ close all;
+ setup_paths
+ 
+-weight_dist = 0.51; % rearwards
+- m = 520*0.453592; % mass, kg
+-L = 62 * 0.0254; % wheelbase, m
+-
+-load('Fy_pure_parameters_run24_new2.mat')
+-C_f = 0.55*2*4.448*cornering_stiffness(Xbestcell,0,535*(1-weight_dist),12,0);
+-C_r = 0.55*2*4.448*cornering_stiffness(Xbestcell,0,535*(weight_dist),12,0);
++addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++weight_dist = sharedStudyVehicle.studies.Bicycle_Model_toe_compliance.weight_dist; % rearwards
++ m = sharedStudyVehicle.studies.Bicycle_Model_toe_compliance.m; % mass, kg
++L = sharedStudyVehicle.studies.Bicycle_Model_toe_compliance.L; % wheelbase, m
++
++sharedFitData = load(sharedStudyTire.studies.Bicycle_Model_toe_compliance.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell;
++C_f = sharedStudyTire.studies.Bicycle_Model_toe_compliance.cornering_force_scale*2*4.448*cornering_stiffness(Xbestcell,0,sharedStudyTire.studies.Bicycle_Model_toe_compliance.cornering_load_mass_lb*(1-weight_dist),sharedStudyTire.studies.Bicycle_Model_toe_compliance.cornering_pressure_psi,0);
++C_r = sharedStudyTire.studies.Bicycle_Model_toe_compliance.cornering_force_scale*2*4.448*cornering_stiffness(Xbestcell,0,sharedStudyTire.studies.Bicycle_Model_toe_compliance.cornering_load_mass_lb*(weight_dist),sharedStudyTire.studies.Bicycle_Model_toe_compliance.cornering_pressure_psi,0);
+  
+ u = 10; % forward velocity, m/s
+ 
+-I_zz = 83.28; % yaw inertia, kg-m^2
++I_zz = sharedStudyVehicle.studies.Bicycle_Model_toe_compliance.I_zz; % yaw inertia, kg-m^2
+ %C_f = 136*4.448; % front cornering stiffness, N/deg @ 150 lb
+ %C_r = 136*4.448; % rear cornering stiffness, N/deg @ 150 lb
+ g = 9.806; % gravitational constant, m/sec^2
+ 
+-N = 4; % steering ratio
++N = sharedStudyVehicle.studies.Bicycle_Model_toe_compliance.N; % steering ratio
+ 
+ 
+ %% Outputs
+diff --git a/Full Car Models/+rampSpeed/loadRampAssets.m b/Full Car Models/+rampSpeed/loadRampAssets.m
+index c3aaf1cdead1b9b02802a62a90b96ae324e25d2f..2a4b5aa8c7600c858a0fe9a559acfc78142921f9 100644
+--- a/Full Car Models/+rampSpeed/loadRampAssets.m	
++++ b/Full Car Models/+rampSpeed/loadRampAssets.m	
+@@ -7,7 +7,7 @@ if ~isfield(setup,'aeroMapId')
+ end
+ 
+ root = fileparts(fileparts(mfilename('fullpath')));
+-componentRoot = fullfile(root,'carComponents');
++sharedTire = vdTireConfig([],[],false);
+ catalog = rampSpeed.aeroMapCatalog();
+ ids = string({catalog.id});
+ index = find(ids == string(setup.aeroMapId),1);
+@@ -18,8 +18,8 @@ if isempty(index)
+ end
+ 
+ mapPath = string(catalog(index).path);
+-camberRatioPath = string(fullfile(componentRoot,'camberratiossmoothed.mat'));
+-camberModelPath = string(fullfile(componentRoot,'camber_models_fast.mat'));
++camberRatioPath = string(sharedTire.camber_ratio_file);
++camberModelPath = string(sharedTire.camber_model_file);
+ map = rampSpeed.validateAeroMapFile(mapPath);
+ ratioData = load(char(camberRatioPath), ...
+     'camber2indices','camber4indices','camber2ratio','camber4ratio');
+diff --git a/Full Car Models/CamberCurveGen/Testcamber.m b/Full Car Models/CamberCurveGen/Testcamber.m
+index ae910cbb192781fcdf3e93a1df621e856928ae77..2bc22f638043620613058086132b9fcc13729ec3 100644
+--- a/Full Car Models/CamberCurveGen/Testcamber.m	
++++ b/Full Car Models/CamberCurveGen/Testcamber.m	
+@@ -7,43 +7,48 @@ clear
+ %% taken from carConfig
+ 
+ %change Fx parameters currently here - Aeden.
+-load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++sharedFitData = load(sharedStudyTire.studies.camber1_Testcamber.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_x combined magic formula parameters
+ Fx_parameters = cell2mat(Xbestcell);
+-load('Fy_pure_parameters_1965run24.mat'); % F_y combined magic formula parameters
++sharedFitData = load(sharedStudyTire.studies.camber1_Testcamber.fit_2,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_y combined magic formula parameters
+ %load('Lapsim_Fy_combined_parameters_1965run15.mat');
+ Fy_parameters = cell2mat(Xbestcell);
+ 
+-friction_scaling_factor = 1.05*0.55;
+-p_i = 12; % tire pressure
++friction_scaling_factor = sharedStudyTire.studies.camber1_Testcamber.friction_scaling_factor;
++p_i = sharedStudyTire.studies.camber1_Testcamber.p_i; % tire pressure
+ 
+ %initialize tire object, used for camber evaluation
+ tire = BDITire2(0,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+ 
+ %Vehicle Width in inches
+-C.front_width = 47;
+-C.rear_width = 47;
+-C.wheelbase = 62;
++C.front_width = sharedStudyVehicle.studies.camber1_Testcamber.C_front_width;
++C.rear_width = sharedStudyVehicle.studies.camber1_Testcamber.C_rear_width;
++C.wheelbase = sharedStudyVehicle.studies.camber1_Testcamber.C_wheelbase;
+ 
+ %Spring Roll Stiffness
+-C.front_spring_roll_stiffness = 2860; %numbers from LLTD Doc
+-C.rear_spring_roll_stiffness = 2911;
+-C.front_bump_stiffness = 2*191.66;%wheel rates
+-C.rear_bump_stiffness = 2*196.02; 
++C.front_spring_roll_stiffness = sharedStudyVehicle.studies.camber1_Testcamber.C_front_spring_roll_stiffness; %numbers from LLTD Doc
++C.rear_spring_roll_stiffness = sharedStudyVehicle.studies.camber1_Testcamber.C_rear_spring_roll_stiffness;
++C.front_bump_stiffness = sharedStudyVehicle.studies.camber1_Testcamber.C_front_bump_stiffness;%wheel rates
++C.rear_bump_stiffness = sharedStudyVehicle.studies.camber1_Testcamber.C_rear_bump_stiffness;
+ 
+ %ARB Roll Stiffness (Currently on Short)
+-C.front_ARB_roll_stiffness = 0;
+-C.rear_ARB_roll_stiffness =986; %699, 1493
++C.front_ARB_roll_stiffness = sharedStudyVehicle.studies.camber1_Testcamber.C_front_ARB_roll_stiffness;
++C.rear_ARB_roll_stiffness = sharedStudyVehicle.studies.camber1_Testcamber.C_rear_ARB_roll_stiffness; %699, 1493
+ 
+ %Car Weight Distribution
+-C.weight_dist = 0.54; % percentage of weight in rear
++C.weight_dist = sharedStudyVehicle.studies.camber1_Testcamber.C_weight_dist; % percentage of weight in rear
+ 
+ %Total Car Weight
+-C.mass = (395 + 150)*4.44; % lbs to N
++C.mass = sharedStudyVehicle.studies.camber1_Testcamber.C_mass; % lbs to N
+ 
+ %anti effects
+-front_anti_dive = .545;
+-rear_anti_lift = 1.02;
+-rear_anti_squat = .457;
++front_anti_dive = sharedStudyVehicle.studies.camber1_Testcamber.front_anti_dive;
++rear_anti_lift = sharedStudyVehicle.studies.camber1_Testcamber.rear_anti_lift;
++rear_anti_squat = sharedStudyVehicle.studies.camber1_Testcamber.rear_anti_squat;
+ 
+ %% camber curve optimization
+ %roll angles and cambers to search through
+diff --git a/Full Car Models/CamberCurveGen/generateIdealCamberCurves.m b/Full Car Models/CamberCurveGen/generateIdealCamberCurves.m
+index 69c2de8b63584da7278277fc40259c00573948e0..3954abc28d46ec9d649cd4957efe04fc28a11d14 100644
+--- a/Full Car Models/CamberCurveGen/generateIdealCamberCurves.m	
++++ b/Full Car Models/CamberCurveGen/generateIdealCamberCurves.m	
+@@ -7,33 +7,38 @@ clear all
+ format compact;
+ 
+ %% taken from carConfig
+-load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++sharedFitData = load(sharedStudyTire.studies.camber1_generateIdealCamberCurves.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_x combined magic formula parameters
+ Fx_parameters = cell2mat(Xbestcell);
+-load('Fy_combined_parameters_16x10x7.5_LC0.mat'); % F_y combined magic formula parameters
++sharedFitData = load(sharedStudyTire.studies.camber1_generateIdealCamberCurves.fit_2,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_y combined magic formula parameters
+ Fy_parameters = cell2mat(Xbestcell);
+-friction_scaling_factor = 1.05*0.55;
+-p_i = 12; % tire pressure
++friction_scaling_factor = sharedStudyTire.studies.camber1_generateIdealCamberCurves.friction_scaling_factor;
++p_i = sharedStudyTire.studies.camber1_generateIdealCamberCurves.p_i; % tire pressure
+ 
+ %initialize tire object, used for camber evaluation
+ tire = BDITire2(0,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+ 
+ %Vehicle Width in inches
+-C.front_width = 47;
+-C.rear_width = 47;
++C.front_width = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves.C_front_width;
++C.rear_width = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves.C_rear_width;
+ 
+ %Spring Roll Stiffness
+-C.front_spring_roll_stiffness = 3000;2860; %numbers from LLTD Doc
+-C.rear_spring_roll_stiffness = 3000;2911;
++C.front_spring_roll_stiffness = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves.C_front_spring_roll_stiffness;2860; %numbers from LLTD Doc
++C.rear_spring_roll_stiffness = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves.C_rear_spring_roll_stiffness;2911;
+ 
+ %ARB Roll Stiffness (Currently on Short)
+-C.front_ARB_roll_stiffness = 0;
+-C.rear_ARB_roll_stiffness = 0;%699;986;1493;
++C.front_ARB_roll_stiffness = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves.C_front_ARB_roll_stiffness;
++C.rear_ARB_roll_stiffness = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves.C_rear_ARB_roll_stiffness;%699;986;1493;
+ 
+ %Car Weight Distribution
+-C.weight_dist = 0.54; % percentage of weight in rear
++C.weight_dist = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves.C_weight_dist; % percentage of weight in rear
+ 
+ %Total Car Weight
+-C.mass = (395 + 150); % lbs
++C.mass = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves.C_mass; % lbs
+ 
+ 
+ % [normal_load_vector, wheel_displacement_vector] = calcWheelForcesAndDisplacements(1, C);
+diff --git a/Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m b/Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m
+index 413cb664299cf7038db767328d9a1eb11477b258..18c6abcc53e4c5975619e87442ba2d9c94017583 100644
+--- a/Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m	
++++ b/Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m	
+@@ -7,33 +7,38 @@ clear all
+ format compact;
+ 
+ %% taken from carConfig
+-load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++sharedFitData = load(sharedStudyTire.studies.camber1_generateIdealCamberCurves_simplified.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_x combined magic formula parameters
+ Fx_parameters = cell2mat(Xbestcell);
+-load('Fy_combined_parameters_16x10x7.5_LC0.mat'); % F_y combined magic formula parameters
++sharedFitData = load(sharedStudyTire.studies.camber1_generateIdealCamberCurves_simplified.fit_2,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_y combined magic formula parameters
+ Fy_parameters = cell2mat(Xbestcell);
+-friction_scaling_factor = 1.05*0.55;
+-p_i = 12; % tire pressure
++friction_scaling_factor = sharedStudyTire.studies.camber1_generateIdealCamberCurves_simplified.friction_scaling_factor;
++p_i = sharedStudyTire.studies.camber1_generateIdealCamberCurves_simplified.p_i; % tire pressure
+ 
+ %initialize tire object, used for camber evaluation
+ tire = BDITire2(0,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+ 
+ %Vehicle Width in inches
+-C.front_width = 47;
+-C.rear_width = 47;
++C.front_width = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves_simplified.C_front_width;
++C.rear_width = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves_simplified.C_rear_width;
+ 
+ %Spring Roll Stiffness
+-C.front_spring_roll_stiffness = 3000;2860; %numbers from LLTD Doc
+-C.rear_spring_roll_stiffness = 0;2911;
++C.front_spring_roll_stiffness = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves_simplified.C_front_spring_roll_stiffness;2860; %numbers from LLTD Doc
++C.rear_spring_roll_stiffness = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves_simplified.C_rear_spring_roll_stiffness;2911;
+ 
+ %ARB Roll Stiffness (Currently on Short)
+-C.front_ARB_roll_stiffness = 0;
+-C.rear_ARB_roll_stiffness = 0;%699;986;1493;
++C.front_ARB_roll_stiffness = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves_simplified.C_front_ARB_roll_stiffness;
++C.rear_ARB_roll_stiffness = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves_simplified.C_rear_ARB_roll_stiffness;%699;986;1493;
+ 
+ %Car Weight Distribution
+-C.weight_dist = 0.54; % percentage of weight in rear
++C.weight_dist = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves_simplified.C_weight_dist; % percentage of weight in rear
+ 
+ %Total Car Weight
+-C.mass = (395 + 150); % lbs
++C.mass = sharedStudyVehicle.studies.camber1_generateIdealCamberCurves_simplified.C_mass; % lbs
+ 
+ 
+ % [normal_load_vector, wheel_displacement_vector] = calcWheelForcesAndDisplacements(1, C);
+diff --git a/Full Car Models/CamberCurveGen/test.m b/Full Car Models/CamberCurveGen/test.m
+index 993f5f4addf3b1f60d2224bb6e8490029b6bea54..7ccb10d5b03ee6924b15c6e2ee2036ae87e68c4d 100644
+--- a/Full Car Models/CamberCurveGen/test.m	
++++ b/Full Car Models/CamberCurveGen/test.m	
+@@ -1,9 +1,13 @@
+-load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyTire = vdTireConfig([],[],false);
++sharedFitData = load(sharedStudyTire.studies.camber1_test.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_x combined magic formula parameters
+ Fx_parameters = cell2mat(Xbestcell);
+-load('Fy_combined_parameters_16x10x7.5_LC0.mat'); % F_y combined magic formula parameters
++sharedFitData = load(sharedStudyTire.studies.camber1_test.fit_2,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_y combined magic formula parameters
+ Fy_parameters = cell2mat(Xbestcell);
+-friction_scaling_factor = 1.05*0.55;
+-p_i = 12; % tire pressure
++friction_scaling_factor = sharedStudyTire.studies.camber1_test.friction_scaling_factor;
++p_i = sharedStudyTire.studies.camber1_test.p_i; % tire pressure
+ 
+ %initialize tire object, used for camber evaluation
+ tire = BDITire2(3,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+diff --git a/Full Car Models/CamberCurveGen2/Testcamber.m b/Full Car Models/CamberCurveGen2/Testcamber.m
+index 498b01d448e86cb0dcd66f1a4ecd73b75e5e85e4..ae9bf9fdfcb18279e57fb73e39738e4411d2130a 100644
+--- a/Full Car Models/CamberCurveGen2/Testcamber.m	
++++ b/Full Car Models/CamberCurveGen2/Testcamber.m	
+@@ -5,33 +5,38 @@ close all
+ clear all
+ 
+ %% taken from carConfig
+-load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++sharedFitData = load(sharedStudyTire.studies.camber2_Testcamber.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_x combined magic formula parameters
+ Fx_parameters = cell2mat(Xbestcell);
+-load('Fy_combined_parameters_16x10x7.5_LC0.mat'); % F_y combined magic formula parameters
++sharedFitData = load(sharedStudyTire.studies.camber2_Testcamber.fit_2,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_y combined magic formula parameters
+ Fy_parameters = cell2mat(Xbestcell);
+-friction_scaling_factor = 1.05*0.55;
+-p_i = 12; % tire pressure
++friction_scaling_factor = sharedStudyTire.studies.camber2_Testcamber.friction_scaling_factor;
++p_i = sharedStudyTire.studies.camber2_Testcamber.p_i; % tire pressure
+ 
+ %initialize tire object, used for camber evaluation
+ tire = BDITire2(0,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+ 
+ %Vehicle Width in inches
+-C.front_width = 47;
+-C.rear_width = 47;
++C.front_width = sharedStudyVehicle.studies.camber2_Testcamber.C_front_width;
++C.rear_width = sharedStudyVehicle.studies.camber2_Testcamber.C_rear_width;
+ 
+ %Spring Roll Stiffness
+-C.front_spring_roll_stiffness = 2860; %numbers from LLTD Doc
+-C.rear_spring_roll_stiffness = 2911;
++C.front_spring_roll_stiffness = sharedStudyVehicle.studies.camber2_Testcamber.C_front_spring_roll_stiffness; %numbers from LLTD Doc
++C.rear_spring_roll_stiffness = sharedStudyVehicle.studies.camber2_Testcamber.C_rear_spring_roll_stiffness;
+ 
+ %ARB Roll Stiffness (Currently on Short)
+-C.front_ARB_roll_stiffness = 0;
+-C.rear_ARB_roll_stiffness =986; %699, 1493
++C.front_ARB_roll_stiffness = sharedStudyVehicle.studies.camber2_Testcamber.C_front_ARB_roll_stiffness;
++C.rear_ARB_roll_stiffness = sharedStudyVehicle.studies.camber2_Testcamber.C_rear_ARB_roll_stiffness; %699, 1493
+ 
+ %Car Weight Distribution
+-C.weight_dist = 0.54; % percentage of weight in rear
++C.weight_dist = sharedStudyVehicle.studies.camber2_Testcamber.C_weight_dist; % percentage of weight in rear
+ 
+ %Total Car Weight
+-C.mass = 395 + 150; % lbs
++C.mass = sharedStudyVehicle.studies.camber2_Testcamber.C_mass; % lbs
+ 
+ %% camber curve optimization
+ %roll angles and cambers to search through
+diff --git a/Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m b/Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m
+index 69c2de8b63584da7278277fc40259c00573948e0..5538be7aeb3d98330556690a25d7addef9d4b6d8 100644
+--- a/Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m	
++++ b/Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m	
+@@ -7,33 +7,38 @@ clear all
+ format compact;
+ 
+ %% taken from carConfig
+-load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++sharedFitData = load(sharedStudyTire.studies.camber2_generateIdealCamberCurves.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_x combined magic formula parameters
+ Fx_parameters = cell2mat(Xbestcell);
+-load('Fy_combined_parameters_16x10x7.5_LC0.mat'); % F_y combined magic formula parameters
++sharedFitData = load(sharedStudyTire.studies.camber2_generateIdealCamberCurves.fit_2,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_y combined magic formula parameters
+ Fy_parameters = cell2mat(Xbestcell);
+-friction_scaling_factor = 1.05*0.55;
+-p_i = 12; % tire pressure
++friction_scaling_factor = sharedStudyTire.studies.camber2_generateIdealCamberCurves.friction_scaling_factor;
++p_i = sharedStudyTire.studies.camber2_generateIdealCamberCurves.p_i; % tire pressure
+ 
+ %initialize tire object, used for camber evaluation
+ tire = BDITire2(0,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+ 
+ %Vehicle Width in inches
+-C.front_width = 47;
+-C.rear_width = 47;
++C.front_width = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves.C_front_width;
++C.rear_width = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves.C_rear_width;
+ 
+ %Spring Roll Stiffness
+-C.front_spring_roll_stiffness = 3000;2860; %numbers from LLTD Doc
+-C.rear_spring_roll_stiffness = 3000;2911;
++C.front_spring_roll_stiffness = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves.C_front_spring_roll_stiffness;2860; %numbers from LLTD Doc
++C.rear_spring_roll_stiffness = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves.C_rear_spring_roll_stiffness;2911;
+ 
+ %ARB Roll Stiffness (Currently on Short)
+-C.front_ARB_roll_stiffness = 0;
+-C.rear_ARB_roll_stiffness = 0;%699;986;1493;
++C.front_ARB_roll_stiffness = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves.C_front_ARB_roll_stiffness;
++C.rear_ARB_roll_stiffness = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves.C_rear_ARB_roll_stiffness;%699;986;1493;
+ 
+ %Car Weight Distribution
+-C.weight_dist = 0.54; % percentage of weight in rear
++C.weight_dist = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves.C_weight_dist; % percentage of weight in rear
+ 
+ %Total Car Weight
+-C.mass = (395 + 150); % lbs
++C.mass = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves.C_mass; % lbs
+ 
+ 
+ % [normal_load_vector, wheel_displacement_vector] = calcWheelForcesAndDisplacements(1, C);
+diff --git a/Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m b/Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m
+index 4075772fcc229ede485ea1ff5112cd924e206c71..e6c158f1c168d9324723f4f4c212ef72ffc67c37 100644
+--- a/Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m	
++++ b/Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m	
+@@ -7,33 +7,38 @@ clear all
+ format compact;
+ 
+ %% taken from carConfig
+-load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++sharedFitData = load(sharedStudyTire.studies.camber2_generateIdealCamberCurves_simplified.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_x combined magic formula parameters
+ Fx_parameters = cell2mat(Xbestcell);
+-load('Fy_combined_parameters_16x10x7.5_LC0.mat'); % F_y combined magic formula parameters
++sharedFitData = load(sharedStudyTire.studies.camber2_generateIdealCamberCurves_simplified.fit_2,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_y combined magic formula parameters
+ Fy_parameters = cell2mat(Xbestcell);
+-friction_scaling_factor = 1.05*0.55;
+-p_i = 12; % tire pressure
++friction_scaling_factor = sharedStudyTire.studies.camber2_generateIdealCamberCurves_simplified.friction_scaling_factor;
++p_i = sharedStudyTire.studies.camber2_generateIdealCamberCurves_simplified.p_i; % tire pressure
+ 
+ %initialize tire object, used for camber evaluation
+ tire = BDITire2(0,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+ 
+ %Vehicle Width in inches
+-C.front_width = 47;
+-C.rear_width = 47;
++C.front_width = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves_simplified.C_front_width;
++C.rear_width = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves_simplified.C_rear_width;
+ 
+ %Spring Roll Stiffness
+-C.front_spring_roll_stiffness = 3000;2860; %numbers from LLTD Doc
+-C.rear_spring_roll_stiffness = 0;2911;
++C.front_spring_roll_stiffness = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves_simplified.C_front_spring_roll_stiffness;2860; %numbers from LLTD Doc
++C.rear_spring_roll_stiffness = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves_simplified.C_rear_spring_roll_stiffness;2911;
+ 
+ %ARB Roll Stiffness (Currently on Short)
+-C.front_ARB_roll_stiffness = 0;
+-C.rear_ARB_roll_stiffness = 0;%699;986;1493;
++C.front_ARB_roll_stiffness = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves_simplified.C_front_ARB_roll_stiffness;
++C.rear_ARB_roll_stiffness = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves_simplified.C_rear_ARB_roll_stiffness;%699;986;1493;
+ 
+ %Car Weight Distribution
+-C.weight_dist = 0.54; % percentage of weight in rear
++C.weight_dist = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves_simplified.C_weight_dist; % percentage of weight in rear
+ 
+ %Total Car Weight
+-C.mass = (395 + 150); % lbs
++C.mass = sharedStudyVehicle.studies.camber2_generateIdealCamberCurves_simplified.C_mass; % lbs
+ 
+ 
+ % [normal_load_vector, wheel_displacement_vector] = calcWheelForcesAndDisplacements(1, C);
+diff --git a/Full Car Models/CamberCurveGen2/test.m b/Full Car Models/CamberCurveGen2/test.m
+index 993f5f4addf3b1f60d2224bb6e8490029b6bea54..eb392e7804b5056d59637ba121184357b3757823 100644
+--- a/Full Car Models/CamberCurveGen2/test.m	
++++ b/Full Car Models/CamberCurveGen2/test.m	
+@@ -1,9 +1,13 @@
+-load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
++addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))),'Full Car Models','config'));
++sharedStudyTire = vdTireConfig([],[],false);
++sharedFitData = load(sharedStudyTire.studies.camber2_test.fit_1,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_x combined magic formula parameters
+ Fx_parameters = cell2mat(Xbestcell);
+-load('Fy_combined_parameters_16x10x7.5_LC0.mat'); % F_y combined magic formula parameters
++sharedFitData = load(sharedStudyTire.studies.camber2_test.fit_2,'Xbestcell');
++Xbestcell = sharedFitData.Xbestcell; % F_y combined magic formula parameters
+ Fy_parameters = cell2mat(Xbestcell);
+-friction_scaling_factor = 1.05*0.55;
+-p_i = 12; % tire pressure
++friction_scaling_factor = sharedStudyTire.studies.camber2_test.friction_scaling_factor;
++p_i = sharedStudyTire.studies.camber2_test.p_i; % tire pressure
+ 
+ %initialize tire object, used for camber evaluation
+ tire = BDITire2(3,p_i,Fx_parameters,Fy_parameters,friction_scaling_factor);
+diff --git a/Full Car Models/Suspension Transient Model/FullCarVibrationModel.m b/Full Car Models/Suspension Transient Model/FullCarVibrationModel.m
+index 4ca639ae34a99ce2760c86bdda97cc4b242a9c5a..bbe31ccf83bc8bcb7a98f5973dc0dac77dc22402 100644
+--- a/Full Car Models/Suspension Transient Model/FullCarVibrationModel.m	
++++ b/Full Car Models/Suspension Transient Model/FullCarVibrationModel.m	
+@@ -9,12 +9,7 @@ end
+ % input car parameters
+ carCell = carConfig();
+ car = carCell{1,1};
+-car.k = 200*4.45*39.37; % N/m
+-car.c = 10000; % N*s/m
+-car.Ixx = 60;
+-car.Iyy = 82;
+-car.k_rf = 18000; % Nm/rad
+-car.k_rr = 18000; % Nm/rad
++car = vdApplySuspensionConfig(car,'vibration');
+ car.TSmpc = .003; %has to be multiple of TSdyn
+ car.TSdyn = .0005;
+ car.Jm = 0; car.Jw = 1;
+@@ -23,7 +18,8 @@ n = 8000; % number of timesteps
+ 
+ k_f = car.k;
+ k_r = car.k;
+-k_tf = car.k*10;
++tireConfig = vdTireConfig([],[],false);
++k_tf = car.k*tireConfig.vertical_stiffness.vibration_spring_multiplier;
+ k_tr = k_tf;
+ c_f = car.c;
+ c_r = car.c;
+diff --git a/Full Car Models/carComponents/Camber_Evaluation.m b/Full Car Models/carComponents/Camber_Evaluation.m
+index 9af01c5cefee09f984c3b9e00ea445b5b282085c..7bc10749fa6ed3940998a8fe49b0f8913dfef2b9 100644
+--- a/Full Car Models/carComponents/Camber_Evaluation.m	
++++ b/Full Car Models/carComponents/Camber_Evaluation.m	
+@@ -19,8 +19,9 @@ function camber = Camber_Evaluation(long_vel, yaw_rate, steer_angle_1, steer_ang
+         betaL = config.camberModelData.betaL;
+         betaR = config.camberModelData.betaR;
+     else
+-        componentRoot = fileparts(mfilename('fullpath'));
+-        S = load(fullfile(componentRoot,'camber_models_fast.mat'),'betaL','betaR');
++        addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))),'config'));
++        sharedTire = vdTireConfig([],[],false);
++        S = load(sharedTire.camber_model_file,'betaL','betaR');
+         betaL = S.betaL;
+         betaR = S.betaR;
+     end
+diff --git a/Full Car Models/carComponents/Tire2.m b/Full Car Models/carComponents/Tire2.m
+index 1a5ba80676f45eacb6ee9053244bb08cbe9541e2..c5f1b1ae10d69cd72a2850f0097a1c908f309441 100644
+--- a/Full Car Models/carComponents/Tire2.m	
++++ b/Full Car Models/carComponents/Tire2.m	
+@@ -22,8 +22,9 @@ classdef Tire2
+             obj.Fy_parameters = Fy_parameters;
+             obj.friction_scaling_factor = friction_scaling_factor;
+             if nargin < 5 || isempty(camberData)
+-                componentRoot = fileparts(mfilename('fullpath'));
+-                camberData = load(fullfile(componentRoot,'camberratiossmoothed.mat'), ...
++                addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))),'config'));
++                sharedTire = vdTireConfig([],[],false);
++                camberData = load(sharedTire.camber_ratio_file, ...
+                     'camber2indices','camber4indices','camber2ratio','camber4ratio');
+             end
+             c = camberData;
+diff --git a/Full Car Models/carConfig.m b/Full Car Models/carConfig.m
+index ba0c9dcb2ac2c5aa480e37c52502992418b2cb13..3a9b85dab9ce871d536c77932deba33a0e6bd6e3 100644
+--- a/Full Car Models/carConfig.m	
++++ b/Full Car Models/carConfig.m	
+@@ -21,171 +21,19 @@ if nargin < 2, numSamples = []; end
+ if nargin < 3 || isempty(tireModel), tireModel = "legacy"; end
+ if nargin < 4 || isempty(uncertaintyMode), uncertaintyMode = "nominal"; end
+ 
+-% car parameters (updated 2/4/21)
+-carParams = struct();
+-carParams.mass = 162; % not including driver (366 lb)
+-carParams.driver_weight = 64; %
+-carParams.accel_driver_weight = 59; % (130 lb)
+-carParams.wheelbase = 62*0.0254; % 62 in
+-carParams.weight_dist = 0.512; % percentage of weight in rear
+-carParams.track_width = 47*0.0254; % (47 in)
+-carParams.wheel_radius = 0.1956; % loaded
+-% radius (7.7 in)
+-carParams.cg_height = [11.75] * 0.0254; % (12 in) % 0.2965
+-carParams.roll_center_height_front = 3.4 * 0.0254; %
+-carParams.roll_center_height_rear = 3.6 * 0.0254; %
+-carParams.R_sf = [0.34]; % proportion of roll stiffness in front (not same as LLTD)
+-carParams.I_zz = [83.28];%, 82.28]; %kg-m^2
+-carParams.ackermann = [1]; %expressed as exponent for current ackermann curve
+-carParams.camber_compliance_f =  0; %lateral deg/G
+-carParams.camber_compliance_r =  0;
+-% Camber kinematics. The front roll/steer surface remains the fitted TTC
+-% model; the rear roll gains below were formerly hidden in Camber_Evaluation.
+-% Ride-camber gains are signed deg/in of wheel bump compression: negative
+-% increases negative physical camber under bump. Leave at zero until the
+-% suspension kinematic model or measured data supplies them.
+-carParams.roll_gradient_deg_per_g = 0.68;
+-carParams.rear_roll_camber_outer_deg_per_deg = 0.58;
+-carParams.rear_roll_camber_inner_deg_per_deg = -0.592;
+-carParams.ride_camber_front_deg_per_in = 0;
+-carParams.ride_camber_rear_deg_per_in  = 0;
+-carParams.static_r_toe = [0]; %toe in deg, toe out - negative
+-
+-% Rotating inertia (kg-m^2).
+-%
+-% I_wheel is PER WHEEL and covers tyre, rim, hub and brake disc. I_driveline
+-% is referred to the CRANK -- crank, balancer, clutch basket and primary gear
+-% -- and gets multiplied by the square of the total reduction, so it matters
+-% far more in first gear than in fifth.
+-%
+-carParams.I_wheel = 0.164;
+-
+-% I_driveline is now ZERO, and that is a deliberate choice, not "no crank
+-% inertia".
+-carParams.I_driveline = 0;
+-
+-% Rolling resistance coefficient. Force = Crr*(M*g + downforce) opposing
+-% travel, added in equations() alongside aero drag.
+-%
+-% 0.014 is FITTED to the 75 m accel (4.80 s) with I_driveline held at 0, not
+-% measured. It is a plausible warm-slick value (FSAE run 0.012-0.030), but read
+-% it as the whole "extra longitudinal resistance" the accel needs, absorbing
+-% rolling resistance, driveline inertia and whatever else.
+-
+-carParams.Crr = 0.014;
+-% Shared QSS steering stop.  Keep this at the existing 25 degree bound until
+-% a measured physical steering stop is supplied.
+-carParams.qss_steering_limit_deg = 25;
+-
+-% Ride-height model. Rates are spring rates at the damper, with motion ratio
+-% defined as shock travel / wheel travel. The map looks up height changes in
+-% inches relative to its CFD reference, so static and map-reference heights
+-% both start at zero: the first aero query is the map's (0,0) row.
+-carParams.spring_rate_front_lb_in = 300;
+-carParams.spring_rate_rear_lb_in  = 250;
+-carParams.motion_ratio_front = 0.847;
+-carParams.motion_ratio_rear  = 0.984;
+-% Keep the default car as one calibrated baseline.  Ride-height variation is
+-% generated explicitly by aeroMapStarCases rather than multiplying every
+-% ordinary carConfig/DOE call into a 3-by-3 full-factorial grid.
+-carParams.static_front_ride_height_in = 0;
+-carParams.static_rear_ride_height_in  = 0;
+-
+-% aero parameters (updated 6/6/22)
+-aeroParams = struct();
+-aeroParams.cda = [1.48]; % m^2 (1.88)
+-aeroParams.cla = 3.969; % m^2 (3.45)
+-
+-aeroParams.cla_p_deg_p = 0;
+-aeroParams.D_p_deg_p = 0;
+-
+-aeroParams.accel_cda = [0.855]; % low drag
+-aeroParams.accel_cla = [2.37]; %
+-aeroParams.acc_cla_p_deg_p = 0; % NOT USED - see note above
+-aeroParams.acc_D_p_deg_p = 0;   % NOT USED - see note above
+-
+-aeroParams.distribution = 0.418; % proportion of downforce in front
+-% Main aero-model switch. true uses the ride-height coupled aeromap below;
+-% false uses the static cla/cda/distribution values immediately above.
+-aeroParams.use_aeromap = true;
+-aeroParams.map_path = fullfile(fileparts(mfilename('fullpath')),'aeromap_b26.csv');
+-% These are independent of the car's static ride heights. Set them to the
+-% CAD F/R heights used for CFD once known; leave both at zero to make the
+-% (0,0) aeromap point the static baseline.
+-aeroParams.map_reference_front_ride_height_in = 0;
+-aeroParams.map_reference_rear_ride_height_in  = 0;
+-
+-% KTM engine parameters (updated 5/1/19)
+-eParams = struct();
+-eParams.redline = 11500; % 11500   20000
+-eParams.shift_point = 10000; % approximate 10000   25000
+-% these parameters are non-iterable
+-eParams.gears = [32/16 30/18 28/20 26/22 24/24]; % updated KTM450[32/16 30/18 28/20 26/22 24/24]
+-eParams.primary_reduction = 76/32; % KTM450 76/32
+-eParams.torque_fn = KTM450(); %KTM450()
+-eParams.shift_time = 0.050; % seconds FOR UPSHIFT ONLY; 150ms for downshift
+-
+-% drivetrain parameters (updated 10/14/23)
+-DTparams = struct();
+-DTparams.final_drive = [33/11];% drivetrain sprocket ratio [33/11] 7.2918
+-DTparams.drivetrain_efficiency = [0.87]; % scales torque value  (0.87)
+-DTparams.G_d1 = 0; % differential torque transfer offset due to internal friction
+-DTparams.G_d2_overrun = 0; % differential torque transfer gain in overrun (not used right now)
+-TBR = 1;%1:0.5:4;
+-DTparams.G_d2_driving = (TBR-1)./(2+2*TBR); % differential torque transfer gain on power
+-
+-% brake parameters (updated 8/14/23)
+-Bparams = struct();
+-Bparams.brake_distribution = [0.75];% proportion of brake torque applied to front
+-Bparams.max_braking_torque = 840; % total braking torque (Nm)
+-
+-% tire parameters (updated 5/1/19)
+-tireParams = struct();
+-tireParams.gamma_f = -1; %linspace(0, -1.5, 8); % camber angle
+-tireParams.gamma_r = -1; %linspace(0, -1.5, 8); % camber angle
+-
+-tireParams.p_i = [12]; % pressure
+-% Keep the legacy Pacejka model as the default. The switchable LC0 model
+-% uses exact target-size lateral data and the larger same-compound TTC donor
+-% for longitudinal/combined-slip shape.
++% Shared defaults. Study overrides still belong in the sampling table.
++addpath(fullfile(fileparts(mfilename('fullpath')),'config'));
++cfg = vdVehicleConfig();
++carParams = cfg.car;
++aeroParams = cfg.aero;
++eParams = cfg.engine;
++eParams.torque_fn = eParams.torque_fn();
++DTparams = cfg.drivetrain;
++Bparams = cfg.brakes;
++tireParams = vdTireConfig(tireModel,uncertaintyMode);
+ tireParams.model_type = lower(string(tireModel));
+ tireParams.model_uncertainty = lower(string(uncertaintyMode));
+-tireParams.model_artifact = fullfile(fileparts(fileparts(mfilename('fullpath'))), ...
+-    'Magic Formula','experimental','lc0_nd_tire','results', ...
+-    'lc0_nd_pacejka_comparison.mat');
+-% these parameters are non-iterable
+-load('Fx_combined_parameters_run38_30.mat'); % F_x combined magic formula parameters
+-tireParams.Fx_parameters = cell2mat(Xbestcell);
+-load('Lapsim_Fy_combined_parameters_1965run15.mat'); % F_y combined magic formula parameters
+-tireParams.Fy_parameters = cell2mat(Xbestcell);
+-tireParams.friction_scaling_factor = 1; % scales tire forces to account for test/road surface difference
+-tireParams.grip_scaling_front = 0.6125;
+-tireParams.grip_scaling_rear  = 0.62;
+-
+-%% ---------------- event parameters ----------------
+-
+-eventParams = struct();
+-
+-% Course geometry and event format
+-eventParams.skidpad_radius  = 8.5;   % m, PATH radius the car drives. The inner
+-                                     % cone circle is 15.25 m across; 8.5 leaves
+-                                     % roughly a foot of margin to the cones.
+-eventParams.accel_length    = 75;    % m, timed acceleration run
+-eventParams.accel_rollout   = 2.19;  % m, run-up before the timing line on accel
+-eventParams.track_rollout   = 6;     % m, run-up before the line on autocross
+-                                     % and endurance
+-eventParams.endurance_laps  = 10;    % laps in the endurance event
+-
+-eventParams.driver_factor_autocross = 1.1;
+-eventParams.driver_factor_endurance = 1.085;
+-
+-% Scoring reference times: the fastest time recorded at the event, which the
+-% FSAE points formulas score against. Update these per event, not per car.
+-eventParams.winning_time = struct( ...
+-    'skidpad',   4.8, ...
+-    'accel',     4.206, ...     % Michigan 2024 (2023 was 4.174)
+-    'autocross', 46.911, ...    % Michigan 2024 (2023 was 45.886)
+-    'endurance', 1389.891);
++eventParams = cfg.events;
+ 
+ %% calibrated scalar baseline and requested cases
+ [baselineCars,baselineTable] = parameters_loop(carParams,aeroParams,eParams, ...
+diff --git a/Full Car Models/carConfigBaseline.m b/Full Car Models/carConfigBaseline.m
+index 491bc778e751ef55fa18aa64f1baa5949181703a..fb2b76da93fd858985476384cf007a2ed729ab65 100644
+--- a/Full Car Models/carConfigBaseline.m	
++++ b/Full Car Models/carConfigBaseline.m	
+@@ -2,132 +2,13 @@ function [car,config] = carConfigBaseline()
+ %CARCONFIGBASELINE Return the stable single-car ramp-speed baseline.
+ %   [CAR,CONFIG] = CARCONFIGBASELINE creates exactly one acceleration-oriented
+ %   Car object. CONFIG is the frozen, serializable source for future setup
+-%   duplication and editing; it is intentionally independent of carConfig.
++%   duplication and editing; it reads the same master defaults as carConfig.
+ 
+ root = fileparts(mfilename('fullpath'));
+-config = baselineConfig(root);
++addpath(fullfile(root,'config'));
++config = vdRampConfig();
+ defaultSetup = config.defaultSetup;
+ assets = rampSpeed.loadRampAssets(config,defaultSetup);
+ [car,~] = buildSingleRampCar(config.fixedParameters,defaultSetup, ...
+     assets.map,assets);
+ end
+-
+-function config = baselineConfig(root)
+-vehicle = struct();
+-vehicle.mass = 162;
+-vehicle.accel_driver_weight = 59;
+-vehicle.wheelbase = 62*0.0254;
+-vehicle.weight_dist = 0.512;
+-vehicle.track_width = 47*0.0254;
+-vehicle.wheel_radius = 0.1956;
+-vehicle.cg_height = 11.75*0.0254;
+-vehicle.roll_center_height_front = 3.4*0.0254;
+-vehicle.roll_center_height_rear = 3.6*0.0254;
+-vehicle.I_zz = 83.28;
+-vehicle.ackermann = 1;
+-vehicle.camber_compliance_f = 0;
+-vehicle.camber_compliance_r = 0;
+-vehicle.static_r_toe = 0;
+-vehicle.roll_gradient_deg_per_g = 0.68;
+-vehicle.rear_roll_camber_outer_deg_per_deg = 0.58;
+-vehicle.rear_roll_camber_inner_deg_per_deg = -0.592;
+-vehicle.ride_camber_front_deg_per_in = 0;
+-vehicle.ride_camber_rear_deg_per_in = 0;
+-vehicle.I_wheel = 0.164;
+-vehicle.I_driveline = 0;
+-vehicle.Crr = 0.014;
+-vehicle.qss_steering_limit_deg = 25;
+-vehicle.motion_ratio_front = 0.847;
+-vehicle.motion_ratio_rear = 0.984;
+-% The b26 aero map uses front/rear offsets at the axle stations. The physical
+-% ride-height measurements are taken at the CAD stations below, so translate
+-% the nominal CAD line to x=0 and x=wheelbase before defining the baseline.
+-cad_front_x_in = 4.378;
+-cad_rear_x_in = 59.75;
+-cad_front_z_in = 4.0;
+-cad_rear_z_in = 5.7;
+-front_axle_x_in = 0;
+-rear_axle_x_in = vehicle.wheelbase/0.0254;
+-cad_slope_in_per_in = (cad_rear_z_in-cad_front_z_in)/ ...
+-    (cad_rear_x_in-cad_front_x_in);
+-vehicle.map_reference_front_ride_height_in = cad_front_z_in + ...
+-    cad_slope_in_per_in*(front_axle_x_in-cad_front_x_in);
+-vehicle.map_reference_rear_ride_height_in = cad_rear_z_in + ...
+-    cad_slope_in_per_in*(rear_axle_x_in-cad_rear_x_in);
+-
+-vehicle.accel_cda = 0.855;
+-vehicle.accel_cla = 2.37;
+-vehicle.aero_distribution = 0.418;
+-vehicle.accel_cla_p_deg_p = 0;
+-vehicle.accel_D_p_deg_p = 0;
+-
+-vehicle.redline = 11500;
+-vehicle.shift_point = 10000;
+-vehicle.gears = [32/16 30/18 28/20 26/22 24/24];
+-vehicle.primary_reduction = 76/32;
+-vehicle.torque_fn = KTM450();
+-vehicle.shift_time = 0.050;
+-vehicle.final_drive = 33/11;
+-vehicle.drivetrain_efficiency = 0.87;
+-vehicle.G_d1 = 0;
+-vehicle.G_d2_overrun = 0;
+-vehicle.G_d2_driving = 0;
+-vehicle.brake_distribution = 0.75;
+-vehicle.max_braking_torque = 840;
+-vehicle.gamma_f = -1;
+-vehicle.gamma_r = -1;
+-
+-vehicle.p_i = 12;
+-componentRoot = fullfile(root,'carComponents');
+-fx = load(fullfile(componentRoot,'Fx_combined_parameters_run38_30.mat'), ...
+-    'Xbestcell');
+-fy = load(fullfile(componentRoot,'Lapsim_Fy_combined_parameters_1965run15.mat'), ...
+-    'Xbestcell');
+-vehicle.Fx_parameters = cell2mat(fx.Xbestcell);
+-vehicle.Fy_parameters = cell2mat(fy.Xbestcell);
+-vehicle.friction_scaling_factor = 1;
+-vehicle.grip_scaling_front = 0.6125;
+-vehicle.grip_scaling_rear = 0.62;
+-
+-% The current acceleration setup has no front ARB; keep this fixed while the
+-% rear ARB remains the discrete setup factor.
+-fixed = struct('vehicle',vehicle,'frontArbStiffness_NmPerRad',0);
+-config = struct( ...
+-    'schemaVersion',1, ...
+-    'baselineVersion',"ramp-baseline-3", ...
+-    'id',"ramp-baseline", ...
+-    'label',"Ramp-speed baseline", ...
+-    'source',"carConfigBaseline", ...
+-    'fixedParameters',fixed, ...
+-    'defaultMapPath',fullfile(root,'aeromap_b26.csv'));
+-
+-% These lists are deliberately owned here, not inherited from carConfig.
+-config.options = struct( ...
+-    'rearArbStiffness_NmPerRad',[0 699 986 1493], ...
+-    'frontSpringRate_lb_in',[250 300 350], ...
+-    'rearSpringRate_lb_in',[200 250 300]);
+-config.defaults = struct( ...
+-    'rearArbStiffness_NmPerRad',986, ...
+-    'frontSpringRate_lb_in',300, ...
+-    'rearSpringRate_lb_in',250, ...
+-    'frontRideHeight_in',vehicle.map_reference_front_ride_height_in, ...
+-    'rearRideHeight_in',vehicle.map_reference_rear_ride_height_in, ...
+-    'aeroMapId',"b26", ...
+-    'driverWeight_kg',vehicle.accel_driver_weight, ...
+-    'rearWeightDistribution_percent',vehicle.weight_dist*100);
+-config.defaultSetup = struct( ...
+-    'schemaVersion',1, ...
+-    'baselineVersion',config.baselineVersion, ...
+-    'id',config.id, ...
+-    'label',config.label, ...
+-    'source',config.source, ...
+-    'aeroMapId',config.defaults.aeroMapId, ...
+-    'driverWeight_kg',config.defaults.driverWeight_kg, ...
+-    'rearWeightDistribution_percent',config.defaults.rearWeightDistribution_percent, ...
+-    'rearArbStiffness_NmPerRad',config.defaults.rearArbStiffness_NmPerRad, ...
+-    'frontSpringRate_lb_in',config.defaults.frontSpringRate_lb_in, ...
+-    'rearSpringRate_lb_in',config.defaults.rearSpringRate_lb_in, ...
+-    'frontRideHeight_in',config.defaults.frontRideHeight_in, ...
+-    'rearRideHeight_in',config.defaults.rearRideHeight_in, ...
+-    'isBaseline',true);
+-end
+diff --git a/Full Car Models/config/README.md b/Full Car Models/config/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..aecf98a5f8c299f209f559eadd53f27256fd9b7e
+--- /dev/null
++++ b/Full Car Models/config/README.md	
+@@ -0,0 +1,67 @@
++# Shared inputs
++
++Edit `vdVehicleConfig.m` for vehicle, aero, drivetrain, event and suspension
++defaults. Edit `vdTireConfig.m` for tire settings and coefficient-file paths.
++Both full-car builders now read these files. Their existing call signatures,
++DOE overrides and optional tire-model selection are retained.
++
++This is an input-location refactor. Existing numeric values, unit conversions,
++tire coefficient files and calculation equations are retained.
++
++## Files
++
++| File | Purpose |
++| --- | --- |
++| `vdVehicleConfig.m` | Shared full-car defaults; ramp options; named suspension and historical study presets. |
++| `vdTireConfig.m` | Default tire settings and asset paths; historical fit choices and stiffness inputs. |
++| `vdRampConfig.m` | Adapts shared defaults to the existing ramp setup structure, including its CAD ride-height conversion. |
++| `vdApplySuspensionConfig.m` | Applies a study's existing suspension settings. |
++| `vdLoadTireParameters.m` | Loads and checks the full-car fit coefficients. |
++
++The full-car defaults remain 162 kg without driver, 62-inch wheelbase,
++47-inch track, 11.75-inch CG height and 12 psi tire pressure. `weight_dist`
++is the **rear** mass fraction. Geometry in `cfg.car` is in metres; the old
++study presets retain the units expected by their source scripts.
++
++The default coefficient files remain:
++
++- `carComponents/Fx_combined_parameters_run38_30.mat`
++- `carComponents/Lapsim_Fy_combined_parameters_1965run15.mat`
++- `carComponents/camberratiossmoothed.mat`
++- `carComponents/camber_models_fast.mat`
++
++Paths resolve relative to the repository. Use `vdTireConfig([],[],false)`
++when only settings or paths are needed; this avoids reading unrelated
++full-car coefficients. The normal call loads the coefficients as before.
++The engine torque function is stored as a handle and evaluated by the two
++builders, so geometry-only studies need no engine dependency.
++
++## Historical studies
++
++`cfg.studies` and `cfg.suspension` preserve the different setups already used
++by the bicycle, camber, roll, understeer and suspension scripts. These are
++not all the same car or the same tire-fit format. Edit the appropriate preset
++in the shared files; do not assume editing `cfg.car.mass` changes every old
++study's mass. Fields explicitly referencing another shared field follow it.
++The toe-compliance study's 520 lb vehicle mass and 535 lb cornering-load input
++are both retained; resolving that mismatch belongs in a separate audit.
++
++Full-car consumers already calling `carConfig` inherit its defaults. Functions
++accepting a car or parameter structure continue to use their caller's inputs.
++Archived/obsolete implementations, tire-fitting tools, measurement processing,
++saved car/model data and class compatibility defaults are outside this change.
++No SN6 substitution or TUM integration is included.
++
++## Checks and existing limitations
++
++See `tests/shared_inputs/README.md` at the repository root for the regression
++command and tested coverage. GNU Octave checks cover input equivalence, tire
++forces, suspension inputs and the vehicle numerical core. Production MATLAB
++table/aeromap entrypoints, apps and Simulink still need a MATLAB run.
++
++Existing issues remain separate: two historical bicycle scripts refer to the
++missing `Fy_pure_parameters_run24_17.mat`; `BicycleModelODE.m` expects `delta`
++from its caller; the decoupled modal plot refers to undefined `zeta`; and
++`FullCarVibrationModel.m` assigns `car.c`, which the current `Car` class does
++not declare. This refactor does not repair those scripts or establish the
++engineering accuracy of their original equations.
+diff --git a/Full Car Models/config/vdApplySuspensionConfig.m b/Full Car Models/config/vdApplySuspensionConfig.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..42e4b221744623923c138bd0a66c06924453aa68
+--- /dev/null
++++ b/Full Car Models/config/vdApplySuspensionConfig.m	
+@@ -0,0 +1,26 @@
++function car = vdApplySuspensionConfig(car,study)
++%VDAPPLYSUSPENSIONCONFIG Apply a named upstream suspension study setup.
++cfg = vdVehicleConfig();
++tire = vdTireConfig([],[],false);
++if ~isfield(cfg.suspension,study) || strcmp(study,'damping_file')
++    error('vdVehicleConfig:unknownStudy','Unknown suspension study: %s',study);
++end
++s = cfg.suspension.(study);
++fields = {'k','Ixx','Iyy','k_rf','k_rr'};
++for k = 1:numel(fields), car.(fields{k}) = s.(fields{k}); end
++if strcmp(study,'vibration')
++    car.c = s.c;
++    return
++end
++if strcmp(study,'transient')
++    car.k_tf = tire.vertical_stiffness.transient_N_per_m;
++else
++    car.k_tf = car.k*tire.vertical_stiffness.modal_spring_multiplier;
++end
++car.k_tr = car.k_tf;
++data = load(cfg.suspension.damping_file,'cdamp','rdamp',s.motion_ratio_front,s.motion_ratio_rear);
++car.c_compression = data.cdamp{s.damper_index}([1 2 10:10:end],:);
++car.c_rebound = data.rdamp{s.damper_index}([1 2 10:10:end],:);
++car.MR_F = data.(s.motion_ratio_front);
++car.MR_R = data.(s.motion_ratio_rear);
++end
+diff --git a/Full Car Models/config/vdLoadTireParameters.m b/Full Car Models/config/vdLoadTireParameters.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..3ada867050645942b560afb5989367fabe3714b3
+--- /dev/null
++++ b/Full Car Models/config/vdLoadTireParameters.m	
+@@ -0,0 +1,17 @@
++function parameters = vdLoadTireParameters(path,expectedCount)
++%VDLOADTIREPARAMETERS Load one fit without importing variables into a workspace.
++if ~isfile(path)
++    error('vdTireConfig:missingFile','Tire parameter file does not exist: %s',path);
++end
++data = load(path,'Xbestcell');
++if ~isfield(data,'Xbestcell') || ~iscell(data.Xbestcell)
++    error('vdTireConfig:badFile','Expected Xbestcell in %s.',path);
++end
++parameters = cell2mat(data.Xbestcell);
++if ~isnumeric(parameters) || ~isreal(parameters) || ...
++        ~isvector(parameters) || numel(parameters) ~= expectedCount || ...
++        any(~isfinite(parameters(:)))
++    error('vdTireConfig:badParameters', ...
++        'Expected %d finite real coefficients in %s.',expectedCount,path);
++end
++end
+diff --git a/Full Car Models/config/vdRampConfig.m b/Full Car Models/config/vdRampConfig.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..f4e391ecabd6d5bfd4041480daa8e8e415f9b34a
+--- /dev/null
++++ b/Full Car Models/config/vdRampConfig.m	
+@@ -0,0 +1,115 @@
++function config = vdRampConfig()
++%VDRAMPCONFIG Adapt shared defaults to the existing ramp-speed setup schema.
++shared = vdVehicleConfig();
++tire = vdTireConfig();
++vehicle = struct();
++vehicle.mass = shared.car.mass;
++vehicle.accel_driver_weight = shared.car.accel_driver_weight;
++vehicle.wheelbase = shared.car.wheelbase;
++vehicle.weight_dist = shared.car.weight_dist;
++vehicle.track_width = shared.car.track_width;
++vehicle.wheel_radius = shared.car.wheel_radius;
++vehicle.cg_height = shared.car.cg_height;
++vehicle.roll_center_height_front = shared.car.roll_center_height_front;
++vehicle.roll_center_height_rear = shared.car.roll_center_height_rear;
++vehicle.I_zz = shared.car.I_zz;
++vehicle.ackermann = shared.car.ackermann;
++vehicle.camber_compliance_f = shared.car.camber_compliance_f;
++vehicle.camber_compliance_r = shared.car.camber_compliance_r;
++vehicle.static_r_toe = shared.car.static_r_toe;
++vehicle.roll_gradient_deg_per_g = shared.car.roll_gradient_deg_per_g;
++vehicle.rear_roll_camber_outer_deg_per_deg = shared.car.rear_roll_camber_outer_deg_per_deg;
++vehicle.rear_roll_camber_inner_deg_per_deg = shared.car.rear_roll_camber_inner_deg_per_deg;
++vehicle.ride_camber_front_deg_per_in = shared.car.ride_camber_front_deg_per_in;
++vehicle.ride_camber_rear_deg_per_in = shared.car.ride_camber_rear_deg_per_in;
++vehicle.I_wheel = shared.car.I_wheel;
++vehicle.I_driveline = shared.car.I_driveline;
++vehicle.Crr = shared.car.Crr;
++vehicle.qss_steering_limit_deg = shared.car.qss_steering_limit_deg;
++vehicle.motion_ratio_front = shared.car.motion_ratio_front;
++vehicle.motion_ratio_rear = shared.car.motion_ratio_rear;
++% The b26 aero map uses front/rear offsets at the axle stations. The physical
++% ride-height measurements are taken at the CAD stations below, so translate
++% the nominal CAD line to x=0 and x=wheelbase before defining the baseline.
++cad_front_x_in = shared.ramp.cad_front_x_in;
++cad_rear_x_in = shared.ramp.cad_rear_x_in;
++cad_front_z_in = shared.ramp.cad_front_z_in;
++cad_rear_z_in = shared.ramp.cad_rear_z_in;
++front_axle_x_in = 0;
++rear_axle_x_in = vehicle.wheelbase/0.0254;
++cad_slope_in_per_in = (cad_rear_z_in-cad_front_z_in)/ ...
++    (cad_rear_x_in-cad_front_x_in);
++vehicle.map_reference_front_ride_height_in = cad_front_z_in + ...
++    cad_slope_in_per_in*(front_axle_x_in-cad_front_x_in);
++vehicle.map_reference_rear_ride_height_in = cad_rear_z_in + ...
++    cad_slope_in_per_in*(rear_axle_x_in-cad_rear_x_in);
++
++vehicle.accel_cda = shared.aero.accel_cda;
++vehicle.accel_cla = shared.aero.accel_cla;
++vehicle.aero_distribution = shared.aero.distribution;
++vehicle.accel_cla_p_deg_p = shared.aero.acc_cla_p_deg_p;
++vehicle.accel_D_p_deg_p = shared.aero.acc_D_p_deg_p;
++vehicle.redline = shared.engine.redline;
++vehicle.shift_point = shared.engine.shift_point;
++vehicle.gears = shared.engine.gears;
++vehicle.primary_reduction = shared.engine.primary_reduction;
++vehicle.torque_fn = shared.engine.torque_fn();
++vehicle.shift_time = shared.engine.shift_time;
++vehicle.final_drive = shared.drivetrain.final_drive;
++vehicle.drivetrain_efficiency = shared.drivetrain.drivetrain_efficiency;
++vehicle.G_d1 = shared.drivetrain.G_d1;
++vehicle.G_d2_overrun = shared.drivetrain.G_d2_overrun;
++vehicle.G_d2_driving = shared.drivetrain.G_d2_driving;
++vehicle.brake_distribution = shared.brakes.brake_distribution;
++vehicle.max_braking_torque = shared.brakes.max_braking_torque;
++vehicle.gamma_f = tire.gamma_f;
++vehicle.gamma_r = tire.gamma_r;
++vehicle.p_i = tire.p_i;
++vehicle.Fx_parameters = tire.Fx_parameters;
++vehicle.Fy_parameters = tire.Fy_parameters;
++vehicle.friction_scaling_factor = tire.friction_scaling_factor;
++vehicle.grip_scaling_front = tire.grip_scaling_front;
++vehicle.grip_scaling_rear = tire.grip_scaling_rear;
++
++% The current acceleration setup has no front ARB; keep this fixed while the
++% rear ARB remains the discrete setup factor.
++fixed = struct('vehicle',vehicle,'frontArbStiffness_NmPerRad',shared.ramp.frontArbStiffness_NmPerRad);
++config = struct( ...
++    'schemaVersion',1, ...
++    'baselineVersion',"ramp-baseline-3", ...
++    'id',"ramp-baseline", ...
++    'label',"Ramp-speed baseline", ...
++    'source',"carConfigBaseline", ...
++    'fixedParameters',fixed, ...
++    'defaultMapPath',shared.aero.map_path);
++
++% The master owns available choices and default spring/ARB settings.
++config.options = struct( ...
++    'rearArbStiffness_NmPerRad',shared.ramp.rearArbOptions_NmPerRad, ...
++    'frontSpringRate_lb_in',shared.ramp.frontSpringOptions_lb_in, ...
++    'rearSpringRate_lb_in',shared.ramp.rearSpringOptions_lb_in);
++config.defaults = struct( ...
++    'rearArbStiffness_NmPerRad',shared.ramp.rearArbStiffness_NmPerRad, ...
++    'frontSpringRate_lb_in',shared.car.spring_rate_front_lb_in, ...
++    'rearSpringRate_lb_in',shared.car.spring_rate_rear_lb_in, ...
++    'frontRideHeight_in',vehicle.map_reference_front_ride_height_in, ...
++    'rearRideHeight_in',vehicle.map_reference_rear_ride_height_in, ...
++    'aeroMapId',"b26", ...
++    'driverWeight_kg',vehicle.accel_driver_weight, ...
++    'rearWeightDistribution_percent',vehicle.weight_dist*100);
++config.defaultSetup = struct( ...
++    'schemaVersion',1, ...
++    'baselineVersion',config.baselineVersion, ...
++    'id',config.id, ...
++    'label',config.label, ...
++    'source',config.source, ...
++    'aeroMapId',config.defaults.aeroMapId, ...
++    'driverWeight_kg',config.defaults.driverWeight_kg, ...
++    'rearWeightDistribution_percent',config.defaults.rearWeightDistribution_percent, ...
++    'rearArbStiffness_NmPerRad',config.defaults.rearArbStiffness_NmPerRad, ...
++    'frontSpringRate_lb_in',config.defaults.frontSpringRate_lb_in, ...
++    'rearSpringRate_lb_in',config.defaults.rearSpringRate_lb_in, ...
++    'frontRideHeight_in',config.defaults.frontRideHeight_in, ...
++    'rearRideHeight_in',config.defaults.rearRideHeight_in, ...
++    'isBaseline',true);
++end
+diff --git a/Full Car Models/config/vdTireConfig.m b/Full Car Models/config/vdTireConfig.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..30652942b3e40499a526c6c83c6ea908074a37ff
+--- /dev/null
++++ b/Full Car Models/config/vdTireConfig.m	
+@@ -0,0 +1,130 @@
++function cfg = vdTireConfig(modelType,uncertaintyMode,loadParameters)
++%VDTIRECONFIG Shared tire settings and explicit repository asset locations.
++% The default preserves the existing legacy model and calibration.
++% Pass false as the third argument when only settings or asset paths are
++% needed. Historical models then do not depend on the full-car fit files.
++if nargin < 1 || isempty(modelType), modelType = 'legacy'; end
++if nargin < 2 || isempty(uncertaintyMode), uncertaintyMode = 'nominal'; end
++if nargin < 3, loadParameters = true; end
++fullCarRoot = fileparts(fileparts(mfilename('fullpath')));
++repoRoot = fileparts(fullCarRoot);
++components = fullfile(fullCarRoot,'carComponents');
++cfg = struct();
++cfg.gamma_f = -1;
++cfg.gamma_r = -1;
++cfg.p_i = 12; % psi (native fit pressure unit)
++cfg.model_type = lower(char(modelType));
++cfg.model_uncertainty = lower(char(uncertaintyMode));
++cfg.model_artifact = fullfile(repoRoot,'Magic Formula','experimental', ...
++    'lc0_nd_tire','results','lc0_nd_pacejka_comparison.mat');
++cfg.Fx_file = fullfile(components,'Fx_combined_parameters_run38_30.mat');
++cfg.Fy_file = fullfile(components,'Lapsim_Fy_combined_parameters_1965run15.mat');
++cfg.camber_ratio_file = fullfile(components,'camberratiossmoothed.mat');
++cfg.camber_model_file = fullfile(components,'camber_models_fast.mat');
++if loadParameters
++    cfg.Fx_parameters = vdLoadTireParameters(cfg.Fx_file,26);
++    cfg.Fy_parameters = vdLoadTireParameters(cfg.Fy_file,42);
++end
++cfg.friction_scaling_factor = 1;
++cfg.grip_scaling_front = 0.6125;
++cfg.grip_scaling_rear = 0.62;
++% Existing vertical stiffness choices for the suspension studies (N/m).
++cfg.vertical_stiffness.modal_spring_multiplier = 2;
++cfg.vertical_stiffness.transient_N_per_m = 724/0.0057101;
++cfg.vertical_stiffness.vibration_spring_multiplier = 10;
++
++% Existing alternate fit formats for historical standalone studies.
++cfg.legacyFits.fit1 = fullfile(repoRoot,'Bicycle Model','utilities','Fy_pure_parameters_run24_new2.mat');
++cfg.legacyFits.fit2 = fullfile(repoRoot,'Magic Formula','Parameters','Fy_pure_parameters_run24_17.mat');
++cfg.legacyFits.fit3 = fullfile(repoRoot,'Magic Formula','Parameters','Fy_pure_parameters_run24_18.mat');
++cfg.legacyFits.fit4 = fullfile(repoRoot,'Full Car Models','carComponents','Fy_combined_parameters_16x10x7.5_LC0.mat');
++cfg.legacyFits.fit5 = fullfile(repoRoot,'Full Car Models','CamberCurveGen','Fy_pure_parameters_1965run24.mat');
++
++% Standalone historical studies retain their original inputs and native units.
++% They are separate named presets, not a claim that they describe one car.
++% Bicycle Model/toe_compliance.m
++cfg.studies.Bicycle_Model_toe_compliance.fit_1 = cfg.legacyFits.fit1;
++% Bicycle Model/BicycleModel.m
++cfg.studies.Bicycle_Model_BicycleModel.fit_1 = cfg.legacyFits.fit1;
++% Bicycle Model/Simulink Models/BicycleModelSimv2.m
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.C_f = 136*4.448*180/pi/2;
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.C_r = 136*4.448*180/pi/2;
++% Bicycle Model/Simulink Models/NonLin_BicycleModel.m
++cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.C_f = 136*4.448*180/pi/2;
++cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.C_r = 136*4.448*180/pi/2;
++cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.fit_1 = cfg.legacyFits.fit2;
++% Bicycle Model/Simulink Models/FullCarModel.m
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.C_f = 136*4.448*180/pi/2;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.C_r = 136*4.448*180/pi/2;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.fit_1 = cfg.legacyFits.fit3;
++% Bicycle Model/Simulink Models/BicycleModelSim.m
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.C_f = 55000;
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.C_r = 60000;
++% Bicycle Model/ODE Formulation/BicycleModelODE.m
++cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.C_f = 136*4.448*180/pi;
++cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.C_r = 136*4.448*180/pi;
++cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.fit_1 = cfg.legacyFits.fit2;
++% understeer_bode.m
++cfg.studies.understeer_bode.Csum = 1.6e5;
++% understeer_budget.m
++cfg.studies.understeer_budget.CAF = 136*4.448;
++cfg.studies.understeer_budget.CCF = 0.313;
++cfg.studies.understeer_budget.NAF = 50.082;
++cfg.studies.understeer_budget.CGF = 47.657;
++cfg.studies.understeer_budget.NGF = 4.766;
++% Full Car Models/CamberCurveGen/generateIdealCamberCurves.m
++cfg.studies.camber1_generateIdealCamberCurves.friction_scaling_factor = 1.05*0.55;
++cfg.studies.camber1_generateIdealCamberCurves.p_i = cfg.p_i;
++cfg.studies.camber1_generateIdealCamberCurves.fit_1 = cfg.Fx_file;
++cfg.studies.camber1_generateIdealCamberCurves.fit_2 = cfg.legacyFits.fit4;
++% Full Car Models/CamberCurveGen/test.m
++cfg.studies.camber1_test.friction_scaling_factor = 1.05*0.55;
++cfg.studies.camber1_test.p_i = cfg.p_i;
++cfg.studies.camber1_test.fit_1 = cfg.Fx_file;
++cfg.studies.camber1_test.fit_2 = cfg.legacyFits.fit4;
++% Full Car Models/CamberCurveGen/Testcamber.m
++cfg.studies.camber1_Testcamber.friction_scaling_factor = 1.05*0.55;
++cfg.studies.camber1_Testcamber.p_i = cfg.p_i;
++cfg.studies.camber1_Testcamber.fit_1 = cfg.Fx_file;
++cfg.studies.camber1_Testcamber.fit_2 = cfg.legacyFits.fit5;
++% Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m
++cfg.studies.camber1_generateIdealCamberCurves_simplified.friction_scaling_factor = 1.05*0.55;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.p_i = cfg.p_i;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.fit_1 = cfg.Fx_file;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.fit_2 = cfg.legacyFits.fit4;
++% Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m
++cfg.studies.camber2_generateIdealCamberCurves.friction_scaling_factor = 1.05*0.55;
++cfg.studies.camber2_generateIdealCamberCurves.p_i = cfg.p_i;
++cfg.studies.camber2_generateIdealCamberCurves.fit_1 = cfg.Fx_file;
++cfg.studies.camber2_generateIdealCamberCurves.fit_2 = cfg.legacyFits.fit4;
++% Full Car Models/CamberCurveGen2/test.m
++cfg.studies.camber2_test.friction_scaling_factor = 1.05*0.55;
++cfg.studies.camber2_test.p_i = cfg.p_i;
++cfg.studies.camber2_test.fit_1 = cfg.Fx_file;
++cfg.studies.camber2_test.fit_2 = cfg.legacyFits.fit4;
++% Full Car Models/CamberCurveGen2/Testcamber.m
++cfg.studies.camber2_Testcamber.friction_scaling_factor = 1.05*0.55;
++cfg.studies.camber2_Testcamber.p_i = cfg.p_i;
++cfg.studies.camber2_Testcamber.fit_1 = cfg.Fx_file;
++cfg.studies.camber2_Testcamber.fit_2 = cfg.legacyFits.fit4;
++% Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m
++cfg.studies.camber2_generateIdealCamberCurves_simplified.friction_scaling_factor = 1.05*0.55;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.p_i = cfg.p_i;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.fit_1 = cfg.Fx_file;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.fit_2 = cfg.legacyFits.fit4;
++
++% Remaining paired and embedded inputs from the same historical studies.
++cfg.studies.understeer_budget.CAR = 136*4.448;
++cfg.studies.understeer_budget.CCR = 0.323;
++cfg.studies.understeer_budget.NAR = 42.897;
++cfg.studies.understeer_budget.CGR = 43.392;
++cfg.studies.understeer_budget.NGR = 4.339;
++cfg.studies.understeer_bode.K_deg_per_g = 0.18;
++cfg.studies.Bicycle_Model_BicycleModel.cornering_force_scale = 0.55;
++cfg.studies.Bicycle_Model_BicycleModel.cornering_load_mass_lb = 535;
++cfg.studies.Bicycle_Model_BicycleModel.cornering_pressure_psi = 12;
++cfg.studies.Bicycle_Model_toe_compliance.cornering_force_scale = 0.55;
++cfg.studies.Bicycle_Model_toe_compliance.cornering_load_mass_lb = 535;
++cfg.studies.Bicycle_Model_toe_compliance.cornering_pressure_psi = 12;
++
++end
+diff --git a/Full Car Models/config/vdVehicleConfig.m b/Full Car Models/config/vdVehicleConfig.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..840dc2c2a8bb5b5b391b51400b36f1f0469989e8
+--- /dev/null
++++ b/Full Car Models/config/vdVehicleConfig.m	
+@@ -0,0 +1,348 @@
++function cfg = vdVehicleConfig()
++%VDVEHICLECONFIG Master defaults for the repository's existing full-car model.
++% Values retain the upstream calibration. Units are documented at each field.
++% weight_dist is the REAR mass fraction. These are not SN6 specifications.
++% Study overrides are applied after loading this configuration.
++fullCarRoot = fileparts(fileparts(mfilename('fullpath')));
++
++% car parameters (updated 2/4/21)
++carParams = struct();
++carParams.mass = 162; % kg, excluding driver
++carParams.driver_weight = 64; % kg, lap driver
++carParams.accel_driver_weight = 59; % kg, acceleration driver
++carParams.wheelbase = 62*0.0254; % 62 in
++carParams.weight_dist = 0.512; % percentage of weight in rear
++carParams.track_width = 47*0.0254; % (47 in)
++carParams.wheel_radius = 0.1956; % loaded
++% radius (7.7 in)
++carParams.cg_height = [11.75] * 0.0254; % m, converted from 11.75 in
++carParams.roll_center_height_front = 3.4 * 0.0254; %
++carParams.roll_center_height_rear = 3.6 * 0.0254; %
++carParams.R_sf = [0.34]; % proportion of roll stiffness in front (not same as LLTD)
++carParams.I_zz = [83.28];%, 82.28]; %kg-m^2
++carParams.ackermann = [1]; %expressed as exponent for current ackermann curve
++carParams.camber_compliance_f =  0; %lateral deg/G
++carParams.camber_compliance_r =  0;
++% Camber kinematics. The front roll/steer surface remains the fitted TTC
++% model; the rear roll gains below were formerly hidden in Camber_Evaluation.
++% Ride-camber gains are signed deg/in of wheel bump compression: negative
++% increases negative physical camber under bump. Leave at zero until the
++% suspension kinematic model or measured data supplies them.
++carParams.roll_gradient_deg_per_g = 0.68;
++carParams.rear_roll_camber_outer_deg_per_deg = 0.58;
++carParams.rear_roll_camber_inner_deg_per_deg = -0.592;
++carParams.ride_camber_front_deg_per_in = 0;
++carParams.ride_camber_rear_deg_per_in  = 0;
++carParams.static_r_toe = [0]; %toe in deg, toe out - negative
++
++% Rotating inertia (kg-m^2).
++%
++% I_wheel is PER WHEEL and covers tyre, rim, hub and brake disc. I_driveline
++% is referred to the CRANK -- crank, balancer, clutch basket and primary gear
++% -- and gets multiplied by the square of the total reduction, so it matters
++% far more in first gear than in fifth.
++%
++carParams.I_wheel = 0.164;
++
++% I_driveline is now ZERO, and that is a deliberate choice, not "no crank
++% inertia".
++carParams.I_driveline = 0;
++
++% Rolling resistance coefficient. Force = Crr*(M*g + downforce) opposing
++% travel, added in equations() alongside aero drag.
++%
++% 0.014 is FITTED to the 75 m accel (4.80 s) with I_driveline held at 0, not
++% measured. It is a plausible warm-slick value (FSAE run 0.012-0.030), but read
++% it as the whole "extra longitudinal resistance" the accel needs, absorbing
++% rolling resistance, driveline inertia and whatever else.
++
++carParams.Crr = 0.014;
++% Shared QSS steering stop.  Keep this at the existing 25 degree bound until
++% a measured physical steering stop is supplied.
++carParams.qss_steering_limit_deg = 25;
++
++% Ride-height model. Rates are spring rates at the damper, with motion ratio
++% defined as shock travel / wheel travel. The map looks up height changes in
++% inches relative to its CFD reference, so static and map-reference heights
++% both start at zero: the first aero query is the map's (0,0) row.
++carParams.spring_rate_front_lb_in = 300;
++carParams.spring_rate_rear_lb_in  = 250;
++carParams.motion_ratio_front = 0.847;
++carParams.motion_ratio_rear  = 0.984;
++% Keep the default car as one calibrated baseline.  Ride-height variation is
++% generated explicitly by aeroMapStarCases rather than multiplying every
++% ordinary carConfig/DOE call into a 3-by-3 full-factorial grid.
++carParams.static_front_ride_height_in = 0;
++carParams.static_rear_ride_height_in  = 0;
++
++% aero parameters (updated 6/6/22)
++aeroParams = struct();
++aeroParams.cda = [1.48]; % m^2 (1.88)
++aeroParams.cla = 3.969; % m^2 (3.45)
++
++aeroParams.cla_p_deg_p = 0;
++aeroParams.D_p_deg_p = 0;
++
++aeroParams.accel_cda = [0.855]; % low drag
++aeroParams.accel_cla = [2.37]; %
++aeroParams.acc_cla_p_deg_p = 0; % NOT USED - see note above
++aeroParams.acc_D_p_deg_p = 0;   % NOT USED - see note above
++
++aeroParams.distribution = 0.418; % proportion of downforce in front
++% Main aero-model switch. true uses the ride-height coupled aeromap below;
++% false uses the static cla/cda/distribution values immediately above.
++aeroParams.use_aeromap = true;
++aeroParams.map_path = fullfile(fullCarRoot,'aeromap_b26.csv');
++% These are independent of the car's static ride heights. Set them to the
++% CAD F/R heights used for CFD once known; leave both at zero to make the
++% (0,0) aeromap point the static baseline.
++aeroParams.map_reference_front_ride_height_in = 0;
++aeroParams.map_reference_rear_ride_height_in  = 0;
++
++% KTM engine parameters (updated 5/1/19)
++eParams = struct();
++eParams.redline = 11500; % 11500   20000
++eParams.shift_point = 10000; % approximate 10000   25000
++% these parameters are non-iterable
++eParams.gears = [32/16 30/18 28/20 26/22 24/24]; % updated KTM450[32/16 30/18 28/20 26/22 24/24]
++eParams.primary_reduction = 76/32; % KTM450 76/32
++% Evaluate this in the builders, so geometry-only studies need no engine path.
++eParams.torque_fn = @KTM450; %KTM450()
++eParams.shift_time = 0.050; % seconds FOR UPSHIFT ONLY; 150ms for downshift
++
++% drivetrain parameters (updated 10/14/23)
++DTparams = struct();
++DTparams.final_drive = [33/11];% drivetrain sprocket ratio [33/11] 7.2918
++DTparams.drivetrain_efficiency = [0.87]; % scales torque value  (0.87)
++DTparams.G_d1 = 0; % differential torque transfer offset due to internal friction
++DTparams.G_d2_overrun = 0; % differential torque transfer gain in overrun (not used right now)
++TBR = 1;%1:0.5:4;
++DTparams.G_d2_driving = (TBR-1)./(2+2*TBR); % differential torque transfer gain on power
++
++% brake parameters (updated 8/14/23)
++Bparams = struct();
++Bparams.brake_distribution = [0.75];% proportion of brake torque applied to front
++Bparams.max_braking_torque = 840; % total braking torque (Nm)
++
++%% ---------------- event parameters ----------------
++
++eventParams = struct();
++
++% Course geometry and event format
++eventParams.skidpad_radius  = 8.5;   % m, PATH radius the car drives. The inner
++                                     % cone circle is 15.25 m across; 8.5 leaves
++                                     % roughly a foot of margin to the cones.
++eventParams.accel_length    = 75;    % m, timed acceleration run
++eventParams.accel_rollout   = 2.19;  % m, run-up before the timing line on accel
++eventParams.track_rollout   = 6;     % m, run-up before the line on autocross
++                                     % and endurance
++eventParams.endurance_laps  = 10;    % laps in the endurance event
++
++eventParams.driver_factor_autocross = 1.1;
++eventParams.driver_factor_endurance = 1.085;
++
++% Scoring reference times: the fastest time recorded at the event, which the
++% FSAE points formulas score against. Update these per event, not per car.
++eventParams.winning_time = struct( ...
++    'skidpad',   4.8, ...
++    'accel',     4.206, ...     % Michigan 2024 (2023 was 4.174)
++    'autocross', 46.911, ...    % Michigan 2024 (2023 was 45.886)
++    'endurance', 1389.891);
++
++
++cfg = struct('car',carParams,'aero',aeroParams,'engine',eParams, ...
++    'drivetrain',DTparams,'brakes',Bparams,'events',eventParams);
++
++% Ramp-speed setup choices. Shared vehicle and tire values come from the
++% same defaults as carConfig; these are the existing ramp-specific choices.
++cfg.ramp.cad_front_x_in = 4.378;
++cfg.ramp.cad_rear_x_in = 59.75;
++cfg.ramp.cad_front_z_in = 4.0;
++cfg.ramp.cad_rear_z_in = 5.7;
++cfg.ramp.frontArbStiffness_NmPerRad = 0;
++cfg.ramp.rearArbStiffness_NmPerRad = 986;
++cfg.ramp.rearArbOptions_NmPerRad = [0 699 986 1493];
++cfg.ramp.frontSpringOptions_lb_in = [250 300 350];
++cfg.ramp.rearSpringOptions_lb_in = [200 250 300];
++
++% Historical suspension studies used different setups. Keep the choices
++% explicit here instead of silently replacing one study's values with another.
++s = struct('k',250*4.45*39.37,'Ixx',60,'Iyy',82, ...
++    'k_rf',3300*6.474,'k_rr',3200*6.474,'damper_index',9, ...
++    'motion_ratio_front','MR18Front','motion_ratio_rear','MR18Front');
++cfg.suspension.modal = s;
++s.k_rf = 3000*6.474; s.k_rr = 7000*6.474; s.damper_index = 6;
++cfg.suspension.decoupled = s;
++s.k = 200*4.45*39.37;
++cfg.suspension.transient = s;
++cfg.suspension.vibration = struct('k',s.k,'c',10000, ...
++    'Ixx',s.Ixx,'Iyy',s.Iyy,'k_rf',18000,'k_rr',18000);
++cfg.suspension.damping_file = fullfile(fullCarRoot, ...
++    'Suspension Transient Model','dampingcurves.mat');
++
++% Standalone historical studies retain their original inputs and native units.
++% They are separate named presets, not a claim that they describe one car.
++% Bicycle Model/toe_compliance.m
++cfg.studies.Bicycle_Model_toe_compliance.weight_dist = 0.51;
++cfg.studies.Bicycle_Model_toe_compliance.m = 520*0.453592;
++cfg.studies.Bicycle_Model_toe_compliance.L = 62 * 0.0254;
++cfg.studies.Bicycle_Model_toe_compliance.I_zz = cfg.car.I_zz;
++cfg.studies.Bicycle_Model_toe_compliance.N = 4;
++% Bicycle Model/BicycleModel.m
++cfg.studies.Bicycle_Model_BicycleModel.weight_dist = 0.54;
++cfg.studies.Bicycle_Model_BicycleModel.m = 535*0.453592;
++cfg.studies.Bicycle_Model_BicycleModel.L = 1.6;
++cfg.studies.Bicycle_Model_BicycleModel.I_zz = cfg.car.I_zz;
++cfg.studies.Bicycle_Model_BicycleModel.N = 4;
++% Bicycle Model/YawResponseTimePlotter.m
++cfg.studies.Bicycle_Model_YawResponseTimePlotter.weight_dist = 0.51;
++cfg.studies.Bicycle_Model_YawResponseTimePlotter.m = 535*0.453592;
++cfg.studies.Bicycle_Model_YawResponseTimePlotter.L = 1.524;
++cfg.studies.Bicycle_Model_YawResponseTimePlotter.I_zz = cfg.car.I_zz;
++cfg.studies.Bicycle_Model_YawResponseTimePlotter.N = 4;
++% Bicycle Model/LatAccelResponseTimePlotter.m
++cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.weight_dist = 0.51;
++cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.m = 535*0.453592;
++cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.L = 1.524;
++cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.I_zz = cfg.car.I_zz;
++cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.N = 4;
++% Bicycle Model/Simulink Models/BicycleModelSimv2.m
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.weight_dist = 0.3;
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.m = 242.6718;
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.L = 1.524;
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.I_zz = cfg.car.I_zz;
++% Bicycle Model/Simulink Models/NonLin_BicycleModel.m
++cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.weight_dist = 0.55;
++cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.m = 242.6718;
++cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.L = 1.524;
++cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.I_zz = cfg.car.I_zz;
++% Bicycle Model/Simulink Models/FullCarModel.m
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.weight_dist = 0.6;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.m = 242.6718;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.L = 1.524;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.I_zz = cfg.car.I_zz;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.track_width_f = 1.1938;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.track_width_r = 1.1938;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.cla = 1.771;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.cp = 0.5;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.LLTD = 0.6;
++cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.cg_height = 0.3048;
++% Bicycle Model/Simulink Models/BicycleModelSim.m
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.m = 1500;
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.L = 2500;
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.I_zz = 2500;
++% Bicycle Model/ODE Formulation/BicycleModelODE.m
++cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.weight_dist = 0.3;
++cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.m = 242.6718;
++cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.L = 1.524;
++cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.I_zz = cfg.car.I_zz;
++cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.N = 16;
++% roll.m
++cfg.studies.roll.mass = 370 * 0.45359;
++cfg.studies.roll.r_g = 0.85;
++cfg.studies.roll.k_ride_f = 23177.80762;
++cfg.studies.roll.k_ride_r = 26147.44256;
++cfg.studies.roll.cLa = 3.969;
++cfg.studies.roll.CoP = 0.418;
++cfg.studies.roll.rho = 1.2;
++% understeer_bode.m
++cfg.studies.understeer_bode.L = 62 * 0.0254;
++cfg.studies.understeer_bode.m = 535 * 0.453592;
++cfg.studies.understeer_bode.Iz = cfg.car.I_zz;
++% understeer_budget.m
++cfg.studies.understeer_budget.m = 168;
++cfg.studies.understeer_budget.L = 62 * 25.4;
++cfg.studies.understeer_budget.weight_dist = 0.51;
++cfg.studies.understeer_budget.WUF = 17.07;
++cfg.studies.understeer_budget.EF = 0.001;
++cfg.studies.understeer_budget.GF = 0.789;
++cfg.studies.understeer_budget.KF = 2288;
++cfg.studies.understeer_budget.EYF = 0.191;
++cfg.studies.understeer_budget.GYF = 0.291;
++cfg.studies.understeer_budget.ENF = 0.774;
++cfg.studies.understeer_budget.GNF = 0.022;
++cfg.studies.understeer_budget.ROLLpg = 4.47;
++% calcWheelForcesAndDisplacements_pitch.m
++cfg.studies.calcWheelForcesAndDisplacements_pitch.front_anti_lift = 0;
++cfg.studies.calcWheelForcesAndDisplacements_pitch.front_anti_dive = .545;
++cfg.studies.calcWheelForcesAndDisplacements_pitch.rear_anti_lift = 1.02;
++cfg.studies.calcWheelForcesAndDisplacements_pitch.rear_anti_squat = .457;
++% Full Car Models/CamberCurveGen/generateIdealCamberCurves.m
++cfg.studies.camber1_generateIdealCamberCurves.C_front_width = cfg.car.track_width/0.0254;
++cfg.studies.camber1_generateIdealCamberCurves.C_rear_width = cfg.car.track_width/0.0254;
++cfg.studies.camber1_generateIdealCamberCurves.C_front_spring_roll_stiffness = 3000;
++cfg.studies.camber1_generateIdealCamberCurves.C_rear_spring_roll_stiffness = 3000;
++cfg.studies.camber1_generateIdealCamberCurves.C_front_ARB_roll_stiffness = 0;
++cfg.studies.camber1_generateIdealCamberCurves.C_rear_ARB_roll_stiffness = 0;
++cfg.studies.camber1_generateIdealCamberCurves.C_weight_dist = 0.54;
++cfg.studies.camber1_generateIdealCamberCurves.C_mass = (395 + 150);
++% Full Car Models/CamberCurveGen/Testcamber.m
++cfg.studies.camber1_Testcamber.C_front_width = cfg.car.track_width/0.0254;
++cfg.studies.camber1_Testcamber.C_rear_width = cfg.car.track_width/0.0254;
++cfg.studies.camber1_Testcamber.C_wheelbase = cfg.car.wheelbase/0.0254;
++cfg.studies.camber1_Testcamber.C_front_spring_roll_stiffness = 2860;
++cfg.studies.camber1_Testcamber.C_rear_spring_roll_stiffness = 2911;
++cfg.studies.camber1_Testcamber.C_front_bump_stiffness = 2*191.66;
++cfg.studies.camber1_Testcamber.C_rear_bump_stiffness = 2*196.02;
++cfg.studies.camber1_Testcamber.C_front_ARB_roll_stiffness = 0;
++cfg.studies.camber1_Testcamber.C_rear_ARB_roll_stiffness = 986;
++cfg.studies.camber1_Testcamber.C_weight_dist = 0.54;
++cfg.studies.camber1_Testcamber.C_mass = (395 + 150)*4.44;
++cfg.studies.camber1_Testcamber.front_anti_dive = .545;
++cfg.studies.camber1_Testcamber.rear_anti_lift = 1.02;
++cfg.studies.camber1_Testcamber.rear_anti_squat = .457;
++% Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m
++cfg.studies.camber1_generateIdealCamberCurves_simplified.C_front_width = cfg.car.track_width/0.0254;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.C_rear_width = cfg.car.track_width/0.0254;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.C_front_spring_roll_stiffness = 3000;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.C_rear_spring_roll_stiffness = 0;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.C_front_ARB_roll_stiffness = 0;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.C_rear_ARB_roll_stiffness = 0;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.C_weight_dist = 0.54;
++cfg.studies.camber1_generateIdealCamberCurves_simplified.C_mass = (395 + 150);
++% Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m
++cfg.studies.camber2_generateIdealCamberCurves.C_front_width = cfg.car.track_width/0.0254;
++cfg.studies.camber2_generateIdealCamberCurves.C_rear_width = cfg.car.track_width/0.0254;
++cfg.studies.camber2_generateIdealCamberCurves.C_front_spring_roll_stiffness = 3000;
++cfg.studies.camber2_generateIdealCamberCurves.C_rear_spring_roll_stiffness = 3000;
++cfg.studies.camber2_generateIdealCamberCurves.C_front_ARB_roll_stiffness = 0;
++cfg.studies.camber2_generateIdealCamberCurves.C_rear_ARB_roll_stiffness = 0;
++cfg.studies.camber2_generateIdealCamberCurves.C_weight_dist = 0.54;
++cfg.studies.camber2_generateIdealCamberCurves.C_mass = (395 + 150);
++% Full Car Models/CamberCurveGen2/Testcamber.m
++cfg.studies.camber2_Testcamber.C_front_width = cfg.car.track_width/0.0254;
++cfg.studies.camber2_Testcamber.C_rear_width = cfg.car.track_width/0.0254;
++cfg.studies.camber2_Testcamber.C_front_spring_roll_stiffness = 2860;
++cfg.studies.camber2_Testcamber.C_rear_spring_roll_stiffness = 2911;
++cfg.studies.camber2_Testcamber.C_front_ARB_roll_stiffness = 0;
++cfg.studies.camber2_Testcamber.C_rear_ARB_roll_stiffness = 986;
++cfg.studies.camber2_Testcamber.C_weight_dist = 0.54;
++cfg.studies.camber2_Testcamber.C_mass = 395 + 150;
++% Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m
++cfg.studies.camber2_generateIdealCamberCurves_simplified.C_front_width = cfg.car.track_width/0.0254;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.C_rear_width = cfg.car.track_width/0.0254;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.C_front_spring_roll_stiffness = 3000;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.C_rear_spring_roll_stiffness = 0;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.C_front_ARB_roll_stiffness = 0;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.C_rear_ARB_roll_stiffness = 0;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.C_weight_dist = 0.54;
++cfg.studies.camber2_generateIdealCamberCurves_simplified.C_mass = (395 + 150);
++
++% Remaining paired and embedded inputs from the same historical studies.
++cfg.studies.understeer_budget.FYRperg = 8430.9;
++cfg.studies.understeer_budget.NFperg = -403.16;
++cfg.studies.understeer_budget.NRperg = -317.93;
++cfg.studies.understeer_budget.WR = 885.000;
++cfg.studies.understeer_budget.WUR = 99.000;
++cfg.studies.understeer_budget.ER = 0.055;
++cfg.studies.understeer_budget.GR = -0.720;
++cfg.studies.understeer_budget.KR = 367;
++cfg.studies.understeer_budget.EYR = 0.045;
++cfg.studies.understeer_budget.GYR = -0.328;
++cfg.studies.understeer_budget.ENR = -0.113;
++cfg.studies.understeer_budget.GNR = 0.023;
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.a = 1.1;
++cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.b = 1.6;
++cfg.studies.understeer_bode.weight_dist = 0.512;
++
++end
+diff --git a/Full Car Models/entrypoints/ModalAnalysis.m b/Full Car Models/entrypoints/ModalAnalysis.m
+index 63cc767cf484ce0f86114233392ce4aa31f44a03..9858f842272a45ee316f61073b26a2d2994c20d2 100644
+--- a/Full Car Models/entrypoints/ModalAnalysis.m	
++++ b/Full Car Models/entrypoints/ModalAnalysis.m	
+@@ -4,29 +4,10 @@ clear; close all; clc
+ entrypointDir = fileparts(mfilename('fullpath'));
+ run(fullfile(entrypointDir, 'bootstrap.m'));
+ 
+-load(fullfile(fullCarModelsDir, 'Suspension Transient Model', 'dampingcurves.mat'));
+ % input car parameters
+ carCell = carConfig();
+ car = carCell{1,1};
+-car.k = 250*4.45*39.37; % N/m
+-car.k_tf = car.k*2; % tire stiffness (N/m)
+-car.k_tr = car.k_tf;
+-
+-% LSC-HSC, LSR_HSR
+-% LS ticks from fully clockwise
+-% HS turns from fully counter clockwise
+-% C12/R12 valving
+-% 1:5 HS sweep (0-x 0-x), x = 4.3 3 2 1 0
+-% 6:11 LS sweep (x-4.3 x-4.3), x = 2 4 6 10 15 25
+-car.c_compression = cdamp{9}([1 2 10:10:end],:); % damping curves ([in/s lbf])
+-car.c_rebound = rdamp{9}([1 2 10:10:end],:);
+-
+-car.Ixx = 60;
+-car.Iyy = 82;
+-car.k_rf = 3300*6.474; % in-lb/deg -> Nm/rad
+-car.k_rr = 3200*6.474; % Nm/rad
+-car.MR_F = MR18Front;
+-car.MR_R = MR18Front;
++car = vdApplySuspensionConfig(car,'modal');
+ 
+ %% Modal Analysis (Undamped)
+ tirePos = zeros(1,4);
+diff --git a/Full Car Models/entrypoints/ModalAnalysisDecoupled.m b/Full Car Models/entrypoints/ModalAnalysisDecoupled.m
+index 0a2916ae38955fc575871bdc3486cba3042d28db..9ddd9b0e3ae8e1c216ac0ccb94928844e4a66d73 100644
+--- a/Full Car Models/entrypoints/ModalAnalysisDecoupled.m	
++++ b/Full Car Models/entrypoints/ModalAnalysisDecoupled.m	
+@@ -4,29 +4,10 @@ clear; %close all; clc
+ entrypointDir = fileparts(mfilename('fullpath'));
+ run(fullfile(entrypointDir, 'bootstrap.m'));
+ 
+-load(fullfile(fullCarModelsDir, 'Suspension Transient Model', 'dampingcurves.mat'));
+ % input car parameters
+ carCell = carConfig();
+ car = carCell{1,1};
+-car.k = 250*4.45*39.37; % N/m
+-car.k_tf = car.k*2; % tire stiffness (N/m)
+-car.k_tr = car.k_tf;
+-
+-% LSC-HSC, LSR_HSR
+-% LS ticks from fully clockwise
+-% HS turns from fully counter clockwise
+-% C12/R12 valving
+-% 1:5 HS sweep (0-x 0-x), x = 4.3 3 2 1 0
+-% 6:11 LS sweep (x-4.3 x-4.3), x = 2 4 6 10 15 25
+-car.c_compression = cdamp{6}([1 2 10:10:end],:); % damping curves ([in/s lbf])
+-car.c_rebound = rdamp{6}([1 2 10:10:end],:);
+-
+-car.Ixx = 60;
+-car.Iyy = 82;
+-car.k_rf = 3000*6.474; % Nm/rad
+-car.k_rr = 7000*6.474; % Nm/rad
+-car.MR_F = MR18Front;
+-car.MR_R = MR18Front;
++car = vdApplySuspensionConfig(car,'decoupled');
+ 
+ %% Modal Analysis (Undamped)
+ tirePos = zeros(1,4);
+diff --git a/Full Car Models/entrypoints/transientSim.m b/Full Car Models/entrypoints/transientSim.m
+index 068d0e8a7f9fa836e86907089cbf97a1c4d8c6f2..4b000f46418b8b5c98a51a7f4ebe93b0cead8c89 100644
+--- a/Full Car Models/entrypoints/transientSim.m	
++++ b/Full Car Models/entrypoints/transientSim.m	
+@@ -2,32 +2,11 @@ clear; clc
+ entrypointDir = fileparts(mfilename('fullpath'));
+ run(fullfile(entrypointDir, 'bootstrap.m'));
+ 
+-load(fullfile(fullCarModelsDir, 'Suspension Transient Model', 'dampingcurves.mat'));
+ 
+ % input car parameters
+ carCell = carConfig();
+ car = carCell{1,1};
+-car.k = 200*4.45*39.37; % N/m
+-car.k_tf = 724 /0.0057101; % tire stiffness (N/m), 16" LC0, https://www.hoosiertire.com/contingency_rates/fsae/
+-car.k_tr = car.k_tf;
+-
+-% LSC-HSC, LSR_HSR
+-% LS ticks from fully clockwise
+-% HS turns from fully couter clockwise
+-% C12/R12 valving
+-% 1:5 HS sweep (0-x 0-x), x = 4.3 3 2 1 0
+-% 6:11 LS sweep (x-4.3 x-4.3), x = 0 2 4 6 10 15 25
+-car.c_compression = cdamp{6}([1 2 10:10:end],:); % damping curves ([in/s lbf])
+-car.c_rebound = rdamp{6}([1 2 10:10:end],:);
+-
+-car.k_rf = 3000*6.474; % Nm/rad
+-car.k_rr = 7000*6.474; % Nm/rad
+-
+-car.Ixx = 60;
+-car.Iyy = 82;
+-
+-car.MR_F = MR18Front;
+-car.MR_R = MR18Front;
++car = vdApplySuspensionConfig(car,'transient');
+ car.Jm = 0; car.Jw = 1;
+ 
+ car.TSmpc = .003; %has to be multiple of TSdyn
+diff --git a/Full Car Models/utilities/parameters_loop.m b/Full Car Models/utilities/parameters_loop.m
+index 3360ffe7bbbb663c6fbe6303105307b2852e3f69..173fd7e151b6fa44f57ab878e0ca7862f46b6318 100644
+--- a/Full Car Models/utilities/parameters_loop.m	
++++ b/Full Car Models/utilities/parameters_loop.m	
+@@ -63,10 +63,10 @@ end
+ % is on the QSS equation hot path, so it must never read a MAT file for each
+ % force evaluation.  The same cache also avoids rebuilding the legacy tire
+ % camber interpolant once per car.
+-componentRoot = fullfile(fileparts(mfilename('fullpath')),'..','carComponents');
+-camberModelData = load(fullfile(componentRoot,'camber_models_fast.mat'), ...
++sharedTire = vdTireConfig([],[],false);
++camberModelData = load(sharedTire.camber_model_file, ...
+     'betaL','betaR');
+-camberRatioData = load(fullfile(componentRoot,'camberratiossmoothed.mat'), ...
++camberRatioData = load(sharedTire.camber_ratio_file, ...
+     'camber2indices','camber4indices','camber2ratio','camber4ratio');
+ 
+ for i = 1:numRuns
+diff --git a/calcWheelForcesAndDisplacements_pitch.m b/calcWheelForcesAndDisplacements_pitch.m
+index f2e2f38436796c999f43ed0286f089e32c09786f..0d79ce1fc1c9e50fbe7f91a04dbfe0d83393a3d9 100644
+--- a/calcWheelForcesAndDisplacements_pitch.m
++++ b/calcWheelForcesAndDisplacements_pitch.m
+@@ -5,10 +5,12 @@ function [normal_load_vector, wheel_displacement_vector] = calcWheelForcesAndDis
+     wheel_displacement_vector = zeros(4,1);
+     normal_load_vector = zeros(4,1);
+ 
+-    front_anti_lift = 0;
+-    front_anti_dive = .545;
+-    rear_anti_lift = 1.02;
+-    rear_anti_squat = .457;
++    addpath(fullfile(fileparts(mfilename('fullpath')),'Full Car Models','config'));
++    sharedStudyVehicle = vdVehicleConfig();
++    front_anti_lift = sharedStudyVehicle.studies.calcWheelForcesAndDisplacements_pitch.front_anti_lift;
++    front_anti_dive = sharedStudyVehicle.studies.calcWheelForcesAndDisplacements_pitch.front_anti_dive;
++    rear_anti_lift = sharedStudyVehicle.studies.calcWheelForcesAndDisplacements_pitch.rear_anti_lift;
++    rear_anti_squat = sharedStudyVehicle.studies.calcWheelForcesAndDisplacements_pitch.rear_anti_squat;
+ 
+     if pitch_angle<0
+         %disp_f/disp_r
+diff --git a/roll.m b/roll.m
+index 044d034b41e5ad9125d995a31eca1d621f24c61a..98d408267c00368c22a80d8e94e82c9d17486ae1 100644
+--- a/roll.m
++++ b/roll.m
+@@ -1,13 +1,15 @@
+ %%% INPUTS %%%
+-mass = 370 * 0.45359; %370 lbs
++addpath(fullfile(fileparts(mfilename('fullpath')),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++mass = sharedStudyVehicle.studies.roll.mass; %370 lbs
+ g = 9.8;
+-r_g = 0.85; %roll gradient
+-k_ride_f = 23177.80762; %n/m
+-k_ride_r = 26147.44256;
++r_g = sharedStudyVehicle.studies.roll.r_g; %roll gradient
++k_ride_f = sharedStudyVehicle.studies.roll.k_ride_f; %n/m
++k_ride_r = sharedStudyVehicle.studies.roll.k_ride_r;
+ 
+-cLa = 3.969;
+-CoP = 0.418; %percent forward
+-rho = 1.2;
++cLa = sharedStudyVehicle.studies.roll.cLa;
++CoP = sharedStudyVehicle.studies.roll.CoP; %percent forward
++rho = sharedStudyVehicle.studies.roll.rho;
+ 
+ skidpad_r = 8;
+ skidpad_time = 5; %s
+diff --git a/tests/shared_inputs/README.md b/tests/shared_inputs/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..b8461064a717acb14bba10c567a627cc15f0fe94
+--- /dev/null
++++ b/tests/shared_inputs/README.md
+@@ -0,0 +1,38 @@
++# Shared-input regression checks
++
++From the repository root in MATLAB or GNU Octave:
++
++```matlab
++addpath(fullfile(pwd,'tests','shared_inputs'));
++results = runSharedInputChecks();
++```
++
++The fixture was captured from commit
++`0b02ea46df58c6f03434c3f0c7021880487804ed` and independently reproduced from
++current master `144b3548425d05988668fcc93e3b2b5bd0830676` on 2026-10-15.
++Those commits have identical calculation code and tire assets. The capture
++normalizes repository paths and represents MATLAB strings as character data.
++It includes complete main/ramp defaults and 375 tire states, with both Fx and
++Fy outputs from the original Tire2 implementation.
++
++Checks cover:
++
++- Main and complete ramp default equivalence, including the steering limit
++  and CAD-to-axle ride-height conversion.
++- 185 relocated historical numeric inputs against their original expressions.
++- Propagation of temporary master mass/pressure edits; settings-only access
++  without the full-car coefficient files. Temporary files and paths are restored.
++- Missing, non-finite and wrong-length coefficient validation.
++- 375 tire states and an independent nested-interpolation comparison.
++- Three Car suspension presets and finite 7-DOF matrices. The vibration
++  preset is checked on a struct because upstream Car has no `c` property.
++- Nine Car.equations evaluations and a two-second, 101-sample steering response.
++
++GNU Octave 8.4.0 passed these checks. The test-only `octave_compat` adapter
++implements the two-dimensional linear griddedInterpolant operation used here.
++It is added only for Octave and removed when the check ends; it does not replace
++vehicle or tire equations. Do not permanently add the tests tree with genpath.
++
++The MATLAB branch additionally builds both production factories. It has **not**
++been executed here. Apps, full lap optimization and Simulink are not covered.
++The tests establish refactor regression coverage, not physical model accuracy.
+diff --git a/tests/shared_inputs/checkHistoricalDefaults.m b/tests/shared_inputs/checkHistoricalDefaults.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..8640e136432feedf4c75c5f284c8642bee5764e7
+--- /dev/null
++++ b/tests/shared_inputs/checkHistoricalDefaults.m
+@@ -0,0 +1,189 @@
++function count = checkHistoricalDefaults(cfg,tireCfg)
++% Compare migrated standalone literals with upstream 0b02ea46 defaults.
++assert(abs(cfg.studies.Bicycle_Model_BicycleModel.weight_dist-(0.54)) < 1e-10); % Bicycle Model/BicycleModel.m: weight_dist
++assert(abs(cfg.studies.Bicycle_Model_BicycleModel.m-(535*0.453592)) < 1e-10); % Bicycle Model/BicycleModel.m: m
++assert(abs(cfg.studies.Bicycle_Model_BicycleModel.L-(1.6)) < 1e-10); % Bicycle Model/BicycleModel.m: L
++assert(abs(cfg.studies.Bicycle_Model_BicycleModel.I_zz-(83.28)) < 1e-10); % Bicycle Model/BicycleModel.m: I_zz
++assert(abs(cfg.studies.Bicycle_Model_BicycleModel.N-(4)) < 1e-10); % Bicycle Model/BicycleModel.m: N
++assert(abs(cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.weight_dist-(0.51)) < 1e-10); % Bicycle Model/LatAccelResponseTimePlotter.m: weight_dist
++assert(abs(cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.m-(535*0.453592)) < 1e-10); % Bicycle Model/LatAccelResponseTimePlotter.m: m
++assert(abs(cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.L-(1.524)) < 1e-10); % Bicycle Model/LatAccelResponseTimePlotter.m: L
++assert(abs(cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.I_zz-(83.28)) < 1e-10); % Bicycle Model/LatAccelResponseTimePlotter.m: I_zz
++assert(abs(cfg.studies.Bicycle_Model_LatAccelResponseTimePlotter.N-(4)) < 1e-10); % Bicycle Model/LatAccelResponseTimePlotter.m: N
++assert(abs(cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.weight_dist-(0.3)) < 1e-10); % Bicycle Model/ODE Formulation/BicycleModelODE.m: weight_dist
++assert(abs(cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.m-(242.6718)) < 1e-10); % Bicycle Model/ODE Formulation/BicycleModelODE.m: m
++assert(abs(cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.L-(1.524)) < 1e-10); % Bicycle Model/ODE Formulation/BicycleModelODE.m: L
++assert(abs(cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.I_zz-(83.28)) < 1e-10); % Bicycle Model/ODE Formulation/BicycleModelODE.m: I_zz
++assert(abs(tireCfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.C_f-(136*4.448*180/pi)) < 1e-10); % Bicycle Model/ODE Formulation/BicycleModelODE.m: C_f
++assert(abs(tireCfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.C_r-(136*4.448*180/pi)) < 1e-10); % Bicycle Model/ODE Formulation/BicycleModelODE.m: C_r
++assert(abs(cfg.studies.Bicycle_Model_ODE_Formulation_BicycleModelODE.N-(16)) < 1e-10); % Bicycle Model/ODE Formulation/BicycleModelODE.m: N
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.m-(1500)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSim.m: m
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.L-(2500)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSim.m: L
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.I_zz-(2500)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSim.m: I_zz
++assert(abs(tireCfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.C_f-(55000)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSim.m: C_f
++assert(abs(tireCfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.C_r-(60000)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSim.m: C_r
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.weight_dist-(0.3)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSimv2.m: weight_dist
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.m-(242.6718)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSimv2.m: m
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.L-(1.524)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSimv2.m: L
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.I_zz-(83.28)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSimv2.m: I_zz
++assert(abs(tireCfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.C_f-(136*4.448*180/pi/2)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSimv2.m: C_f
++assert(abs(tireCfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSimv2.C_r-(136*4.448*180/pi/2)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSimv2.m: C_r
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.weight_dist-(0.6)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: weight_dist
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.m-(242.6718)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: m
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.L-(1.524)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: L
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.I_zz-(83.28)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: I_zz
++assert(abs(tireCfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.C_f-(136*4.448*180/pi/2)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: C_f
++assert(abs(tireCfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.C_r-(136*4.448*180/pi/2)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: C_r
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.track_width_f-(1.1938)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: track_width_f
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.track_width_r-(1.1938)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: track_width_r
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.cla-(1.771)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: cla
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.cp-(0.5)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: cp
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.LLTD-(0.6)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: LLTD
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_FullCarModel.cg_height-(0.3048)) < 1e-10); % Bicycle Model/Simulink Models/FullCarModel.m: cg_height
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.weight_dist-(0.55)) < 1e-10); % Bicycle Model/Simulink Models/NonLin_BicycleModel.m: weight_dist
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.m-(242.6718)) < 1e-10); % Bicycle Model/Simulink Models/NonLin_BicycleModel.m: m
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.L-(1.524)) < 1e-10); % Bicycle Model/Simulink Models/NonLin_BicycleModel.m: L
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.I_zz-(83.28)) < 1e-10); % Bicycle Model/Simulink Models/NonLin_BicycleModel.m: I_zz
++assert(abs(tireCfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.C_f-(136*4.448*180/pi/2)) < 1e-10); % Bicycle Model/Simulink Models/NonLin_BicycleModel.m: C_f
++assert(abs(tireCfg.studies.Bicycle_Model_Simulink_Models_NonLin_BicycleModel.C_r-(136*4.448*180/pi/2)) < 1e-10); % Bicycle Model/Simulink Models/NonLin_BicycleModel.m: C_r
++assert(abs(cfg.studies.Bicycle_Model_YawResponseTimePlotter.weight_dist-(0.51)) < 1e-10); % Bicycle Model/YawResponseTimePlotter.m: weight_dist
++assert(abs(cfg.studies.Bicycle_Model_YawResponseTimePlotter.m-(535*0.453592)) < 1e-10); % Bicycle Model/YawResponseTimePlotter.m: m
++assert(abs(cfg.studies.Bicycle_Model_YawResponseTimePlotter.L-(1.524)) < 1e-10); % Bicycle Model/YawResponseTimePlotter.m: L
++assert(abs(cfg.studies.Bicycle_Model_YawResponseTimePlotter.I_zz-(83.28)) < 1e-10); % Bicycle Model/YawResponseTimePlotter.m: I_zz
++assert(abs(cfg.studies.Bicycle_Model_YawResponseTimePlotter.N-(4)) < 1e-10); % Bicycle Model/YawResponseTimePlotter.m: N
++assert(abs(cfg.studies.Bicycle_Model_toe_compliance.weight_dist-(0.51)) < 1e-10); % Bicycle Model/toe_compliance.m: weight_dist
++assert(abs(cfg.studies.Bicycle_Model_toe_compliance.m-(520*0.453592)) < 1e-10); % Bicycle Model/toe_compliance.m: m
++assert(abs(cfg.studies.Bicycle_Model_toe_compliance.L-(62 * 0.0254)) < 1e-10); % Bicycle Model/toe_compliance.m: L
++assert(abs(cfg.studies.Bicycle_Model_toe_compliance.I_zz-(83.28)) < 1e-10); % Bicycle Model/toe_compliance.m: I_zz
++assert(abs(cfg.studies.Bicycle_Model_toe_compliance.N-(4)) < 1e-10); % Bicycle Model/toe_compliance.m: N
++assert(abs(tireCfg.studies.camber1_Testcamber.friction_scaling_factor-(1.05*0.55)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: friction_scaling_factor
++assert(abs(tireCfg.studies.camber1_Testcamber.p_i-(12)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: p_i
++assert(abs(cfg.studies.camber1_Testcamber.C_front_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.front_width
++assert(abs(cfg.studies.camber1_Testcamber.C_rear_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.rear_width
++assert(abs(cfg.studies.camber1_Testcamber.C_wheelbase-(62)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.wheelbase
++assert(abs(cfg.studies.camber1_Testcamber.C_front_spring_roll_stiffness-(2860)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.front_spring_roll_stiffness
++assert(abs(cfg.studies.camber1_Testcamber.C_rear_spring_roll_stiffness-(2911)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.rear_spring_roll_stiffness
++assert(abs(cfg.studies.camber1_Testcamber.C_front_bump_stiffness-(2*191.66)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.front_bump_stiffness
++assert(abs(cfg.studies.camber1_Testcamber.C_rear_bump_stiffness-(2*196.02)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.rear_bump_stiffness
++assert(abs(cfg.studies.camber1_Testcamber.C_front_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.front_ARB_roll_stiffness
++assert(abs(cfg.studies.camber1_Testcamber.C_rear_ARB_roll_stiffness-(986)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.rear_ARB_roll_stiffness
++assert(abs(cfg.studies.camber1_Testcamber.C_weight_dist-(0.54)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.weight_dist
++assert(abs(cfg.studies.camber1_Testcamber.C_mass-((395 + 150)*4.44)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: C.mass
++assert(abs(cfg.studies.camber1_Testcamber.front_anti_dive-(.545)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: front_anti_dive
++assert(abs(cfg.studies.camber1_Testcamber.rear_anti_lift-(1.02)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: rear_anti_lift
++assert(abs(cfg.studies.camber1_Testcamber.rear_anti_squat-(.457)) < 1e-10); % Full Car Models/CamberCurveGen/Testcamber.m: rear_anti_squat
++assert(abs(tireCfg.studies.camber1_generateIdealCamberCurves.friction_scaling_factor-(1.05*0.55)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: friction_scaling_factor
++assert(abs(tireCfg.studies.camber1_generateIdealCamberCurves.p_i-(12)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: p_i
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves.C_front_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: C.front_width
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves.C_rear_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: C.rear_width
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves.C_front_spring_roll_stiffness-(3000)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: C.front_spring_roll_stiffness
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves.C_rear_spring_roll_stiffness-(3000)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: C.rear_spring_roll_stiffness
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves.C_front_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: C.front_ARB_roll_stiffness
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves.C_rear_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: C.rear_ARB_roll_stiffness
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves.C_weight_dist-(0.54)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: C.weight_dist
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves.C_mass-((395 + 150))) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves.m: C.mass
++assert(abs(tireCfg.studies.camber1_generateIdealCamberCurves_simplified.friction_scaling_factor-(1.05*0.55)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: friction_scaling_factor
++assert(abs(tireCfg.studies.camber1_generateIdealCamberCurves_simplified.p_i-(12)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: p_i
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves_simplified.C_front_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: C.front_width
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves_simplified.C_rear_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: C.rear_width
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves_simplified.C_front_spring_roll_stiffness-(3000)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: C.front_spring_roll_stiffness
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves_simplified.C_rear_spring_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: C.rear_spring_roll_stiffness
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves_simplified.C_front_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: C.front_ARB_roll_stiffness
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves_simplified.C_rear_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: C.rear_ARB_roll_stiffness
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves_simplified.C_weight_dist-(0.54)) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: C.weight_dist
++assert(abs(cfg.studies.camber1_generateIdealCamberCurves_simplified.C_mass-((395 + 150))) < 1e-10); % Full Car Models/CamberCurveGen/generateIdealCamberCurves_simplified.m: C.mass
++assert(abs(tireCfg.studies.camber1_test.friction_scaling_factor-(1.05*0.55)) < 1e-10); % Full Car Models/CamberCurveGen/test.m: friction_scaling_factor
++assert(abs(tireCfg.studies.camber1_test.p_i-(12)) < 1e-10); % Full Car Models/CamberCurveGen/test.m: p_i
++assert(abs(tireCfg.studies.camber2_Testcamber.friction_scaling_factor-(1.05*0.55)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: friction_scaling_factor
++assert(abs(tireCfg.studies.camber2_Testcamber.p_i-(12)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: p_i
++assert(abs(cfg.studies.camber2_Testcamber.C_front_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: C.front_width
++assert(abs(cfg.studies.camber2_Testcamber.C_rear_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: C.rear_width
++assert(abs(cfg.studies.camber2_Testcamber.C_front_spring_roll_stiffness-(2860)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: C.front_spring_roll_stiffness
++assert(abs(cfg.studies.camber2_Testcamber.C_rear_spring_roll_stiffness-(2911)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: C.rear_spring_roll_stiffness
++assert(abs(cfg.studies.camber2_Testcamber.C_front_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: C.front_ARB_roll_stiffness
++assert(abs(cfg.studies.camber2_Testcamber.C_rear_ARB_roll_stiffness-(986)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: C.rear_ARB_roll_stiffness
++assert(abs(cfg.studies.camber2_Testcamber.C_weight_dist-(0.54)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: C.weight_dist
++assert(abs(cfg.studies.camber2_Testcamber.C_mass-(395 + 150)) < 1e-10); % Full Car Models/CamberCurveGen2/Testcamber.m: C.mass
++assert(abs(tireCfg.studies.camber2_generateIdealCamberCurves.friction_scaling_factor-(1.05*0.55)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: friction_scaling_factor
++assert(abs(tireCfg.studies.camber2_generateIdealCamberCurves.p_i-(12)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: p_i
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves.C_front_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: C.front_width
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves.C_rear_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: C.rear_width
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves.C_front_spring_roll_stiffness-(3000)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: C.front_spring_roll_stiffness
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves.C_rear_spring_roll_stiffness-(3000)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: C.rear_spring_roll_stiffness
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves.C_front_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: C.front_ARB_roll_stiffness
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves.C_rear_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: C.rear_ARB_roll_stiffness
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves.C_weight_dist-(0.54)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: C.weight_dist
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves.C_mass-((395 + 150))) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves.m: C.mass
++assert(abs(tireCfg.studies.camber2_generateIdealCamberCurves_simplified.friction_scaling_factor-(1.05*0.55)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: friction_scaling_factor
++assert(abs(tireCfg.studies.camber2_generateIdealCamberCurves_simplified.p_i-(12)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: p_i
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves_simplified.C_front_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: C.front_width
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves_simplified.C_rear_width-(47)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: C.rear_width
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves_simplified.C_front_spring_roll_stiffness-(3000)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: C.front_spring_roll_stiffness
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves_simplified.C_rear_spring_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: C.rear_spring_roll_stiffness
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves_simplified.C_front_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: C.front_ARB_roll_stiffness
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves_simplified.C_rear_ARB_roll_stiffness-(0)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: C.rear_ARB_roll_stiffness
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves_simplified.C_weight_dist-(0.54)) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: C.weight_dist
++assert(abs(cfg.studies.camber2_generateIdealCamberCurves_simplified.C_mass-((395 + 150))) < 1e-10); % Full Car Models/CamberCurveGen2/generateIdealCamberCurves_simplified.m: C.mass
++assert(abs(tireCfg.studies.camber2_test.friction_scaling_factor-(1.05*0.55)) < 1e-10); % Full Car Models/CamberCurveGen2/test.m: friction_scaling_factor
++assert(abs(tireCfg.studies.camber2_test.p_i-(12)) < 1e-10); % Full Car Models/CamberCurveGen2/test.m: p_i
++assert(abs(cfg.studies.calcWheelForcesAndDisplacements_pitch.front_anti_lift-(0)) < 1e-10); % calcWheelForcesAndDisplacements_pitch.m: front_anti_lift
++assert(abs(cfg.studies.calcWheelForcesAndDisplacements_pitch.front_anti_dive-(.545)) < 1e-10); % calcWheelForcesAndDisplacements_pitch.m: front_anti_dive
++assert(abs(cfg.studies.calcWheelForcesAndDisplacements_pitch.rear_anti_lift-(1.02)) < 1e-10); % calcWheelForcesAndDisplacements_pitch.m: rear_anti_lift
++assert(abs(cfg.studies.calcWheelForcesAndDisplacements_pitch.rear_anti_squat-(.457)) < 1e-10); % calcWheelForcesAndDisplacements_pitch.m: rear_anti_squat
++assert(abs(cfg.studies.roll.mass-(370 * 0.45359)) < 1e-10); % roll.m: mass
++assert(abs(cfg.studies.roll.r_g-(0.85)) < 1e-10); % roll.m: r_g
++assert(abs(cfg.studies.roll.k_ride_f-(23177.80762)) < 1e-10); % roll.m: k_ride_f
++assert(abs(cfg.studies.roll.k_ride_r-(26147.44256)) < 1e-10); % roll.m: k_ride_r
++assert(abs(cfg.studies.roll.cLa-(3.969)) < 1e-10); % roll.m: cLa
++assert(abs(cfg.studies.roll.CoP-(0.418)) < 1e-10); % roll.m: CoP
++assert(abs(cfg.studies.roll.rho-(1.2)) < 1e-10); % roll.m: rho
++assert(abs(cfg.studies.understeer_bode.L-(62 * 0.0254)) < 1e-10); % understeer_bode.m: L
++assert(abs(cfg.studies.understeer_bode.m-(535 * 0.453592)) < 1e-10); % understeer_bode.m: m
++assert(abs(cfg.studies.understeer_bode.Iz-(83.28)) < 1e-10); % understeer_bode.m: Iz
++assert(abs(tireCfg.studies.understeer_bode.Csum-(1.6e5)) < 1e-10); % understeer_bode.m: Csum
++assert(abs(tireCfg.studies.understeer_budget.CAF-(136*4.448)) < 1e-10); % understeer_budget.m: CAF
++assert(abs(tireCfg.studies.understeer_budget.CCF-(0.313)) < 1e-10); % understeer_budget.m: CCF
++assert(abs(tireCfg.studies.understeer_budget.NAF-(50.082)) < 1e-10); % understeer_budget.m: NAF
++assert(abs(tireCfg.studies.understeer_budget.CGF-(47.657)) < 1e-10); % understeer_budget.m: CGF
++assert(abs(tireCfg.studies.understeer_budget.NGF-(4.766)) < 1e-10); % understeer_budget.m: NGF
++assert(abs(cfg.studies.understeer_budget.m-(168)) < 1e-10); % understeer_budget.m: m
++assert(abs(cfg.studies.understeer_budget.L-(62 * 25.4)) < 1e-10); % understeer_budget.m: L
++assert(abs(cfg.studies.understeer_budget.weight_dist-(0.51)) < 1e-10); % understeer_budget.m: weight_dist
++assert(abs(cfg.studies.understeer_budget.WUF-(17.07)) < 1e-10); % understeer_budget.m: WUF
++assert(abs(cfg.studies.understeer_budget.EF-(0.001)) < 1e-10); % understeer_budget.m: EF
++assert(abs(cfg.studies.understeer_budget.GF-(0.789)) < 1e-10); % understeer_budget.m: GF
++assert(abs(cfg.studies.understeer_budget.KF-(2288)) < 1e-10); % understeer_budget.m: KF
++assert(abs(cfg.studies.understeer_budget.EYF-(0.191)) < 1e-10); % understeer_budget.m: EYF
++assert(abs(cfg.studies.understeer_budget.GYF-(0.291)) < 1e-10); % understeer_budget.m: GYF
++assert(abs(cfg.studies.understeer_budget.ENF-(0.774)) < 1e-10); % understeer_budget.m: ENF
++assert(abs(cfg.studies.understeer_budget.GNF-(0.022)) < 1e-10); % understeer_budget.m: GNF
++assert(abs(cfg.studies.understeer_budget.ROLLpg-(4.47)) < 1e-10); % understeer_budget.m: ROLLpg
++assert(abs(tireCfg.studies.understeer_budget.CAR-(136*4.448)) < 1e-10); % understeer_budget.m: CAR
++assert(abs(tireCfg.studies.understeer_budget.CCR-(0.323)) < 1e-10); % understeer_budget.m: CCR
++assert(abs(tireCfg.studies.understeer_budget.NAR-(42.897)) < 1e-10); % understeer_budget.m: NAR
++assert(abs(tireCfg.studies.understeer_budget.CGR-(43.392)) < 1e-10); % understeer_budget.m: CGR
++assert(abs(tireCfg.studies.understeer_budget.NGR-(4.339)) < 1e-10); % understeer_budget.m: NGR
++assert(abs(cfg.studies.understeer_budget.FYRperg-(8430.9)) < 1e-10); % understeer_budget.m: FYRperg
++assert(abs(cfg.studies.understeer_budget.NFperg-(-403.16)) < 1e-10); % understeer_budget.m: NFperg
++assert(abs(cfg.studies.understeer_budget.NRperg-(-317.93)) < 1e-10); % understeer_budget.m: NRperg
++assert(abs(cfg.studies.understeer_budget.WR-(885.000)) < 1e-10); % understeer_budget.m: WR
++assert(abs(cfg.studies.understeer_budget.WUR-(99.000)) < 1e-10); % understeer_budget.m: WUR
++assert(abs(cfg.studies.understeer_budget.ER-(0.055)) < 1e-10); % understeer_budget.m: ER
++assert(abs(cfg.studies.understeer_budget.GR-(-0.720)) < 1e-10); % understeer_budget.m: GR
++assert(abs(cfg.studies.understeer_budget.KR-(367)) < 1e-10); % understeer_budget.m: KR
++assert(abs(cfg.studies.understeer_budget.EYR-(0.045)) < 1e-10); % understeer_budget.m: EYR
++assert(abs(cfg.studies.understeer_budget.GYR-(-0.328)) < 1e-10); % understeer_budget.m: GYR
++assert(abs(cfg.studies.understeer_budget.ENR-(-0.113)) < 1e-10); % understeer_budget.m: ENR
++assert(abs(cfg.studies.understeer_budget.GNR-(0.023)) < 1e-10); % understeer_budget.m: GNR
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.a-(1.1)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSim.m: a
++assert(abs(cfg.studies.Bicycle_Model_Simulink_Models_BicycleModelSim.b-(1.6)) < 1e-10); % Bicycle Model/Simulink Models/BicycleModelSim.m: b
++assert(abs(tireCfg.studies.understeer_bode.K_deg_per_g-(0.18)) < 1e-10); % understeer_bode.m: K_deg_per_g
++assert(abs(cfg.studies.understeer_bode.weight_dist-0.512) < 1e-10);
++assert(abs(tireCfg.studies.Bicycle_Model_BicycleModel.cornering_force_scale-(0.55)) < 1e-10);
++assert(abs(tireCfg.studies.Bicycle_Model_BicycleModel.cornering_load_mass_lb-(535)) < 1e-10);
++assert(abs(tireCfg.studies.Bicycle_Model_BicycleModel.cornering_pressure_psi-(12)) < 1e-10);
++assert(abs(tireCfg.studies.Bicycle_Model_toe_compliance.cornering_force_scale-(0.55)) < 1e-10);
++assert(abs(tireCfg.studies.Bicycle_Model_toe_compliance.cornering_load_mass_lb-(535)) < 1e-10);
++assert(abs(tireCfg.studies.Bicycle_Model_toe_compliance.cornering_pressure_psi-(12)) < 1e-10);
++count = 185;
++end
+diff --git a/tests/shared_inputs/checkSharedInputEdits.m b/tests/shared_inputs/checkSharedInputEdits.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..75a68ccd0efcc92a0641521123baa1302fed9c79
+--- /dev/null
++++ b/tests/shared_inputs/checkSharedInputEdits.m
+@@ -0,0 +1,45 @@
++function checkSharedInputEdits(root)
++% Edit temporary copies to verify both builders' input sources follow changes.
++originalPath = path;
++tmp = tempname;
++configDir = fullfile(tmp,'Full Car Models','config');
++componentDir = fullfile(tmp,'Full Car Models','carComponents');
++mkdir(configDir); mkdir(componentDir);
++cleanup = onCleanup(@() restore(originalPath,tmp)); %#ok<NASGU>
++copyfile(fullfile(root,'config','*.m'),configDir);
++t = vdTireConfig();
++for name = {'Fx_file','Fy_file','camber_ratio_file','camber_model_file'}
++    copyfile(t.(name{1}),componentDir);
++end
++rewrite(fullfile(configDir,'vdVehicleConfig.m'),'carParams.mass = 162;', ...
++    'carParams.mass = 172;');
++rewrite(fullfile(configDir,'vdTireConfig.m'),'cfg.p_i = 12;', ...
++    'cfg.p_i = 13;');
++addpath(configDir,'-begin');
++clear vdVehicleConfig vdTireConfig vdRampConfig
++v = vdVehicleConfig(); t = vdTireConfig(); r = vdRampConfig();
++assert(v.car.mass==172 && r.fixedParameters.vehicle.mass==172);
++assert(t.p_i==13 && r.fixedParameters.vehicle.p_i==13);
++assert(t.studies.camber2_Testcamber.p_i==13);
++% New reads reflect another edit, with no persistent configuration cache.
++rewrite(fullfile(configDir,'vdVehicleConfig.m'),'carParams.mass = 172;', ...
++    'carParams.mass = 173;');
++clear vdVehicleConfig vdRampConfig
++v = vdVehicleConfig(); r = vdRampConfig();
++assert(v.car.mass==173 && r.fixedParameters.vehicle.mass==173);
++% Path/settings consumers must not need unrelated full-car coefficient files.
++delete(t.Fx_file); delete(t.Fy_file);
++pathsOnly = vdTireConfig([],[],false);
++assert(pathsOnly.p_i==13 && ~isfield(pathsOnly,'Fx_parameters'));
++end
++function rewrite(file,old,new)
++s = fileread(file); assert(~isempty(strfind(s,old))); %#ok<STREMP>
++f = fopen(file,'w'); assert(f>=0);
++cleanup = onCleanup(@() fclose(f)); %#ok<NASGU>
++fprintf(f,'%s',strrep(s,old,new));
++end
++function restore(originalPath,tmp)
++path(originalPath);
++clear vdVehicleConfig vdTireConfig vdRampConfig
++if exist(tmp,'dir'), rmdir(tmp,'s'); end
++end
+diff --git a/tests/shared_inputs/octave_compat/griddedInterpolant.m b/tests/shared_inputs/octave_compat/griddedInterpolant.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..226f12fb2d822ecdef168063fe4cd21e5d3e0547
+--- /dev/null
++++ b/tests/shared_inputs/octave_compat/griddedInterpolant.m
+@@ -0,0 +1,19 @@
++function F = griddedInterpolant(grid,values,method,extrapolation)
++% Octave test adapter for the tire's two-dimensional linear interpolation.
++% This directory must only be added by runSharedInputChecks in GNU Octave.
++assert(iscell(grid) && numel(grid)==2);
++assert(strcmp(method,'linear') && strcmp(extrapolation,'linear'));
++F = @(x,y) linearGrid(grid{1},grid{2},values,x,y);
++end
++function out = linearGrid(gx,gy,values,x,y)
++if isscalar(x), x = repmat(x,size(y)); end
++if isscalar(y), y = repmat(y,size(x)); end
++assert(isequal(size(x),size(y)));
++v = interp1(gx,values,x(:),'linear','extrap');
++pos = interp1(gy,1:numel(gy),y(:),'linear','extrap');
++lo = max(1,min(numel(gy)-1,floor(pos)));
++w = pos-lo;
++i = (1:numel(x))';
++out = (1-w).*v(sub2ind(size(v),i,lo)) + w.*v(sub2ind(size(v),i,lo+1));
++out = reshape(out,size(x));
++end
+diff --git a/tests/shared_inputs/runSharedInputChecks.m b/tests/shared_inputs/runSharedInputChecks.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..8a720522715816024caa1bd3dfadc4fda8dbfcd2
+--- /dev/null
++++ b/tests/shared_inputs/runSharedInputChecks.m
+@@ -0,0 +1,174 @@
++function results = runSharedInputChecks()
++%RUNSHAREDINPUTCHECKS Execute regression checks in MATLAB or GNU Octave.
++% Run from any working directory after adding this file's folder to the path.
++% MATLAB additionally builds both production car entrypoints. Octave tests
++% the shared inputs, Tire2 force equations, Car equation samples, and a
++% headless lateral-response integration. It does not run Simulink or the apps.
++here = fileparts(mfilename('fullpath'));
++repo = fileparts(fileparts(here));
++root = fullfile(repo,'Full Car Models');
++oldPath = path;
++cleanup = onCleanup(@() path(oldPath)); %#ok<NASGU>
++addpath(root,fullfile(root,'config'),fullfile(root,'carComponents'), ...
++    fullfile(root,'utilities'),fullfile(root,'Suspension Transient Model'));
++isOctave = exist('OCTAVE_VERSION','builtin') ~= 0;
++if isOctave, addpath(fullfile(here,'octave_compat')); end
++ref = load(fullfile(here,'upstream_defaults.mat'));
++cfg = vdVehicleConfig(); tireCfg = vdTireConfig();
++actual = cfg;
++actual.engine.torque_fn = actual.engine.torque_fn();
++actual.aero.map_path = 'aeromap_b26.csv';
++for name = {'car','aero','engine','drivetrain','brakes','events'}
++    assertEqual(actual.(name{1}),ref.baseline.(name{1}));
++end
++actualTire = tireCfg;
++actualTire.model_artifact = fullfile('Magic Formula','experimental', ...
++    'lc0_nd_tire','results','lc0_nd_pacejka_comparison.mat');
++for name = fieldnames(ref.baseline.tire)'
++    assertEqual(actualTire.(name{1}),ref.baseline.tire.(name{1}));
++end
++ramp = vdRampConfig(); ramp.defaultMapPath = 'aeromap_b26.csv';
++assertEqual(ramp,ref.ramp);
++fprintf('PASS: main and ramp default inputs match upstream fixture\n');
++count = checkHistoricalDefaults(cfg,tireCfg);
++fprintf('PASS: %d historical study inputs match upstream literals\n',count);
++checkSharedInputEdits(root);
++fprintf('PASS: temporary master mass/pressure edits propagate to ramp and presets\n');
++
++% Exercise file validation, including a correctly shaped but invalid fit.
++missing = [tempname '.mat'];
++assertError(@() vdLoadTireParameters(missing,26),'vdTireConfig:missingFile');
++Xbestcell = num2cell([NaN ones(1,25)]); %#ok<NASGU>
++save(missing,'Xbestcell');
++deleteTemp = onCleanup(@() delete(missing)); %#ok<NASGU>
++assertError(@() vdLoadTireParameters(missing,26),'vdTireConfig:badParameters');
++assertError(@() vdLoadTireParameters(tireCfg.Fx_file,42),'vdTireConfig:badParameters');
++fprintf('PASS: missing, non-finite and wrong-length tire fits fail clearly\n');
++
++% Use the default constructor route, so the shared camber file is exercised.
++tire = Tire2(tireCfg.p_i,tireCfg.Fx_parameters,tireCfg.Fy_parameters, ...
++    tireCfg.friction_scaling_factor);
++p = ref.tireInputs;
++fx = tire.F_x(p(:,1),p(:,2),p(:,3),p(:,4));
++fy = tire.F_y(p(:,1),p(:,2),p(:,3),p(:,4));
++assertEqual(fx,ref.expectedFx); assertEqual(fy,ref.expectedFy);
++assert(all(fx(p(:,3)<=0)==0) && all(fy(p(:,3)<=0)==0));
++% Independently check the Octave adapter against nested 1-D interpolation.
++for i = 1:size(p,1)
++    a = p(i,1); g = p(i,4); c = ref.camber;
++    vals = [interp1(c.camber4indices,c.camber4ratio,-a,'linear','extrap'), ...
++        interp1(c.camber2indices,c.camber2ratio,-a,'linear','extrap'),1, ...
++        interp1(c.camber2indices,c.camber2ratio,a,'linear','extrap'), ...
++        interp1(c.camber4indices,c.camber4ratio,a,'linear','extrap')];
++    expected = interp1([-4 -2 0 2 4],vals,g,'linear','extrap');
++    assertEqual(tire.camberInterpolator(a,g),expected);
++end
++fprintf('PASS: %d tire states match upstream Fx/Fy and camber interpolation\n',size(p,1));
++
++% The acceleration car uses static aero in the production parameter loop.
++% Build that same numerical core through the shared production constructor.
++car = accelerationCore(cfg,tireCfg,tire);
++assertEqual(car.M,cfg.car.mass+cfg.car.accel_driver_weight);
++assertEqual(car.l_f+car.l_r,cfg.car.wheelbase);
++for study = {'modal','decoupled','transient'}
++    suspension = vdApplySuspensionConfig(car,study{1});
++    assertEqual(suspension.k,cfg.suspension.(study{1}).k);
++    assertEqual(suspension.Ixx,cfg.suspension.(study{1}).Ixx);
++    if ~strcmp(study{1},'vibration')
++        [M,C,K] = calc_MCK(suspension,zeros(1,4),zeros(1,4));
++        assert(all(isfinite([M(:);C(:);K(:)])));
++    end
++end
++% The vibration script already assigns an undeclared Car.c property upstream.
++% Check its relocated inputs on a struct without changing the production class.
++vibration = vdApplySuspensionConfig(struct(),'vibration');
++assertEqual(vibration.c,cfg.suspension.vibration.c);
++assertEqual(vibration.k,cfg.suspension.vibration.k);
++fprintf('PASS: three Car suspension presets, 7-DOF matrices and vibration inputs\n');
++
++% Fixed inputs sample the actual Car.equations path. This checks execution,
++% not the engineering accuracy of the upstream equations.
++samples = 0;
++for speed = [5 15 25]
++    for steer = [-2 0 2]*pi/180
++        P = [steer .1 speed 0 steer*speed/car.W_b 0 0 .02 .02];
++        [rpm,beta,ay,ax,yawacc,wheelacc] = car.equations(P);
++        assert(all(isfinite([rpm beta ay ax yawacc wheelacc(:)'])));
++        samples = samples+1;
++    end
++end
++% A small imposed-speed steering response using the same Car equations.
++[t,x] = ode45(@(time,state) responseRhs(time,state,car),linspace(0,2,101),[0;0]);
++assert(all(isfinite(x(:))) && max(abs(x(:,1)))>0);
++fprintf('PASS: %d Car equation states and %d response samples\n',samples,numel(t));
++
++results = struct('runtime',version,'tireStates',size(p,1), ...
++    'maxFxDifference',max(abs(fx-ref.expectedFx)), ...
++    'maxFyDifference',max(abs(fy-ref.expectedFy)), ...
++    'equationStates',samples,'responseTime',t,'responseStates',x, ...
++    'MATLAB_entrypoints_executed',false);
++if ~isOctave
++    addpath(genpath(root));
++    [cars,eventParams] = carConfig();
++    [rampCar,rampConfig] = carConfigBaseline();
++    assertEqual(cars{1,1}.M,cfg.car.mass+cfg.car.driver_weight);
++    assertEqual(cars{1,2}.M,car.M);
++    assertEqual(rampCar.M,car.M);
++    assertEqual(eventParams,cfg.events);
++    assertEqual(rampConfig.fixedParameters.vehicle,ramp.fixedParameters.vehicle);
++    results.MATLAB_entrypoints_executed = true;
++    fprintf('PASS: MATLAB production entrypoints\n');
++else
++    fprintf('NOT RUN: MATLAB table/aeromap entrypoints, apps and Simulink\n');
++end
++end
++
++function car = accelerationCore(cfg,t,tire)
++c = cfg.car; a = cfg.aero; e = cfg.engine; d = cfg.drivetrain; b = cfg.brakes;
++aero = Aero(a.accel_cda,a.accel_cla,a.distribution,a.acc_cla_p_deg_p,a.acc_D_p_deg_p);
++powertrain = Powertrain(e.redline,e.shift_point,e.gears,e.primary_reduction, ...
++    e.torque_fn(),e.shift_time,d.final_drive,c.wheel_radius,d.drivetrain_efficiency, ...
++    d.G_d1,d.G_d2_overrun,d.G_d2_driving,b.brake_distribution,b.max_braking_torque);
++q = c;
++for name = {'gamma_f','gamma_r','grip_scaling_front','grip_scaling_rear'}
++    q.(name{1}) = t.(name{1});
++end
++kin = struct();
++for name = {'roll_gradient_deg_per_g','rear_roll_camber_outer_deg_per_deg', ...
++        'rear_roll_camber_inner_deg_per_deg','ride_camber_front_deg_per_in', ...
++        'ride_camber_rear_deg_per_in'}
++    kin.(name{1}) = c.(name{1});
++end
++kin.camberModelData = load(t.camber_model_file,'betaL','betaR');
++car = buildCarFromParameterSet(q,c.accel_driver_weight,aero,powertrain,tire, ...
++    [],kin,c.R_sf);
++end
++
++function dx = responseRhs(time,state,car)
++speed = 10; steer = (time>=.2)*pi/180;
++P = [steer 0 speed state(1) state(2) 0 0 0 0];
++[~,~,ay,~,yawacc] = car.equations(P);
++% Car.equations returns the body-frame lateral velocity derivative.
++dx = [ay; yawacc];
++end
++
++function assertEqual(a,b)
++if isstruct(b)
++    assert(isequal(sort(fieldnames(a)),sort(fieldnames(b))));
++    for name = fieldnames(b)', assertEqual(a.(name{1}),b.(name{1})); end
++elseif isnumeric(b) || islogical(b)
++    assert(isequal(size(a),size(b)));
++    assert(all(abs(a(:)-b(:)) <= 1e-11*max(1,abs(b(:)))));
++else
++    assert(strcmp(char(a),char(b)));
++end
++end
++function assertError(fn,id)
++try
++    fn();
++catch err
++    assert(strcmp(err.identifier,id));
++    return
++end
++error('Expected error %s.',id);
++end
+diff --git a/tests/shared_inputs/upstream_defaults.mat b/tests/shared_inputs/upstream_defaults.mat
+new file mode 100644
+index 0000000000000000000000000000000000000000..e67964b5efb01f43661248b6316db121c9962efb
+GIT binary patch
+literal 33015
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/understeer_bode.m b/understeer_bode.m
+index 807288c57df21de7c2b7975e130afc24d19f5a30..ff3d2c95ae3d9660f0c67ca303462c4942d196f8 100644
+--- a/understeer_bode.m
++++ b/understeer_bode.m
+@@ -5,16 +5,19 @@ clear; clc;
+ 
+ %% ------------ User inputs ------------
+ % Geometry / inertia / mass
+-L   =  62 * 0.0254;        % wheelbase [m]
+-a   = L * 0.512;        % CG -> front axle [m] 
+-m   = 535 * 0.453592;   % mass [kg] 
+-Iz  = 83.28;       % yaw inertia [kg*m^2] 
++addpath(fullfile(fileparts(mfilename('fullpath')),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++L = sharedStudyVehicle.studies.understeer_bode.L;        % wheelbase [m]
++a   = L * sharedStudyVehicle.studies.understeer_bode.weight_dist;        % CG -> front axle [m]
++m = sharedStudyVehicle.studies.understeer_bode.m;   % mass [kg]
++Iz = sharedStudyVehicle.studies.understeer_bode.Iz;       % yaw inertia [kg*m^2]
+ 
+ % Understeer gradient at the tire
+-K_deg_per_g = 0.18;    % [deg/g]  <-- set to your value
++K_deg_per_g = sharedStudyTire.studies.understeer_bode.K_deg_per_g;    % [deg/g]  <-- set to your value
+ 
+ % Cornering “size” (only needed to pin down Cf, Cr distribution)
+-Csum = 1.6e5;      % Cf + Cr [N/rad] (pick based on tire data; adjust as needed)
++Csum = sharedStudyTire.studies.understeer_bode.Csum;      % Cf + Cr [N/rad] (pick based on tire data; adjust as needed)
+ 
+ % Speed sweep for Bode overlays
+ U_vec = [10 15 20];    % [m/s] add more speeds if you like
+diff --git a/understeer_budget.m b/understeer_budget.m
+index 6c65b7c47bb4591096dcf49ed73aa5756ac1f647..bbf19bf196d1d2c4c6ddc398cc82a868262e54c6 100644
+--- a/understeer_budget.m
++++ b/understeer_budget.m
+@@ -8,38 +8,41 @@
+ % Cornering compliance budget after simulation has completed.
+ clear
+ 
+-CAF = 136*4.448 ; CAR = 136*4.448% Tire cornering stiffnesses per tire (N/deg)
+-CCF = 0.313 ; CCR = 0.323 % Tire camber stiffnesses per tire (N/deg)
+-NAF = 50.082 ; NAR = 42.897 % Tire aligning moment stiffnesses per tire (Nm/deg)
+-CGF = 47.657 ; CGR = 43.392 % Tire camber stiffnesses per tire (N/deg)
+-NGF = 4.766 ; NGR = 4.339 % Tire alinging moment camber stiffnesses per tire (Nm/deg)
+-
+-m = 168;
++addpath(fullfile(fileparts(mfilename('fullpath')),'Full Car Models','config'));
++sharedStudyVehicle = vdVehicleConfig();
++sharedStudyTire = vdTireConfig([],[],false);
++CAF = sharedStudyTire.studies.understeer_budget.CAF; CAR = sharedStudyTire.studies.understeer_budget.CAR% Tire cornering stiffnesses per tire (N/deg)
++CCF = sharedStudyTire.studies.understeer_budget.CCF; CCR = sharedStudyTire.studies.understeer_budget.CCR % Tire camber stiffnesses per tire (N/deg)
++NAF = sharedStudyTire.studies.understeer_budget.NAF; NAR = sharedStudyTire.studies.understeer_budget.NAR % Tire aligning moment stiffnesses per tire (Nm/deg)
++CGF = sharedStudyTire.studies.understeer_budget.CGF; CGR = sharedStudyTire.studies.understeer_budget.CGR % Tire camber stiffnesses per tire (N/deg)
++NGF = sharedStudyTire.studies.understeer_budget.NGF; NGR = sharedStudyTire.studies.understeer_budget.NGR % Tire alinging moment camber stiffnesses per tire (Nm/deg)
++
++m = sharedStudyVehicle.studies.understeer_budget.m;
+ g = 9.8;
+ 
+ 
+-L = 62 * 25.4 % WHEELBASE (mm)
+-weight_dist = 0.51; % rearwards
++L = sharedStudyVehicle.studies.understeer_budget.L% WHEELBASE (mm)
++weight_dist = sharedStudyVehicle.studies.understeer_budget.weight_dist; % rearwards
+ 
+ a = L*weight_dist; % front axle to cg, m
+ b = L*(1-weight_dist); % rear axle to cg, m
+ 
+ FYFperg = m * g * b / L% front axle sideforce per g from simulation (N/g)
+-FYRperg = 8430.9 % Rear
+-NFperg = -403.16 % Front axle aligning moment per g from simulation (Nm/g)
+-NRperg = -317.93 % Rear
++FYRperg = sharedStudyVehicle.studies.understeer_budget.FYRperg % Rear
++NFperg = sharedStudyVehicle.studies.understeer_budget.NFperg % Front axle aligning moment per g from simulation (Nm/g)
++NRperg = sharedStudyVehicle.studies.understeer_budget.NRperg % Rear
+ 
+-WF = m*(1-weight_dist); WR = 885.000 % AXLE MASS (kg)
+-WUF = 17.07; WUR = 99.000 %UNSPRUNG MASS (kg)
++WF = m*(1-weight_dist); WR = sharedStudyVehicle.studies.understeer_budget.WR % AXLE MASS (kg)
++WUF = sharedStudyVehicle.studies.understeer_budget.WUF; WUR = sharedStudyVehicle.studies.understeer_budget.WUR %UNSPRUNG MASS (kg)
+ 
+-EF = 0.001; ER = 0.055 %ROLL STEER (deg steer/deg roll)
+-GF = 0.789; GR = -0.720 %ROLL CAMBER (deg camber/deg roll)
+-KF = 2288; KR = 367; %ROLL STIFFNESS (front roll stiffness (Nm/deg)
++EF = sharedStudyVehicle.studies.understeer_budget.EF; ER = sharedStudyVehicle.studies.understeer_budget.ER %ROLL STEER (deg steer/deg roll)
++GF = sharedStudyVehicle.studies.understeer_budget.GF; GR = sharedStudyVehicle.studies.understeer_budget.GR %ROLL CAMBER (deg camber/deg roll)
++KF = sharedStudyVehicle.studies.understeer_budget.KF; KR = sharedStudyVehicle.studies.understeer_budget.KR; %ROLL STIFFNESS (front roll stiffness (Nm/deg)
+ 
+-EYF = 0.191; EYR = 0.045 %L.F. STEER (deg/1000 N)
+-GYF = 0.291; GYR = -0.328 %L.F. CAMBER (deg/1000 N)
+-ENF = 0.774; ENR = -0.113 %A.T. STEER (deg/100 Nm)
+-GNF = 0.022; GNR = 0.023 %A.T. CAMBER (deg/100 Nm)
++EYF = sharedStudyVehicle.studies.understeer_budget.EYF; EYR = sharedStudyVehicle.studies.understeer_budget.EYR %L.F. STEER (deg/1000 N)
++GYF = sharedStudyVehicle.studies.understeer_budget.GYF; GYR = sharedStudyVehicle.studies.understeer_budget.GYR %L.F. CAMBER (deg/1000 N)
++ENF = sharedStudyVehicle.studies.understeer_budget.ENF; ENR = sharedStudyVehicle.studies.understeer_budget.ENR %A.T. STEER (deg/100 Nm)
++GNF = sharedStudyVehicle.studies.understeer_budget.GNF; GNR = sharedStudyVehicle.studies.understeer_budget.GNR %A.T. CAMBER (deg/100 Nm)
+ 
+ cc_WGT_f = 9.806*WF/2/CAF; % Cornering Compliances from weight contributions
+ cc_WGT_r = -9.806*WR/2/CAR;
+@@ -47,7 +50,7 @@ cc_WGT_r = -9.806*WR/2/CAR;
+ cc_RBAT_f = -(NFperg + NRperg)/2/L/CAF; % Cornering Compliances from rigid body Mz (F)
+ cc_RBAT_r = -(NFperg + NRperg)/2/L/CAR; % Rear
+ 
+-ROLLpg = 4.47; % Roll gradient (deg/g)
++ROLLpg = sharedStudyVehicle.studies.understeer_budget.ROLLpg; % Roll gradient (deg/g)
+ 
+ cc_RS_f = ROLLpg * EF ; % Front roll steer contribution (deg/g)
+ cc_RS_r = ROLLpg * ER ; % Rear

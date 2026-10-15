@@ -1,0 +1,8 @@
+PASS: main and ramp default inputs match upstream fixture
+PASS: 185 historical study inputs match upstream literals
+PASS: temporary master mass/pressure edits propagate to ramp and presets
+PASS: missing, non-finite and wrong-length tire fits fail clearly
+PASS: 375 tire states match upstream Fx/Fy and camber interpolation
+PASS: three Car suspension presets, 7-DOF matrices and vibration inputs
+PASS: 9 Car equation states and 101 response samples
+NOT RUN: MATLAB table/aeromap entrypoints, apps and Simulink

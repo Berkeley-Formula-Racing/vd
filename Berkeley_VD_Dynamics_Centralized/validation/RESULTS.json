@@ -1,0 +1,22 @@
+{
+  "source_repository": "https://github.com/Berkeley-Formula-Racing/vd",
+  "base_commit": "144b3548425d05988668fcc93e3b2b5bd0830676",
+  "checked_date": "2026-10-15",
+  "changed_files": 43,
+  "modified_files": 31,
+  "new_files": 12,
+  "matlab_source_files_linted": 40,
+  "historical_numeric_inputs_checked": 185,
+  "runtime": "8.4.0",
+  "tire_states": 375,
+  "max_Fx_difference": 0.0,
+  "max_Fy_difference": 0.0,
+  "car_equation_states": 9,
+  "steering_response_samples": 101,
+  "MATLAB_entrypoints_executed": false,
+  "patch_check_and_application": "PASS: applied against current upstream originals; all output files byte-match delivery",
+  "fixture_revalidated_against_current_HEAD": true,
+  "Car_m_modified": false,
+  "docs_paths_modified": false,
+  "original_tire_assets_modified": false
+}
