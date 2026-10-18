@@ -47,7 +47,7 @@ files = strings(0,1);
 requiredPaths = strings(0,1);
 missingPaths = strings(0,1);
 
-required = ["setup_paths.m"; "+rampSpeed"; "tests"; "resources"; ...
+required = ["setup_paths.m"; "+rampSpeed"; "+vehicleConfig"; "tests"; "resources"; ...
     "carComponents"; "events"; "gg"; "CnAy"; "sweeps"; ...
     "utilities"; "testing"; "Phase Plane"; ...
     "Suspension Transient Model"; "Understeer Gradient"; ...
@@ -67,7 +67,8 @@ for i = 1:numel(required)
 end
 
 releaseFiles = ["RampSpeedApp.mlapp";"RampSpeedApp.prj"; ...
-    "README_ramp_speed_app.md"];
+    "README_ramp_speed_app.md";"carConfig.m";"carConfigBaseline.m"; ...
+    "runRampSpeedStudy.m";"aeromap_b26.csv"];
 for i = 1:numel(releaseFiles)
     relative = releaseFiles(i);
     candidate = fullfile(rootDirectory,relative);
@@ -103,10 +104,10 @@ end
 function relative = relativePath(rootDirectory,fileName)
 rootText = char(rootDirectory);
 fileText = char(absolutePath(fileName));
-prefixLength = length(rootText) + 1;
-if length(fileText) >= prefixLength && ...
-        startsWith(fileText,[rootText filesep])
-    relative = string(fileText(prefixLength:end));
+rootPrefix = [rootText filesep];
+if length(fileText) > length(rootPrefix) && ...
+        startsWith(fileText,rootPrefix)
+    relative = string(fileText(length(rootPrefix)+1:end));
 else
     relative = string(fileText);
 end
