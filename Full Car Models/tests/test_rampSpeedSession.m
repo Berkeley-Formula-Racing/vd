@@ -72,6 +72,50 @@ verifyFalse(testCase,any(string(session.viewModel().setupTable.id) == ...
     "accel-copy"));
 end
 
+function testRenameRetainsSelectionAndUpdatesSavedSetup(testCase)
+fixture = makeRampFixture();
+session = rampSpeed.RampSpeedSession(fixture.cars,fixture.cases);
+session.selectCases(["baseline","accel"]);
+session.editSetup("accel",struct("id","renamed"));
+model = session.viewModel();
+verifyEqual(testCase,model.selectedCaseIds,["baseline";"renamed"]);
+verifyEqual(testCase,string(model.setupTable.id),["baseline";"renamed"]);
+verifyEqual(testCase,string(model.study.setupSpecifications(2).id),"renamed");
+verifyEqual(testCase,string(model.study.cases(2).id),"renamed");
+end
+
+function testInvalidRenameLeavesCatalogAndSelectionUnchanged(testCase)
+fixture = makeRampFixture();
+session = rampSpeed.RampSpeedSession(fixture.cars,fixture.cases);
+before = session.viewModel();
+verifyError(testCase,@()session.editSetup("accel",struct("id","baseline")), ...
+    "rampSpeed:duplicateSetupId");
+for invalid = {"", "   ", string(missing), ["one","two"]}
+    verifyError(testCase,@()session.editSetup("accel",struct("id",invalid{1})), ...
+        "rampSpeed:invalidSetupId");
+end
+after = session.viewModel();
+verifyEqual(testCase,after.setupTable,before.setupTable);
+verifyEqual(testCase,after.selectedCaseIds,before.selectedCaseIds);
+end
+
+function testRenameAfterRunRetainsResultsThroughSaveAndLoad(testCase)
+fixture = makeRampFixture();
+session = rampSpeed.RampSpeedSession(fixture.cars,fixture.cases, ...
+    baseOptions(@fixtureRun));
+session.start();
+session.editSetup("accel",struct("id","renamed"));
+model = session.viewModel();
+verifyEqual(testCase,string({model.study.cases.id}),["baseline","renamed"]);
+verifyEqual(testCase,string({model.study.runs.caseId}),["baseline","renamed"]);
+path = [tempname '.mat'];
+cleanup = onCleanup(@()delete(path));
+session.save(path);
+loaded = rampSpeed.loadStudy(path,"test");
+verifyEqual(testCase,string({loaded.runs.caseId}),["baseline","renamed"]);
+verifyEqual(testCase,string(loaded.runs(2).runMeta.setupSpec.id),"renamed");
+end
+
 function testSessionLocksEditsDuringRun(testCase)
 fixture = makeRampFixture();
 busyIdentifier = "";
