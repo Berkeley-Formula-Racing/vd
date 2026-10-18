@@ -1,0 +1,105 @@
+<?xml version="1.0"?>
+<Maths Locale="English_United States.1252" DefaultLocale="C" Id="User">
+ <MathConstants>
+  <MathConstant Name="accel threshold" Value="0.25" Unit="G"/>
+  <MathConstant Name="COG Height" Value="20" Unit="in"/>
+  <MathConstant Name="Rotor Mu" Value=".41" Unit=""/>
+  <MathConstant Name="Track Width" Value="47" Unit="in"/>
+  <MathConstant Name="Weight" Value="450" Unit="lb"/>
+  <MathConstant Name="Wheelbase" Value="61" Unit="in"/>
+ </MathConstants>
+ <MathItems>
+  <MathExpression Id="Susp Pos RL" DisplayUnit="in" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="filter_lp('GP Volts 7' [V] * 0.4616 - 0.9649,1)" SampleRate="0" Unit="in"/>
+  <MathExpression Id="Susp Pos RR" DisplayUnit="in" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="filter_lp(-'GP Volts 6' [V]*0.4616 + 1.23,1)
+" SampleRate="0" Unit="in"/>
+  <MathExpression Id="Susp Pos FL" DisplayUnit="in" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="filter_lp('GP Volts 10' [V]*0.6453 + 2.1765,1)" SampleRate="0" Unit="in"/>
+  <MathExpression Id="Susp Pos FR" DisplayUnit="in" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="filter_lp(-'GP Volts 5' [V]*0.6453 + 2.1756,1)" SampleRate="0" Unit="in"/>
+  <MathExpression Id="Pitch Angle" DisplayUnit="deg" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="atan((-(('Susp Pos FR' [in]+'Susp Pos FL' [in])/2)+(('Susp Pos RR' [in]+'Susp Pos RL' [in])/2))/60)" SampleRate="0" Unit="rad"/>
+  <MathExpression Id="Roll Angle" DisplayUnit="deg" DisplayDPS="2" DisplayColorIndex="5" Interpolate="1" Script="atan(((('Susp Pos FR' [in]+'Susp Pos RR' [in])/2)-(('Susp Pos FL' [in]+'Susp Pos RL' [in])/2))/50)" SampleRate="0" Unit="rad"/>
+  <MathExpression Id="Roll Calculated Lat G" DisplayUnit="G" DisplayDPS="2" DisplayColorIndex="6" Interpolate="1" Script="'Roll Angle' [deg]/0.49" SampleRate="0" Unit="G"/>
+  <MathExpression Id="rl droop limit" DisplayDPS="2" DisplayColorIndex="7" Interpolate="1" Script="'GP Volts 7' [V] &lt;= 2.2
+" SampleRate="0" Unit=""/>
+  <MathExpression Id="Wheel Speed FR" DisplayUnit="mph" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="'Ground Speed Right'" SampleRate="0" Unit="mph"/>
+  <MathExpression Id="Wheel Speed FL" DisplayUnit="mph" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="'Ground Speed Left'" SampleRate="0" Unit="mph"/>
+  <MathExpression Id="Damper Vel FL" DisplayUnit="in/s" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="derivative('Susp Pos FL' [in]*0.84)" SampleRate="0" Unit="in/s"/>
+  <MathExpression Id="Damper Vel FR" DisplayUnit="in/s" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="derivative('Susp Pos FR' [in]*0.84)" SampleRate="0" Unit="in/s"/>
+  <MathExpression Id="Damper Vel RR" DisplayUnit="in/s" DisplayDPS="2" DisplayColorIndex="5" Interpolate="1" Script="derivative('Susp Pos RR' [in]*1.35)" SampleRate="0" Unit="in/s"/>
+  <MathExpression Id="Damper Vel RL" DisplayUnit="in/s" DisplayDPS="2" DisplayColorIndex="6" Interpolate="1" Script="derivative('Susp Pos RL' [in]*1.35)" SampleRate="0" Unit="in/s"/>
+  <MathExpression Id="Steered Angle" DisplayUnit="deg" DisplayDPS="2" DisplayColorIndex="7" Interpolate="1" Script="'Steering Angle' [deg]" SampleRate="0" Unit="deg"/>
+  <MathExpression Id="Vehicle WheelBase" DisplayUnit="in" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="60" SampleRate="0" Unit="in"/>
+  <MathExpression Id="FL df" DisplayUnit="lbf" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="filter_lp('GP Volts 1' [V]*19.43,1)" SampleRate="0" Unit="lbf"/>
+  <MathExpression Id="FR df" DisplayUnit="lbf" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="filter_lp('GP Volts 2' [V]*27.76,1)" SampleRate="0" Unit="lbf"/>
+  <MathExpression Id="RL df" DisplayUnit="lbf" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="filter_lp('GP Volts 3' [V]*-28.77,1)" SampleRate="0" Unit="lbf"/>
+  <MathExpression Id="RR df" DisplayUnit="lbf" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="filter_lp('GP Volts 4' [V]*-9.63,1)" SampleRate="0" Unit="lbf"/>
+  <MathExpression Id="front df" DisplayUnit="lbf" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="'FL df' [lbf]+'FR df' [lbf]" SampleRate="0" Unit="lbf"/>
+  <MathExpression Id="rear df" DisplayUnit="lbf" DisplayDPS="2" DisplayColorIndex="5" Interpolate="1" Script="'RL df' [lbf]+'RR df' [lbf]" SampleRate="0" Unit="lbf"/>
+  <MathExpression Id="total df" DisplayUnit="lbf" DisplayDPS="2" DisplayColorIndex="6" Interpolate="1" Script="'front df' [lbf]+'rear df' [lbf]" SampleRate="0" Unit="lbf"/>
+  <MathExpression Id="cp" DisplayDPS="2" DisplayColorIndex="7" Interpolate="1" Script="'rear df' [lbf]/'total df' [lbf]" SampleRate="0" Unit=""/>
+  <MathExpression Id="CLA" DisplayUnit="m2" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="('total df' [lbf]*2*4.4482216282509)/('Corr Speed' [mph]*'Corr Speed' [mph]*1.225*0.44704*.44704)" SampleRate="0" Unit="m2"/>
+  <MathExpression Id="gear ratio" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="'Engine RPM' [rpm]/'Corr Speed' [mph]" SampleRate="0" Unit=""/>
+  <MathExpression Id="1st gear" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="350" SampleRate="0" Unit=""/>
+  <MathExpression Id="2nd gear" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="285" SampleRate="0" Unit=""/>
+  <MathExpression Id="3rd gear" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="233" SampleRate="0" Unit=""/>
+  <MathExpression Id="4th gear" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="200" SampleRate="0" Unit=""/>
+  <MathExpression Id="Corr Speed 16" DisplayUnit="mph" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="'Corr Speed' [mph]*0.5*0.822" SampleRate="0" Unit="mph"/>
+  <MathExpression Id="RPM calced wheel speed" DisplayUnit="mph" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="'Engine RPM' [rpm]/321.009155" SampleRate="0" Unit="mph"/>
+  <MathExpression Id="Brake Pressure Front" DisplayUnit="psi" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="'User 2'" SampleRate="0" Unit="kPa"/>
+  <MathExpression Id="Brake Pressure Rear" DisplayUnit="psi" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="'User 1'" SampleRate="0" Unit="kPa"/>
+  <MathExpression Id="Accel Calc Work" DisplayUnit="kJ" DisplayDPS="2" DisplayColorIndex="6" Interpolate="1" Script="integrate_dist(254*9.81*'G Force Long' [G])" SampleRate="0" Unit="J"/>
+  <MathExpression Id="Front Brake Pressure Calculated Work" DisplayUnit="kJ" DisplayDPS="2" DisplayColorIndex="7" Interpolate="1" Script="integrate_dist('Brake Pressure Front' [psi]*4.92*'Rotor Mu' *2.906/(0.2032*8.85))" SampleRate="0" Unit="J"/>
+  <MathExpression Id="Rear Brake Pressure Calculated Work" DisplayUnit="kJ" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="integrate_dist('Brake Pressure Rear' [psi]*2.493*'Rotor Mu' *2.855/(0.2032*8.85))" SampleRate="0" Unit="J"/>
+  <MathExpression Id="Speed Calculated Energy Input" DisplayUnit="J" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="stat_max('Corr Speed 16' [mph])" SampleRate="0" Unit="J"/>
+  <MathExpression Id="Total Brake Pressure Work" DisplayUnit="kJ" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="('Front Brake Pressure Calculated Work' [kJ]+'Rear Brake Pressure Calculated Work' [kJ])*2" SampleRate="0" Unit="kJ"/>
+  <MathExpression Id="Speed Calced Accel" DisplayUnit="G" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="derivative('Corr Speed 16' [m/s])" SampleRate="0" Unit="m/s/s"/>
+  <MathExpression Id="Accel Calc Work 2" DisplayUnit="kJ" DisplayDPS="2" DisplayColorIndex="5" Interpolate="1" Script="integrate_dist(254*9.81*'Speed Calced Accel' [G])" SampleRate="0" Unit="J"/>
+  <MathExpression Id="upshift" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="'Aux 5 Duty ECU' [%]" SampleRate="0" Unit=""/>
+  <MathExpression Id="downshift" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="'Aux 6 Duty ECU' [%]" SampleRate="0" Unit=""/>
+  <MathExpression Id="lambda filter" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="choose('Speed Calced Accel' [G]&lt;0,0.9,'Lambda 1' [LA])" SampleRate="0" Unit=""/>
+  <MathExpression Id="upshift" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="'Aux 5 Duty ECU' [%]" SampleRate="0" Unit=""/>
+  <MathExpression Id="downshift" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="'Aux 6 Duty ECU' [%]" SampleRate="0" Unit=""/>
+  <MathExpression Id="Brake Pressure Total" DisplayUnit="Pa" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="'Brake Pressure Front' [psi]+'Brake Pressure Rear' [psi]" SampleRate="0" Unit="Pa"/>
+  <MathExpression Id="Corner Radius" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="-1/('Inverse Corner Radius')" SampleRate="0" Unit=""/>
+  <MathExpression Id="Roll Velocity" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="derivative('Roll Angle' [deg])" SampleRate="0" Unit=""/>
+  <MathExpression Id="Heave" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="('Susp Pos FL' [in] + 'Susp Pos FR' [in] + 'Susp Pos RL' [in] + 'Susp Pos RR' [in]) / 4" SampleRate="0" Unit=""/>
+  <MathExpression Id="Warp (FL+RR)-(FR+RL)" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="('Susp Pos FL' [in] + 'Susp Pos RR' [in]) - ('Susp Pos FR' [in]+'Susp Pos RL' [in])" SampleRate="0" Unit=""/>
+  <MathExpression Id="Front Roll Angle" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="atan(((('Susp Pos FR' [in]))-(('Susp Pos FL' [in])))/50)" SampleRate="0" Unit=""/>
+  <MathExpression Id="Rear Roll Angle" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="atan(((('Susp Pos RR' [in]))-(('Susp Pos RL' [in])))/50)" SampleRate="0" Unit=""/>
+  <MathExpression Id="Front/Rear roll ratio" DisplayDPS="2" DisplayColorIndex="5" Interpolate="1" Script="'Front Roll Angle' / 'Rear Roll Angle'" SampleRate="0" Unit=""/>
+  <MathExpression Id="Total Accel G" DisplayDPS="2" DisplayColorIndex="6" Interpolate="1" Script="(('G Force Lat' [G])^2+('G Force Long' [G])^2)^(1/2)" SampleRate="0" Unit=""/>
+  <MathExpression Id="Braking Grip" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="('G Force Long' [G] &lt; -'accel threshold' [G])*('Total Accel G')" SampleRate="0" Unit=""/>
+  <MathExpression Id="Accelerating Grip" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="('G Force Long' [G]&gt;'accel threshold' [G])*'Total Accel G'" SampleRate="0" Unit=""/>
+  <MathExpression Id="cornering grip" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="(abs('G Force Lat' [G]) &gt; 'accel threshold' [G])*'Total Accel G'" SampleRate="0" Unit=""/>
+  <MathExpression Id="Braking and Cornering Grip" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="(('G Force Long' [G]&lt;-'accel threshold' [G]) AND (abs('G Force Lat' [G]) &gt;'accel threshold' [G]))*'Total Accel G'" SampleRate="0" Unit=""/>
+  <MathExpression Id="Accel And Cornering Grip" DisplayDPS="2" DisplayColorIndex="5" Interpolate="1" Script="(('G Force Long' [G]&gt;'accel threshold' [G]) AND (abs('G Force Lat' [G]) &gt;'accel threshold' [G]))*'Total Accel G'" SampleRate="0" Unit=""/>
+  <MathExpression Id="Tire Temp FL" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="0" SampleRate="0" Unit=""/>
+  <MathExpression Id="Tire Temp RR" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="0" SampleRate="0" Unit=""/>
+  <MathExpression Id="Tire Temp RL" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="0" SampleRate="0" Unit=""/>
+  <MathExpression Id="Tire Temp FR" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="0" SampleRate="0" Unit=""/>
+  <MathExpression Id="Tire Temp Avg" DisplayDPS="2" DisplayColorIndex="5" Interpolate="1" Script="('Tire Temp FL'+'Tire Temp FR'+'Tire Temp RL'+'Tire Temp RR')/4" SampleRate="0" Unit=""/>
+  <MathExpression Id="Lateral Load Transfer" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="('Weight' [lb] * 'G Force Lat' [G]*'COG Height' [in])/'Track Width' [in]" SampleRate="0" Unit=""/>
+  <MathExpression Id="Tire Temp L-R Front" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="'Tire Temp FL'-'Tire Temp FR'" SampleRate="0" Unit=""/>
+  <MathExpression Id="Tire Temp L-R Rear" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="'Tire Temp RL'-'Tire Temp RR'" SampleRate="0" Unit=""/>
+  <MathExpression Id="Lon Load Transfer" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="('Weight' [lb] * 'G Force Long' [G] * 'COG Height' [in])/'Wheelbase' [in]" SampleRate="0" Unit=""/>
+  <MathExpression Id="Load Cell FR" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="0" SampleRate="0" Unit=""/>
+  <MathExpression Id="Load Cell FL" DisplayDPS="2" DisplayColorIndex="5" Interpolate="1" Script="0" SampleRate="0" Unit=""/>
+  <MathExpression Id="Load Cell RL" DisplayDPS="2" DisplayColorIndex="6" Interpolate="1" Script="0" SampleRate="0" Unit=""/>
+  <MathExpression Id="Load Cell RR" DisplayDPS="2" DisplayColorIndex="7" Interpolate="1" Script="0" SampleRate="0" Unit=""/>
+  <MathExpression Id="Wheel Load FR" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="'Load Cell FR'/.75" SampleRate="0" Unit=""/>
+  <MathExpression Id="Wheel Load FL" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="'Load Cell FL'/.75" SampleRate="0" Unit=""/>
+  <MathExpression Id="Understeer Angle" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="'Corr Steer Angle'-('Wheelbase' [in]*0.0254*'Inverse Corner Radius'*(180/3.14))" SampleRate="0" Unit=""/>
+  <MathExpression Id="Corr Steer Angle" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="0" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Combined" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="sqrt((sqr('G Force Lat' [G]) +sqr('G Force Long' [G])))" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lat 10-20mph" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="'G Force Lat' [G]*('Corr Speed' [mph]  &gt; 10  AND 'Corr Speed' [mph] &lt;= 20)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lon 10-20mph" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="'G Force Long' [G]*('Corr Speed' [mph]  &gt; 10  AND 'Corr Speed' [mph] &lt;= 20)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lat 20-30mph" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="'G Force Lat' [G]*('Corr Speed' [mph]  &gt; 20  AND 'Corr Speed' [mph] &lt;= 30)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lon 20-30mph" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="'G Force Long' [G]*('Corr Speed' [mph]  &gt; 20  AND 'Corr Speed' [mph] &lt;= 30)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lat 30-40mph" DisplayDPS="2" DisplayColorIndex="5" Interpolate="1" Script="'G Force Lat' [G]*('Corr Speed' [mph]  &gt; 30  AND 'Corr Speed' [mph] &lt;= 40)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lon 30-40mph" DisplayDPS="2" DisplayColorIndex="6" Interpolate="1" Script="'G Force Long' [G]*('Corr Speed' [mph]  &gt; 30  AND 'Corr Speed' [mph] &lt;= 40)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lat 40-50mph" DisplayDPS="2" DisplayColorIndex="7" Interpolate="1" Script="'G Force Lat' [G]*('Corr Speed' [mph]  &gt; 40  AND 'Corr Speed' [mph] &lt;= 50)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lon 40-50mph" DisplayDPS="2" DisplayColorIndex="0" Interpolate="1" Script="'G Force Long' [G]*('Corr Speed' [mph]  &gt; 40  AND 'Corr Speed' [mph] &lt;= 50)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lat 50-60mph" DisplayDPS="2" DisplayColorIndex="1" Interpolate="1" Script="'G Force Lat' [G]*('Corr Speed' [mph]  &gt; 50  AND 'Corr Speed' [mph] &lt;= 60)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lon 50-60mph" DisplayDPS="2" DisplayColorIndex="2" Interpolate="1" Script="'G Force Long' [G]*('Corr Speed' [mph]  &gt; 50  AND 'Corr Speed' [mph] &lt;= 60)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G Force Lat &gt; 60mph" DisplayDPS="2" DisplayColorIndex="3" Interpolate="1" Script="'G Force Lat' [G]*('Corr Speed' [mph] &gt; 60)" SampleRate="0" Unit=""/>
+  <MathExpression Id="G force lon &gt; 60mph" DisplayDPS="2" DisplayColorIndex="4" Interpolate="1" Script="'G Force Long' [G]*('Corr Speed' [mph] &gt; 60)" SampleRate="0" Unit=""/>
+ </MathItems>
+</Maths>

@@ -1,4 +1,4 @@
-    function study = DOEStudyConfig()
+function study = DOEStudyConfig()
 study.name = "vehicle_design_2026";
 study.mode = "sensitivity";
 study.randomSeed = 1;

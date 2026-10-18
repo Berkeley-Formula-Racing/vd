@@ -40,7 +40,7 @@ vehicle.qss_steering_limit_deg = 25;
 vehicle.motion_ratio_front = 0.847;
 vehicle.motion_ratio_rear = 0.984;
 % The b26 aero map uses front/rear offsets at the axle stations. The physical
-% ride-height measurements are taken at the CAD points below, so translate
+% ride-height measurements are taken at the CAD stations below, so translate
 % the nominal CAD line to x=0 and x=wheelbase before defining the baseline.
 cad_front_x_in = 4.378;
 cad_rear_x_in = 59.75;
