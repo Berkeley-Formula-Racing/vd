@@ -1,0 +1,205 @@
+<?xml version="1.0"?>
+<Workbook Locale="English_United States.1252" DefaultLocale="C" Version="200" Name="Brakes" Profile="Circuit" Active="Worksheets">
+ <Worksheets Version="100" Name="Worksheets" PosPC="0,0,1000,1000" Active="General">
+  <Worksheet Version="200" Name="General" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Copy (1) of Copy (1) of Copy (1) of Copy (1) of Time/Distance [1]">
+    <MoTeC.TimeDistance Version="100" Name="Copy (1) of Copy (1) of Copy (1) of Copy (1) of Time/Distance [1]" PosPC="0,0,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 5">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="118"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="0,0,0"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Engine RPM">
+        <Trace Id="Engine RPM" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+      <Graph Name="Group 2" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="118" BottomEdge="284"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="0,0,0"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Throttle Pos">
+        <Trace Id="Corr Speed" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+        <Trace Id="Throttle Pos" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+      <Graph Name="Group 4" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="284" BottomEdge="402"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="0,0,0"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="G Force Long">
+        <Trace Id="G Force Long" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+      <Graph Name="Group 6" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="402" BottomEdge="635"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="0,0,0"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Brake Pres Rear">
+        <Trace Id="Brake Pres Front" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+        <Trace Id="Brake Pres Rear" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+      <Graph Name="Group 3" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="635" BottomEdge="833"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="0,0,0"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Brake Temp RL">
+        <Trace Id="Brake Temp FL" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+        <Trace Id="Brake Temp RL" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+      <Graph Name="Group 5" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="833" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="0,0,0"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Brake Bias Setting">
+        <Trace Id="Brake Bias Setting" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+   </Controls>
+  </Worksheet>
+  <Worksheet Version="200" Name="Brake Temp Rainbow" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Copy (1) of Rainbow Track Map [1]">
+    <MoTeC.RainbowTrack Version="100" Name="Copy (1) of Rainbow Track Map [1]" PosPC="0,500,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" ShowSectLabels="0" ShowSectMarks="1" LinkCursor="1">
+     <TrackMapWindow>
+      <SizeScheme>
+       <SizeSchemeEntry Name="Cursor" INTValue="10"/>
+       <SizeSchemeEntry Name="Detail" INTValue="2"/>
+       <SizeSchemeEntry Name="Material" INTValue="6"/>
+      </SizeScheme>
+     </TrackMapWindow>
+     <ContourChannel ID="Brake Temp RL" Enabled="1" ScaleMode="0" UnitsMode="0">
+      <EvenWidthBandAxis PaletteMode="0" GradientMode="0" BandChanColor="255,32,224" AxisChanColor="255,32,224" Color1="255,32,224" Color2="255,64,64" ReversGradient="0" CentredBands="0" GreaterMaxBand="0" LessMinBand="0" Continuous="0" BandMode="1" DataMin="35" DataMax="342" BandWidth="51.1667" BandCount="6">
+       <ColorBand Flags="7" Min="35" Max="86.1667" Color="255,213,249" Visible="1"/>
+       <ColorBand Flags="7" Min="86.1667" Max="137.333" Color="255,145,238" Visible="1"/>
+       <ColorBand Flags="7" Min="137.333" Max="188.5" Color="255,77,228" Visible="1"/>
+       <ColorBand Flags="7" Min="188.5" Max="239.667" Color="255,9,218" Visible="1"/>
+       <ColorBand Flags="7" Min="239.667" Max="290.833" Color="196,0,166" Visible="1"/>
+       <ColorBand Flags="15" Min="290.833" Max="342" Color="128,0,108" Visible="1"/>
+      </EvenWidthBandAxis>
+     </ContourChannel>
+    </MoTeC.RainbowTrack>
+    <MoTeC.RainbowTrack Version="100" Name="Rainbow Track Map [1]" PosPC="0,0,1000,500" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" ShowSectLabels="0" ShowSectMarks="1" LinkCursor="1">
+     <TrackMapWindow>
+      <SizeScheme>
+       <SizeSchemeEntry Name="Cursor" INTValue="10"/>
+       <SizeSchemeEntry Name="Detail" INTValue="2"/>
+       <SizeSchemeEntry Name="Material" INTValue="6"/>
+      </SizeScheme>
+     </TrackMapWindow>
+     <ContourChannel ID="Brake Temp FL" Enabled="1" ScaleMode="0" UnitsMode="0">
+      <EvenWidthBandAxis PaletteMode="0" GradientMode="0" BandChanColor="255,0,0" AxisChanColor="255,0,0" Color1="255,0,0" Color2="255,64,64" ReversGradient="0" CentredBands="0" GreaterMaxBand="0" LessMinBand="0" Continuous="0" BandMode="1" DataMin="164" DataMax="594" BandWidth="71.6667" BandCount="6">
+       <ColorBand Flags="7" Min="164" Max="235.667" Color="255,213,213" Visible="1"/>
+       <ColorBand Flags="7" Min="235.667" Max="307.333" Color="255,145,145" Visible="1"/>
+       <ColorBand Flags="7" Min="307.333" Max="379" Color="255,77,77" Visible="1"/>
+       <ColorBand Flags="7" Min="379" Max="450.667" Color="255,9,9" Visible="1"/>
+       <ColorBand Flags="7" Min="450.667" Max="522.333" Color="196,0,0" Visible="1"/>
+       <ColorBand Flags="15" Min="522.333" Max="594" Color="128,0,0" Visible="1"/>
+      </EvenWidthBandAxis>
+     </ContourChannel>
+    </MoTeC.RainbowTrack>
+   </Controls>
+  </Worksheet>
+  <Worksheet Version="200" Name="Channel Report" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Copy (1) of Report [1]">
+    <MoTeC.ChannelReport TimeFormat="8" SplitterPos="5000" ChartShowKey="1" ChartScaleMode="0" Version="100" Name="Copy (1) of Report [1]" Caption="Channel Report - Selected Laps" PosPC="0,500,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="0" ModeId="0" ShowDataLegend="1" TelemetryZoom="0">
+     <LapReportGen Version="4" FilterRanges="1" InclusiveSamples="0" DataExtent="0" HeaderIndex="0">
+      <ReportRange HeaderGroup="Events"/>
+      <ReportRange HeaderGroup="Vehicles"/>
+      <ReportRange HeaderGroup="Sessions"/>
+      <ReportRange HeaderGroup="Outings"/>
+      <ReportRange HeaderGroup="Outings:Laps"/>
+      <SummaryGenerator Name="rptsummary.min" Enabled="1" Color="185,220,255"/>
+      <SummaryGenerator Name="rptsummary.max" Enabled="1" Color="255,170,170"/>
+      <ChannelEntry ID="Diff Oil Temp">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+       <Formula Name="rngmaths.float.diff"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Gbox Oil Temp">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+       <Formula Name="rngmaths.float.diff"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Brake Temp FL">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Brake Temp RL">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Brake Pres Front">
+       <Formula Name="rngmaths.float.max"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Brake Pres Rear">
+       <Formula Name="rngmaths.float.max"/>
+      </ChannelEntry>
+     </LapReportGen>
+    </MoTeC.ChannelReport>
+    <MoTeC.ChannelReport TimeFormat="8" SplitterPos="5000" ChartShowKey="1" ChartScaleMode="0" Version="100" Name="Report [1]" Caption="Channel Report - Laps" PosPC="0,0,1000,500" ShowCaption="0" AutoCaption="0" LinkZoom="0" ModeId="0" ShowDataLegend="1" TelemetryZoom="0">
+     <LapReportGen Version="4" FilterRanges="1" InclusiveSamples="0" DataExtent="1" HeaderIndex="0">
+      <ReportRange HeaderGroup="Events"/>
+      <ReportRange HeaderGroup="Vehicles"/>
+      <ReportRange HeaderGroup="Sessions"/>
+      <ReportRange HeaderGroup="Outings"/>
+      <ReportRange HeaderGroup="Outings:Laps"/>
+      <SummaryGenerator Name="rptsummary.min" Enabled="1" Color="185,220,255"/>
+      <SummaryGenerator Name="rptsummary.max" Enabled="1" Color="255,170,170"/>
+      <ChannelEntry ID="Diff Oil Temp">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+       <Formula Name="rngmaths.float.diff"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Gbox Oil Temp">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+       <Formula Name="rngmaths.float.diff"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Brake Temp FL">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Brake Temp RL">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Brake Pres Front">
+       <Formula Name="rngmaths.float.max"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Brake Pres Rear">
+       <Formula Name="rngmaths.float.max"/>
+      </ChannelEntry>
+     </LapReportGen>
+    </MoTeC.ChannelReport>
+   </Controls>
+  </Worksheet>
+ </Worksheets>
+</Workbook>

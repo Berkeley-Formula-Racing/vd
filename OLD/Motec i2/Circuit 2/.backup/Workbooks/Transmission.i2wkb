@@ -1,0 +1,117 @@
+<?xml version="1.0"?>
+<Workbook Locale="English_United States.1252" DefaultLocale="C" Version="200" Name="Transmission" Profile="Circuit" Active="Worksheets">
+ <Worksheets Version="100" Name="Worksheets" PosPC="0,0,1000,1000" Active="General">
+  <Worksheet Version="200" Name="General" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Copy (1) of Time/Distance [1]">
+    <MoTeC.TimeDistance Version="100" Name="Copy (1) of Time/Distance [1]" PosPC="0,0,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="359"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="0,0,0"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Engine RPM">
+        <Trace Id="Engine RPM" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+      <Graph Name="Group 2" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="359" BottomEdge="666"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="0,0,0"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Gbox Oil Temp">
+        <Trace Id="Gbox Oil Temp" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+      <Graph Name="Group 3" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="666" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="0,0,0"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Diff Oil Temp">
+        <Trace Id="Diff Oil Temp" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+   </Controls>
+  </Worksheet>
+  <Worksheet Version="200" Name="Lap Report" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Copy (1) of Copy (1) of Copy (2) of Report [1]">
+    <MoTeC.ChannelReport TimeFormat="8" SplitterPos="5000" ChartShowKey="1" ChartScaleMode="0" Version="100" Name="Copy (1) of Copy (1) of Copy (2) of Report [1]" Caption="Channel Report - For Selected Laps" PosPC="0,500,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="0" ModeId="0" ShowDataLegend="1" TelemetryZoom="0">
+     <LapReportGen Version="4" FilterRanges="1" InclusiveSamples="0" DataExtent="0" HeaderIndex="0">
+      <ReportRange HeaderGroup="Events"/>
+      <ReportRange HeaderGroup="Vehicles"/>
+      <ReportRange HeaderGroup="Sessions"/>
+      <ReportRange HeaderGroup="Outings"/>
+      <ReportRange HeaderGroup="Outings:Laps"/>
+      <SummaryGenerator Name="rptsummary.min" Enabled="1" Color="185,220,255"/>
+      <SummaryGenerator Name="rptsummary.max" Enabled="1" Color="255,170,170"/>
+      <ChannelEntry ID="Diff Oil Temp">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+       <Formula Name="rngmaths.float.diff"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Gbox Oil Temp">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+       <Formula Name="rngmaths.float.diff"/>
+      </ChannelEntry>
+     </LapReportGen>
+    </MoTeC.ChannelReport>
+    <MoTeC.ChannelReport TimeFormat="8" SplitterPos="5000" ChartShowKey="1" ChartScaleMode="0" Version="100" Name="Copy (1) of Copy (2) of Report [1]" Caption="Channel Report - For All Laps" PosPC="0,0,1000,500" ShowCaption="0" AutoCaption="0" LinkZoom="0" ModeId="0" ShowDataLegend="1" TelemetryZoom="0">
+     <LapReportGen Version="4" FilterRanges="1" InclusiveSamples="0" DataExtent="1" HeaderIndex="0">
+      <ReportRange HeaderGroup="Events"/>
+      <ReportRange HeaderGroup="Vehicles"/>
+      <ReportRange HeaderGroup="Sessions"/>
+      <ReportRange HeaderGroup="Outings"/>
+      <ReportRange HeaderGroup="Outings:Laps"/>
+      <SummaryGenerator Name="rptsummary.min" Enabled="1" Color="185,220,255"/>
+      <SummaryGenerator Name="rptsummary.max" Enabled="1" Color="255,170,170"/>
+      <ChannelEntry ID="Diff Oil Temp">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+       <Formula Name="rngmaths.float.diff"/>
+      </ChannelEntry>
+      <ChannelEntry ID="Gbox Oil Temp">
+       <Formula Name="rngmaths.float.max"/>
+       <Formula Name="rngmaths.float.avg"/>
+       <Formula Name="rngmaths.float.diff"/>
+      </ChannelEntry>
+     </LapReportGen>
+    </MoTeC.ChannelReport>
+   </Controls>
+  </Worksheet>
+  <Worksheet Version="200" Name="Gearing" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Copy (1) of Scatter Plot [2]">
+    <MoTeC.Scatter Version="100" Name="Copy (1) of Scatter Plot [2]" PosPC="0,0,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" ActiveTrace="0" TileMode="1" TileActiveChan="0" TileAutoCols="1" TileCols="1" XChannel="Corr Speed" ZChannel="Throttle Pos" XScaleMode="0" YScaleMode="0" ZScaleMode="0" ShowPoints="1" ShowDensity="0" DensityBins="50" DensityFillColorMode="1" DensityFillColor1="64,64,255" DensityFillColor2="64,64,255" IntervalStat="0" IntervalStat.BinWidth="100" ShowGridLines="1" ShowGradient="1" ShowColorBinSamples="1" Style="2" Size="1" ShowLines="0" ShowRegEquation="0" LinePointMode="1" CursorStyle="3" RegressionType="0" RegressionParam="0" RegressionZero="0" RegressionDigits="3">
+     <Trace YChannel="Engine RPM" Visible="1" YDelay="0"/>
+     <EvenWidthBandAxis PaletteMode="1" GradientMode="1" BandChanColor="0,174,0" AxisChanColor="255,0,0" Color1="64,64,255" Color2="255,64,64" ReversGradient="0" CentredBands="0" GreaterMaxBand="1" LessMinBand="1" Continuous="0" BandMode="1" DataMin="0" DataMax="100" BandWidth="10" BandCount="10">
+      <ColorBand Flags="2" Min="0" Max="0" Color="64,64,255" Visible="1"/>
+      <ColorBand Flags="7" Min="0" Max="10" Color="64,136,255" Visible="1"/>
+      <ColorBand Flags="7" Min="10" Max="20" Color="64,203,255" Visible="1"/>
+      <ColorBand Flags="7" Min="20" Max="30" Color="64,255,236" Visible="1"/>
+      <ColorBand Flags="7" Min="30" Max="40" Color="64,255,169" Visible="1"/>
+      <ColorBand Flags="7" Min="40" Max="50" Color="64,255,98" Visible="1"/>
+      <ColorBand Flags="7" Min="50" Max="60" Color="98,255,64" Visible="1"/>
+      <ColorBand Flags="7" Min="60" Max="70" Color="169,255,64" Visible="1"/>
+      <ColorBand Flags="7" Min="70" Max="80" Color="236,255,64" Visible="1"/>
+      <ColorBand Flags="7" Min="80" Max="90" Color="255,203,64" Visible="1"/>
+      <ColorBand Flags="15" Min="90" Max="100" Color="255,136,64" Visible="1"/>
+      <ColorBand Flags="1" Min="100" Max="100" Color="255,64,64" Visible="1"/>
+     </EvenWidthBandAxis>
+    </MoTeC.Scatter>
+   </Controls>
+  </Worksheet>
+ </Worksheets>
+</Workbook>

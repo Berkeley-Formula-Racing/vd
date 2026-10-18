@@ -1,0 +1,388 @@
+<?xml version="1.0"?>
+<Workbook Locale="English_United States.1252" DefaultLocale="C" Version="200" Name="Drivers" Profile="Circuit" Active="Worksheets">
+ <Worksheets Version="100" Name="Worksheets" PosPC="0,0,1000,1000" Active="Driver Activity">
+  <Worksheet Version="200" Name="Driver Activity" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Time/Distance Graph (3)">
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (3)" PosPC="0,548,1000,709" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs/>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (5)" PosPC="0,709,1000,859" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Engine RPM">
+        <Trace Id="Engine RPM" DisplayUnit="rpm" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (4)" PosPC="0,859,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Gear">
+        <Trace Id="Gear" DisplayUnit="" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (2)" PosPC="0,393,1000,548" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Steering Angle">
+        <Trace Id="Steered Angle" DisplayUnit="deg" DisplayDPS="2" Visible="1"/>
+        <Trace Id="Steering Angle" DisplayUnit="deg" DisplayDPS="1" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (1)" PosPC="0,198,1000,393" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Throttle Pos">
+        <Trace Id="Throttle Pos" DisplayUnit="%" DisplayDPS="1" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph" PosPC="0,0,1000,198" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Corr Speed">
+        <Trace Id="Corr Speed" DisplayUnit="mph" DisplayDPS="1" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+   </Controls>
+  </Worksheet>
+  <Worksheet Version="200" Name="Vital Functions" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Time/Distance Graph">
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph" PosPC="0,0,1000,282" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Engine RPM">
+        <Trace Id="Engine RPM" DisplayUnit="rpm" DisplayDPS="0" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (1)" PosPC="0,282,1000,526" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Engine Temp">
+        <Trace Id="Engine Temp" DisplayUnit="C" DisplayDPS="1" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (2)" PosPC="0,526,1000,766" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs/>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (3)" PosPC="0,766,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Bat Volts ECU">
+        <Trace Id="Bat Volts ECU" DisplayUnit="V" DisplayDPS="2" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+   </Controls>
+  </Worksheet>
+  <Worksheet Version="200" Name="Throttle Application" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Histogram">
+    <MoTeC.Histogram Version="100" Name="Histogram" PosPC="0,0,1000,200" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" ActiveTrace="0" TileMode="1" TileActiveChan="1" TileAutoCols="1" TileCols="1" SecondChannel="" XScaleMode="0" XSecondScaleMode="0" YUnitMode="1" YScaleMode="1" YScale="20" YAllowOverrides="0" YExcludeUntrusted="1" Style="1" BinLabelStep="-1" UseColors="0" InvertColors="0" StackLines="0" ShowColorBinSamples="1">
+     <HistoTrace Id="Throttle Pos" Visible="1"/>
+     <HistoMainBins>
+      <EvenWidthBandAxis PaletteMode="1" GradientMode="1" BandChanColor="0,0,0" AxisChanColor="0,0,0" Color1="64,64,255" Color2="255,64,64" ReversGradient="0" CentredBands="0" GreaterMaxBand="1" LessMinBand="1" Continuous="0" BandMode="1" DataMin="0" DataMax="70" BandWidth="1.4" BandCount="50">
+       <ColorBand Flags="2" Min="0" Max="0" Color="64,64,255" Visible="1"/>
+       <ColorBand Flags="7" Min="0" Max="1.4" Color="64,79,255" Visible="1"/>
+       <ColorBand Flags="7" Min="1.4" Max="2.8" Color="64,92,255" Visible="1"/>
+       <ColorBand Flags="7" Min="2.8" Max="4.2" Color="64,107,255" Visible="1"/>
+       <ColorBand Flags="7" Min="4.2" Max="5.6" Color="64,126,255" Visible="1"/>
+       <ColorBand Flags="7" Min="5.6" Max="7" Color="64,140,255" Visible="1"/>
+       <ColorBand Flags="7" Min="7" Max="8.4" Color="64,155,255" Visible="1"/>
+       <ColorBand Flags="7" Min="8.4" Max="9.8" Color="64,169,255" Visible="1"/>
+       <ColorBand Flags="7" Min="9.8" Max="11.2" Color="64,184,255" Visible="1"/>
+       <ColorBand Flags="7" Min="11.2" Max="12.6" Color="64,198,255" Visible="1"/>
+       <ColorBand Flags="7" Min="12.6" Max="14" Color="64,213,255" Visible="1"/>
+       <ColorBand Flags="7" Min="14" Max="15.4" Color="64,232,255" Visible="1"/>
+       <ColorBand Flags="7" Min="15.4" Max="16.8" Color="64,245,255" Visible="1"/>
+       <ColorBand Flags="7" Min="16.8" Max="18.2" Color="64,255,251" Visible="1"/>
+       <ColorBand Flags="7" Min="18.2" Max="19.6" Color="64,255,236" Visible="1"/>
+       <ColorBand Flags="7" Min="19.6" Max="21" Color="64,255,222" Visible="1"/>
+       <ColorBand Flags="7" Min="21" Max="22.4" Color="64,255,207" Visible="1"/>
+       <ColorBand Flags="7" Min="22.4" Max="23.8" Color="64,255,193" Visible="1"/>
+       <ColorBand Flags="7" Min="23.8" Max="25.2" Color="64,255,179" Visible="1"/>
+       <ColorBand Flags="7" Min="25.2" Max="26.6" Color="64,255,159" Visible="1"/>
+       <ColorBand Flags="7" Min="26.6" Max="28" Color="64,255,146" Visible="1"/>
+       <ColorBand Flags="7" Min="28" Max="29.4" Color="64,255,131" Visible="1"/>
+       <ColorBand Flags="7" Min="29.4" Max="30.8" Color="64,255,117" Visible="1"/>
+       <ColorBand Flags="7" Min="30.8" Max="32.2" Color="64,255,102" Visible="1"/>
+       <ColorBand Flags="7" Min="32.2" Max="33.6" Color="64,255,88" Visible="1"/>
+       <ColorBand Flags="7" Min="33.6" Max="35" Color="64,255,73" Visible="1"/>
+       <ColorBand Flags="7" Min="35" Max="36.4" Color="73,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="36.4" Max="37.8" Color="88,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="37.8" Max="39.2" Color="102,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="39.2" Max="40.6" Color="117,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="40.6" Max="42" Color="131,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="42" Max="43.4" Color="146,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="43.4" Max="44.8" Color="159,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="44.8" Max="46.2" Color="179,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="46.2" Max="47.6" Color="193,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="47.6" Max="49" Color="207,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="49" Max="50.4" Color="222,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="50.4" Max="51.8" Color="236,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="51.8" Max="53.2" Color="251,255,64" Visible="1"/>
+       <ColorBand Flags="7" Min="53.2" Max="54.6" Color="255,245,64" Visible="1"/>
+       <ColorBand Flags="7" Min="54.6" Max="56" Color="255,232,64" Visible="1"/>
+       <ColorBand Flags="7" Min="56" Max="57.4" Color="255,213,64" Visible="1"/>
+       <ColorBand Flags="7" Min="57.4" Max="58.8" Color="255,198,64" Visible="1"/>
+       <ColorBand Flags="7" Min="58.8" Max="60.2" Color="255,184,64" Visible="1"/>
+       <ColorBand Flags="7" Min="60.2" Max="61.6" Color="255,169,64" Visible="1"/>
+       <ColorBand Flags="7" Min="61.6" Max="63" Color="255,155,64" Visible="1"/>
+       <ColorBand Flags="7" Min="63" Max="64.4" Color="255,140,64" Visible="1"/>
+       <ColorBand Flags="7" Min="64.4" Max="65.8" Color="255,126,64" Visible="1"/>
+       <ColorBand Flags="7" Min="65.8" Max="67.2" Color="255,107,64" Visible="1"/>
+       <ColorBand Flags="7" Min="67.2" Max="68.6" Color="255,92,64" Visible="1"/>
+       <ColorBand Flags="15" Min="68.6" Max="70" Color="255,79,64" Visible="1"/>
+       <ColorBand Flags="1" Min="70" Max="70" Color="255,64,64" Visible="1"/>
+      </EvenWidthBandAxis>
+     </HistoMainBins>
+     <HistoColorBands>
+      <EvenWidthBandAxis PaletteMode="1" GradientMode="1" BandChanColor="0,0,0" AxisChanColor="64,255,64" Color1="64,64,255" Color2="255,64,64" ReversGradient="0" CentredBands="0" GreaterMaxBand="1" LessMinBand="1" Continuous="0" BandMode="1" DataMin="0" DataMax="0" BandWidth="0" BandCount="10"/>
+     </HistoColorBands>
+    </MoTeC.Histogram>
+   </Controls>
+  </Worksheet>
+  <Worksheet Version="200" Name="Braking" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Time/Distance Graph (1)">
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (1)" PosPC="0,268,1000,508" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Corr Speed">
+        <Trace Id="Corr Speed" DisplayUnit="mph" DisplayDPS="1" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.RainbowTrack Version="100" Name="Rainbow Track" PosPC="0,508,496,1000" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" ShowSectLabels="0" ShowSectMarks="1" LinkCursor="1">
+     <TrackMapWindow>
+      <SizeScheme>
+       <SizeSchemeEntry Name="Cursor" INTValue="10"/>
+       <SizeSchemeEntry Name="Detail" INTValue="2"/>
+       <SizeSchemeEntry Name="Material" INTValue="6"/>
+      </SizeScheme>
+     </TrackMapWindow>
+     <ContourChannel ID="G Force Long" Enabled="1" ScaleMode="0" UnitsMode="0">
+      <EvenWidthBandAxis PaletteMode="0" GradientMode="0" BandChanColor="255,160,32" AxisChanColor="255,160,32" Color1="255,160,32" Color2="255,64,64" ReversGradient="0" CentredBands="0" GreaterMaxBand="1" LessMinBand="1" Continuous="0" BandMode="1" DataMin="-1" DataMax="1" BandWidth="0.2" BandCount="10">
+       <ColorBand Flags="2" Min="-1" Max="-1" Color="255,237,213" Visible="1"/>
+       <ColorBand Flags="7" Min="-1" Max="-0.8" Color="255,223,181" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.8" Max="-0.6" Color="255,210,151" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.6" Max="-0.4" Color="255,198,119" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.4" Max="-0.2" Color="255,185,89" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.2" Max="0" Color="255,171,57" Visible="1"/>
+       <ColorBand Flags="7" Min="0" Max="0.2" Color="255,158,28" Visible="1"/>
+       <ColorBand Flags="7" Min="0.2" Max="0.4" Color="251,145,0" Visible="1"/>
+       <ColorBand Flags="7" Min="0.4" Max="0.6" Color="221,128,0" Visible="1"/>
+       <ColorBand Flags="7" Min="0.6" Max="0.8" Color="189,108,0" Visible="1"/>
+       <ColorBand Flags="15" Min="0.8" Max="1" Color="159,91,0" Visible="1"/>
+       <ColorBand Flags="1" Min="1" Max="1" Color="128,73,0" Visible="1"/>
+      </EvenWidthBandAxis>
+     </ContourChannel>
+    </MoTeC.RainbowTrack>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph (2)" PosPC="496,508,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 1">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="G Force Long">
+        <Trace Id="G Force Long" DisplayUnit="G" DisplayDPS="2" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph" PosPC="0,0,1000,269" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 2">
+      <Graph Name="Group 1" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="500"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Brake Pressure Rear">
+        <Trace Id="Brake Pressure Front" DisplayUnit="psi" DisplayDPS="2" Visible="1"/>
+        <Trace Id="Brake Pressure Rear" DisplayUnit="psi" DisplayDPS="2" Visible="1"/>
+       </Traces>
+      </Graph>
+      <Graph Name="Group 2" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="500" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Brake Pressure Total">
+        <Trace Id="Brake Pressure Total" DisplayUnit="Pa" DisplayDPS="2" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+   </Controls>
+  </Worksheet>
+  <Worksheet Version="200" Name="Driving Line" LinkTo="Laps" LockByGPSTime="0">
+   <Controls Active="Time/Distance Graph">
+    <MoTeC.TimeDistance Version="100" Name="Time/Distance Graph" PosPC="0,476,1000,1000" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" TraceLineWidth="1" TracePointSize="3" TraceStyle="0" LinkCursor="1" LinkDatum="1" ShowKeyValues="1" ShowKeyStats="0" KeyMode="0" KeyPos="1" ShowGridLines="1" ShowXAxis="1" ShowXAxisScrollBar="0" ShowYAxis="1" ShowYAxisScrollBar="1" ShowMarkers="1" ShowVSP="0" ShowDeviveEvents="1" ShowBands="1" BandGroup="Outings:Laps:Track Sections:Default" BandMode="1" OverlapMode="0" VariancePos="0.25" VarianceAutoScale="1">
+     <Graphs ActivateChild="Group 2">
+      <Graph Name="Group 2" ScaleMode="2" ScaleMin="0" ScaleMax="1">
+       <Edges Mode="0" TopEdge="0" BottomEdge="1000"/>
+       <Edges Mode="1" TopEdge="0" BottomEdge="1000"/>
+       <Lines>
+        <Line Index="0" Enabled="1" Value="0" Color="210,210,210"/>
+        <Line Index="1" Enabled="0" Value="0" Color="0,0,248"/>
+        <Line Index="2" Enabled="0" Value="0" Color="248,0,0"/>
+       </Lines>
+       <Traces ActiveTrace="Corner Radius">
+        <Trace Id="Corner Radius" DisplayUnit="" DisplayDPS="2" Visible="1"/>
+       </Traces>
+      </Graph>
+     </Graphs>
+     <Cursor Version="1" Style="1" Snap="1"/>
+    </MoTeC.TimeDistance>
+    <MoTeC.RainbowTrack Version="100" Name="Rainbow Track (1)" PosPC="0,0,496,475" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" ShowSectLabels="0" ShowSectMarks="1" LinkCursor="1">
+     <TrackMapWindow>
+      <SizeScheme>
+       <SizeSchemeEntry Name="Cursor" INTValue="10"/>
+       <SizeSchemeEntry Name="Detail" INTValue="2"/>
+       <SizeSchemeEntry Name="Material" INTValue="6"/>
+      </SizeScheme>
+     </TrackMapWindow>
+     <ContourChannel ID="G Force Long" Enabled="1" ScaleMode="0" UnitsMode="0">
+      <EvenWidthBandAxis PaletteMode="0" GradientMode="0" BandChanColor="255,160,32" AxisChanColor="255,160,32" Color1="255,160,32" Color2="255,64,64" ReversGradient="0" CentredBands="0" GreaterMaxBand="1" LessMinBand="1" Continuous="0" BandMode="1" DataMin="-1" DataMax="1" BandWidth="0.2" BandCount="10">
+       <ColorBand Flags="2" Min="-1" Max="-1" Color="255,237,213" Visible="1"/>
+       <ColorBand Flags="7" Min="-1" Max="-0.8" Color="255,223,181" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.8" Max="-0.6" Color="255,210,151" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.6" Max="-0.4" Color="255,198,119" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.4" Max="-0.2" Color="255,185,89" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.2" Max="0" Color="255,171,57" Visible="1"/>
+       <ColorBand Flags="7" Min="0" Max="0.2" Color="255,158,28" Visible="1"/>
+       <ColorBand Flags="7" Min="0.2" Max="0.4" Color="251,145,0" Visible="1"/>
+       <ColorBand Flags="7" Min="0.4" Max="0.6" Color="221,128,0" Visible="1"/>
+       <ColorBand Flags="7" Min="0.6" Max="0.8" Color="189,108,0" Visible="1"/>
+       <ColorBand Flags="15" Min="0.8" Max="1" Color="159,91,0" Visible="1"/>
+       <ColorBand Flags="1" Min="1" Max="1" Color="128,73,0" Visible="1"/>
+      </EvenWidthBandAxis>
+     </ContourChannel>
+    </MoTeC.RainbowTrack>
+    <MoTeC.RainbowTrack Version="100" Name="Rainbow Track" PosPC="496,0,1000,475" ShowCaption="0" AutoCaption="0" LinkZoom="1" ModeId="0" ShowDataLegend="1" ShowColorLegend="1" TelemetryZoom="0" ShowSectLabels="0" ShowSectMarks="1" LinkCursor="1">
+     <TrackMapWindow>
+      <SizeScheme>
+       <SizeSchemeEntry Name="Cursor" INTValue="10"/>
+       <SizeSchemeEntry Name="Detail" INTValue="2"/>
+       <SizeSchemeEntry Name="Material" INTValue="6"/>
+      </SizeScheme>
+     </TrackMapWindow>
+     <ContourChannel ID="G Force Lat" Enabled="1" ScaleMode="0" UnitsMode="0">
+      <EvenWidthBandAxis PaletteMode="0" GradientMode="0" BandChanColor="43,255,255" AxisChanColor="43,255,255" Color1="43,255,255" Color2="255,64,64" ReversGradient="0" CentredBands="0" GreaterMaxBand="1" LessMinBand="1" Continuous="0" BandMode="1" DataMin="-2" DataMax="2" BandWidth="0.4" BandCount="10">
+       <ColorBand Flags="2" Min="-2" Max="-2" Color="213,255,255" Visible="1"/>
+       <ColorBand Flags="7" Min="-2" Max="-1.6" Color="181,255,255" Visible="1"/>
+       <ColorBand Flags="7" Min="-1.6" Max="-1.2" Color="151,255,255" Visible="1"/>
+       <ColorBand Flags="7" Min="-1.2" Max="-0.8" Color="119,255,255" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.8" Max="-0.4" Color="89,255,255" Visible="1"/>
+       <ColorBand Flags="7" Min="-0.4" Max="0" Color="57,255,255" Visible="1"/>
+       <ColorBand Flags="7" Min="0" Max="0.4" Color="28,255,255" Visible="1"/>
+       <ColorBand Flags="7" Min="0.4" Max="0.8" Color="0,251,251" Visible="1"/>
+       <ColorBand Flags="7" Min="0.8" Max="1.2" Color="0,221,221" Visible="1"/>
+       <ColorBand Flags="7" Min="1.2" Max="1.6" Color="0,189,189" Visible="1"/>
+       <ColorBand Flags="15" Min="1.6" Max="2" Color="0,159,159" Visible="1"/>
+       <ColorBand Flags="1" Min="2" Max="2" Color="0,128,128" Visible="1"/>
+      </EvenWidthBandAxis>
+     </ContourChannel>
+    </MoTeC.RainbowTrack>
+   </Controls>
+  </Worksheet>
+ </Worksheets>
+</Workbook>

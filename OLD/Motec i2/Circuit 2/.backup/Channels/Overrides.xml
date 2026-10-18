@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<Overrides Locale="English_United States.1252" DefaultLocale="C">
+ <Override Id="Air Temp Inlet" DisplayMax="332.149993999999992" DisplayMin="272.149993999999992" AutoScale="0"/>
+ <Override Id="Bat Volts ADL" DisplayMax="15.000000000000000" DisplayMin="10.000000000000000" AutoScale="0"/>
+ <Override Id="Corr Speed" DisplayMax="69.444443000000007" DisplayMin="0.000000000000000" AutoScale="0"/>
+ <Override Id="Eng Oil Pres" DisplayMax="600000.000000000000000" DisplayMin="0.000000000000000" AutoScale="0"/>
+ <Override Id="Eng Oil Temp" DisplayMax="382.149993999999992" DisplayMin="272.149993999999992" AutoScale="0"/>
+ <Override Id="Engine RPM" DisplayMax="837.758057000000008" DisplayMin="0.000000000000000" AutoScale="0"/>
+ <Override Id="Engine Temp" DisplayMax="382.149993999999992" DisplayMin="272.149993999999992" AutoScale="0"/>
+ <Override Id="Fuel Pres" DisplayMax="600000.000000000000000" DisplayMin="0.000000000000000" AutoScale="0"/>
+ <Override Id="G Force Lat" DisplayMax="19.613303999999999" DisplayMin="-19.613303999999999" AutoScale="0"/>
+ <Override Id="G Force Long" DisplayMax="14.709978000000000" DisplayMin="-14.709978000000000" AutoScale="0"/>
+ <Override Id="Lambda 1" DisplayMax="1.100000000000000" DisplayMin="0.800000000000000" AutoScale="0"/>
+ <Override Id="Lambda 2" DisplayMax="1.100000000000000" DisplayMin="0.800000000000000" AutoScale="0"/>
+ <Override Id="Manifold Pres" DisplayMax="249999.984375000000000" DisplayMin="0.000000000000000" AutoScale="0"/>
+ <Override Id="Oversteer" DisplayMax="0.104720000000000" DisplayMin="-0.104720000000000" AutoScale="0"/>
+ <Override Id="Steered Angle" DisplayMax="0.174533000000000" DisplayMin="-0.174533000000000" AutoScale="0"/>
+ <Override Id="Throttle Pos" DisplayMax="1.000000000000000" DisplayMin="0.000000000000000" AutoScale="0"/>
+ <Override Id="Tyre Temp FL Centre" DisplayColorIndex="3"/>
+ <Override Id="Tyre Temp FL Inner" DisplayColorIndex="5"/>
+ <Override Id="Tyre Temp FL Outer" DisplayColorIndex="7"/>
+ <Override Id="Tyre Temp FR Inner" DisplayColorIndex="6"/>
+ <Override Id="Tyre Temp FR Outer" DisplayColorIndex="1"/>
+</Overrides>
