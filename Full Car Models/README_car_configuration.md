@@ -21,7 +21,7 @@ The setup is a value struct. Assigning it and changing one field leaves the
 original setup unchanged. `Car`, `Aero`, `Powertrain`, `Tire2`, and
 `NondimensionalTire` are value classes too, so assigning a car does not create
 a shared mutable setup. A rebuilt car is a new configuration and starts without
-the previous car's G-G data or event-result objects. Rebuild after editing;
+the previous car's G-G data or event-result objects. Rebuild after editing, meaning
 changing a setup variable does not update a car that was already constructed.
 
 `carConfig` keeps its legacy cell-array result by default. It returns an
@@ -55,7 +55,7 @@ editable setup workflow used by the Ramp Speed app.
 
 ## Units and map behavior
 
-QSS setup fields retain the units used by the existing vehicle models. Mass and
+Setup fields retain the units used by the existing vehicle models. Mass and
 weights are in kg; vehicle lengths such as wheelbase, track width, wheel radius,
 and CG height are in m. Spring rates use lb/in and motion ratios are
 unitless. Tire pressure `p_i` uses psi. Ride heights and the aero map's front
@@ -89,3 +89,51 @@ the source setup or design table when you need to rebuild with current defaults
 or current class code. Ramp Speed studies with setup specifications rebuild
 cars from those specifications. Older studies without setup specifications
 remain readable as result data and are read-only in the app.
+
+# TLDR
+Car objects are build with a call to defaultSetup to create a baseline config. Then you can mutate it however you want and input lists for parameters to sweep. Then run sampleSetups on the struct from defaultSetup and you now have a struct of setups that is ready to be "built". Use buildCases on the struct you just generated to build the car objects. 
+
+```matlab
+base = vehicleConfig.defaultSetup();
+
+base.parameters.mass = [160 165];
+base.parameters.spring_rate_front_lb_in = [300 325 350];
+
+[setups, designTable] = ...
+    vehicleConfig.sampleSetups(base,"FullFactorial");
+
+cases = vehicleConfig.buildCases(setups);
+```
+
+You can now use these car objects to run a GGV solve then Events2 solve
+
+```matlab
+[base, eventParams] = vehicleConfig.defaultSetup();
+
+base.parameters.mass = [160 165];
+setups = vehicleConfig.sampleSetups(base,"FullFactorial");
+cases = vehicleConfig.buildCases(setups);
+
+ggOptions = ggProductionOptions();
+
+for i = 1:numel(cases)
+    lapCar   = cases(i).lapCar;
+    accelCar = cases(i).accelCar;
+
+    % Calculate and attach the lap car's performance envelope.
+    lapCar = makeGG(gg2(lapCar,0,ggOptions),lapCar);
+
+    % Pass the constructed cars into the event simulator.
+    sim = Events2(lapCar,accelCar,eventParams);
+
+    sim.Skidpad();
+    sim.Accel();
+    sim.Autocross();
+
+    % Retain the solved car and its event results.
+    lapCar.comp = sim;
+    cases(i).lapCar = lapCar;
+
+    disp(sim.times)
+end
+```
